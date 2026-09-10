@@ -1,0 +1,12 @@
+# Конфиг клиентской стороны в режиме TLS.
+mode: "tls"
+
+psk: "REPLACE_WITH_BASE64_32_BYTE_KEY"
+
+local_addr: "127.0.0.1:51821"
+
+remote_tls_addr: "YOUR_SERVER_IP:443"
+server_name: "www.example.com" # должен совпадать с -cn при генерации сертификата
+
+# Вывод команды gencert на сервере ("pinned_cert_sha256: ..."), скопировать сюда.
+pinned_cert_sha256: "REPLACE_WITH_PIN_FROM_GENCERT_OUTPUT"

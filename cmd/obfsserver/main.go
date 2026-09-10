@@ -25,17 +25,37 @@ func main() {
 		log.Fatalf("obfsserver: invalid psk: %v", err)
 	}
 
-	if cfg.LocalAddr == "" || cfg.ListenWireAddr == "" {
-		log.Fatal("obfsserver: local_addr and listen_wire_addr are required")
+	if cfg.LocalAddr == "" {
+		log.Fatal("obfsserver: local_addr is required")
 	}
 
-	log.Printf("obfsserver: listen=%s -> local=%s", cfg.ListenWireAddr, cfg.LocalAddr)
+	switch cfg.Mode {
+	case "", "udp":
+		if cfg.ListenWireAddr == "" {
+			log.Fatal("obfsserver: listen_wire_addr is required in udp mode")
+		}
+		log.Printf("obfsserver: [udp] listen=%s -> local=%s", cfg.ListenWireAddr, cfg.LocalAddr)
+		err = transport.RunServer(transport.Config{
+			PSK:            psk,
+			LocalAddr:      cfg.LocalAddr,
+			ListenWireAddr: cfg.ListenWireAddr,
+		})
+	case "tls":
+		if cfg.ListenTLSAddr == "" || cfg.CertFile == "" || cfg.KeyFile == "" {
+			log.Fatal("obfsserver: listen_tls_addr, cert_file and key_file are required in tls mode")
+		}
+		log.Printf("obfsserver: [tls] listen=%s -> local=%s", cfg.ListenTLSAddr, cfg.LocalAddr)
+		err = transport.RunServerTLS(transport.TLSConfig{
+			PSK:           psk,
+			LocalAddr:     cfg.LocalAddr,
+			ListenTLSAddr: cfg.ListenTLSAddr,
+			CertFile:      cfg.CertFile,
+			KeyFile:       cfg.KeyFile,
+		})
+	default:
+		log.Fatalf("obfsserver: unknown mode %q (want \"udp\" or \"tls\")", cfg.Mode)
+	}
 
-	err = transport.RunServer(transport.Config{
-		PSK:            psk,
-		LocalAddr:      cfg.LocalAddr,
-		ListenWireAddr: cfg.ListenWireAddr,
-	})
 	if err != nil {
 		log.Fatalf("obfsserver: %v", err)
 	}

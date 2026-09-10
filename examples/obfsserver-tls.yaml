@@ -1,0 +1,18 @@
+# Конфиг серверной стороны в режиме TLS (сильнее против активного
+# DPI-пробинга, чем чистый UDP-режим): порт отвечает настоящим
+# TLS-рукопожатием, поэтому проба "а что это за протокол на этом порту"
+# видит легитимный TLS-сервер.
+mode: "tls"
+
+psk: "REPLACE_WITH_BASE64_32_BYTE_KEY"
+
+# Реальный WG-сервер слушает ТОЛЬКО на localhost.
+local_addr: "127.0.0.1:51821"
+
+# Публичный TCP-порт для TLS-обёртки.
+listen_tls_addr: "0.0.0.0:443"
+
+# Сгенерировать: go run ./cmd/gencert -cn www.example.com -cert server.crt -key server.key
+# (используй нейтральный cn, похожий на настоящий домен — это "cover identity")
+cert_file: "server.crt"
+key_file: "server.key"

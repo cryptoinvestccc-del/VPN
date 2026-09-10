@@ -19,6 +19,19 @@ type File struct {
 	RemoteWireAddr string `yaml:"remote_wire_addr,omitempty"`
 	ListenWireAddr string `yaml:"listen_wire_addr,omitempty"`
 	JunkPackets    int    `yaml:"junk_packets,omitempty"`
+
+	// Mode selects the wire transport: "udp" (default, plain obfuscated
+	// UDP) or "tls" (obfuscated frames carried inside a real TLS
+	// connection — stronger against active DPI probing).
+	Mode string `yaml:"mode,omitempty"`
+
+	// TLS mode fields.
+	ListenTLSAddr    string `yaml:"listen_tls_addr,omitempty"`
+	CertFile         string `yaml:"cert_file,omitempty"`
+	KeyFile          string `yaml:"key_file,omitempty"`
+	RemoteTLSAddr    string `yaml:"remote_tls_addr,omitempty"`
+	ServerName       string `yaml:"server_name,omitempty"`
+	PinnedCertSHA256 string `yaml:"pinned_cert_sha256,omitempty"`
 }
 
 // PSK decodes the base64 PSK into a fixed-size key.

@@ -66,6 +66,27 @@ go run ./cmd/obfsclient -config obfsclient.yaml
 Подними WG-интерфейс (`wg-quick up wg0`) — трафик пойдёт через
 `obfsclient` → обфускация → `obfsserver` → реальный WG.
 
+### Режим TLS (устойчивее к активному DPI-пробингу)
+
+По умолчанию (`mode: udp`) канал — просто обфусцированный UDP: DPI видит
+UDP-трафик на нестандартном порту, что само по себе подозрительно в
+странах со строгой фильтрацией. Режим `mode: tls` заворачивает трафик в
+настоящее TLS 1.3-соединение — порт сервера отвечает как обычный HTTPS,
+включая полноценное рукопожатие, что проходит и активный пробинг DPI.
+
+На сервере:
+
+```bash
+go run ./cmd/gencert -cn www.example.com -cert server.crt -key server.key
+```
+
+Скопируй строку `pinned_cert_sha256` из вывода. Используй
+`examples/obfsserver-tls.yaml` и `examples/obfsclient-tls.yaml` как
+шаблоны — впиши туда PSK, IP сервера и этот pin. Сертификат
+самоподписанный: доверие устанавливается не через публичный CA, а через
+pinning отпечатка (как в Trojan/ShadowTLS) — клиент откажется соединяться,
+если отпечаток не совпадёт (защита от MITM).
+
 ## Roadmap / что дальше
 
 См. раздел Roadmap в [`docs/DESIGN.md`](docs/DESIGN.md): TLS-мимикрия

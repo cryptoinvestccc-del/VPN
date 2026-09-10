@@ -25,18 +25,38 @@ func main() {
 		log.Fatalf("obfsclient: invalid psk: %v", err)
 	}
 
-	if cfg.LocalAddr == "" || cfg.RemoteWireAddr == "" {
-		log.Fatal("obfsclient: local_addr and remote_wire_addr are required")
+	if cfg.LocalAddr == "" {
+		log.Fatal("obfsclient: local_addr is required")
 	}
 
-	log.Printf("obfsclient: local=%s -> remote=%s (junk=%d)", cfg.LocalAddr, cfg.RemoteWireAddr, cfg.JunkPackets)
+	switch cfg.Mode {
+	case "", "udp":
+		if cfg.RemoteWireAddr == "" {
+			log.Fatal("obfsclient: remote_wire_addr is required in udp mode")
+		}
+		log.Printf("obfsclient: [udp] local=%s -> remote=%s (junk=%d)", cfg.LocalAddr, cfg.RemoteWireAddr, cfg.JunkPackets)
+		err = transport.RunClient(transport.Config{
+			PSK:            psk,
+			LocalAddr:      cfg.LocalAddr,
+			RemoteWireAddr: cfg.RemoteWireAddr,
+			JunkPackets:    cfg.JunkPackets,
+		})
+	case "tls":
+		if cfg.RemoteTLSAddr == "" || cfg.PinnedCertSHA256 == "" {
+			log.Fatal("obfsclient: remote_tls_addr and pinned_cert_sha256 are required in tls mode")
+		}
+		log.Printf("obfsclient: [tls] local=%s -> remote=%s (sni=%s)", cfg.LocalAddr, cfg.RemoteTLSAddr, cfg.ServerName)
+		err = transport.RunClientTLS(transport.TLSConfig{
+			PSK:              psk,
+			LocalAddr:        cfg.LocalAddr,
+			RemoteTLSAddr:    cfg.RemoteTLSAddr,
+			ServerName:       cfg.ServerName,
+			PinnedCertSHA256: cfg.PinnedCertSHA256,
+		})
+	default:
+		log.Fatalf("obfsclient: unknown mode %q (want \"udp\" or \"tls\")", cfg.Mode)
+	}
 
-	err = transport.RunClient(transport.Config{
-		PSK:            psk,
-		LocalAddr:      cfg.LocalAddr,
-		RemoteWireAddr: cfg.RemoteWireAddr,
-		JunkPackets:    cfg.JunkPackets,
-	})
 	if err != nil {
 		log.Fatalf("obfsclient: %v", err)
 	}
