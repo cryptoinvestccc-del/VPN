@@ -41,17 +41,6 @@ func fakeWireGuardPeer(t *testing.T) (addr string, close func()) {
 	return conn.LocalAddr().String(), func() { conn.Close() }
 }
 
-func freeUDPAddr(t *testing.T) string {
-	t.Helper()
-	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := conn.LocalAddr().String()
-	conn.Close()
-	return addr
-}
-
 func TestClientServerRoundTrip(t *testing.T) {
 	ctx := testContext(t)
 	var psk [32]byte

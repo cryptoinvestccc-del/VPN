@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -71,13 +72,13 @@ type wgPeer struct {
 }
 
 // startWireGuard brings up a real WireGuard peer in userspace.
-func startWireGuard(t *testing.T, addr netip.Addr, config string) *wgPeer {
+func startWireGuard(t *testing.T, addr netip.Addr, mtu int, config string) *wgPeer {
 	t.Helper()
 
 	tunDev, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{addr},
 		[]netip.Addr{netip.MustParseAddr("127.0.0.1")}, // unused; no DNS in these tests
-		1420, // WireGuard's default MTU, the size our padding budget assumes
+		mtu,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -95,26 +96,68 @@ func startWireGuard(t *testing.T, addr netip.Addr, config string) *wgPeer {
 	return &wgPeer{net: tnet, device: dev}
 }
 
-func freeUDPPort(t *testing.T) int {
+var (
+	issuedPortsMu sync.Mutex
+	issuedPorts   = map[string]bool{}
+)
+
+// reserveAddr returns a loopback address the operating system is offering
+// and never returns the same one twice within this process.
+//
+// The obvious implementation — bind port 0, read the address back, close —
+// can hand the same port to two consecutive callers, because the port is
+// free again the instant it is read. This test builds a topology out of
+// four separate addresses; if two of them collide, WireGuard's packets go
+// somewhere unintended and the failure appears much later as a handshake
+// that never completes. That was an observed flake, not a hypothetical.
+func reserveAddr(t *testing.T, network string) string {
 	t.Helper()
-	c, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+
+	for attempt := 0; attempt < 100; attempt++ {
+		var addr string
+		switch network {
+		case "udp":
+			c, err := net.ListenPacket("udp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			addr = c.LocalAddr().String()
+			c.Close()
+		case "tcp":
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			addr = ln.Addr().String()
+			ln.Close()
+		default:
+			t.Fatalf("unsupported network %q", network)
+		}
+
+		issuedPortsMu.Lock()
+		fresh := !issuedPorts[addr]
+		issuedPorts[addr] = true
+		issuedPortsMu.Unlock()
+
+		if fresh {
+			return addr
+		}
 	}
-	defer c.Close()
-	return c.LocalAddr().(*net.UDPAddr).Port
+
+	t.Fatalf("could not find an unused %s port after 100 attempts", network)
+	return ""
 }
 
-func freeTCPAddr(t *testing.T) string {
+func freeUDPPort(t *testing.T) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	addr, err := net.ResolveUDPAddr("udp", reserveAddr(t, "udp"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := ln.Addr().String()
-	ln.Close()
-	return addr
+	return addr.Port
 }
+
+func freeTCPAddr(t *testing.T) string { return reserveAddr(t, "tcp") }
 
 func testPSK(t *testing.T) [32]byte {
 	t.Helper()
@@ -146,6 +189,10 @@ func lastHandshake(t *testing.T, peer *wgPeer) string {
 }
 
 const (
+	// wireGuardDefaultMTU is what WireGuard uses when nothing is set —
+	// correct for running over plain IP, too large inside this tunnel.
+	wireGuardDefaultMTU = 1420
+
 	serverTunnelIP = "10.55.0.1"
 	clientTunnelIP = "10.55.0.2"
 	servicePort    = 8080
@@ -158,7 +205,15 @@ const (
 //
 // startProxies is called with the addresses the two proxies must use, so
 // the same topology serves both the UDP and the TLS transport.
+// buildTunnel builds the topology at WireGuard's default MTU.
 func buildTunnel(t *testing.T, startProxies func(t *testing.T, wgServerPort int, clientEntry string)) *wgPeer {
+	t.Helper()
+	return buildTunnelMTU(t, wireGuardDefaultMTU, startProxies)
+}
+
+// buildTunnelMTU is buildTunnel with the WireGuard interface MTU under the
+// test's control, so a test can check what a given MTU puts on the wire.
+func buildTunnelMTU(t *testing.T, mtu int, startProxies func(t *testing.T, wgServerPort int, clientEntry string)) *wgPeer {
 	t.Helper()
 
 	serverKeys := generateKeypair(t)
@@ -171,7 +226,7 @@ func buildTunnel(t *testing.T, startProxies func(t *testing.T, wgServerPort int,
 
 	// The server-side peer learns the client's endpoint from the
 	// handshake, exactly as a deployed server does.
-	serverPeer := startWireGuard(t, netip.MustParseAddr(serverTunnelIP), fmt.Sprintf(
+	serverPeer := startWireGuard(t, netip.MustParseAddr(serverTunnelIP), mtu, fmt.Sprintf(
 		"private_key=%s\nlisten_port=%d\npublic_key=%s\nallowed_ip=%s/32\n",
 		serverKeys.privateHex, wgServerPort, clientKeys.publicHex, clientTunnelIP,
 	))
@@ -180,7 +235,7 @@ func buildTunnel(t *testing.T, startProxies func(t *testing.T, wgServerPort int,
 
 	// The client's endpoint is the local obfsclient, not the server: as
 	// far as WireGuard knows it is talking to a peer on localhost.
-	clientPeer := startWireGuard(t, netip.MustParseAddr(clientTunnelIP), fmt.Sprintf(
+	clientPeer := startWireGuard(t, netip.MustParseAddr(clientTunnelIP), mtu, fmt.Sprintf(
 		"private_key=%s\nlisten_port=%d\npublic_key=%s\nallowed_ip=%s/32\nendpoint=%s\npersistent_keepalive_interval=5\n",
 		clientKeys.privateHex, wgClientPort, serverKeys.publicHex, serverTunnelIP, clientEntry,
 	))

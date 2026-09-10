@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Formatting
+        run: |
+          unformatted="$(gofmt -l . test/wireguard)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: |
+          go vet ./...
+          (cd test/wireguard && go vet ./...)
+
+      - name: Build
+        run: go build ./...
+
+      # The race detector is not optional here. Both of the defects that
+      # made this tunnel unusable in practice — cross-wired clients and
+      # dropped full-size packets — hid behind tests that ran one packet
+      # through one client, and the concurrency bugs beside them only
+      # surface under load with -race.
+      - name: Unit and load tests
+        run: go test -race -count=1 ./...
+
+      # Runs the real WireGuard protocol at both ends of the tunnel via
+      # wireguard-go's userspace stack. -short skips the rekey test, which
+      # needs 2.5 minutes of wall clock.
+      - name: Real WireGuard integration
+        run: (cd test/wireguard && go test -race -count=1 -short ./...)
+
+      # Exercises the shipped binaries with real config files and real
+      # processes: package tests cannot catch a broken CLI flag, a config
+      # field that never reaches the transport, or a service that dies on
+      # SIGTERM instead of shutting down.
+      - name: End-to-end
+        run: ./scripts/e2e_test.sh
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Short fuzzing on every run, over the parsers an attacker reaches
+      # before authenticating: the packet unwrapper on the public UDP port
+      # and the frame reader inside TLS.
+      - name: Fuzz parsers
+        run: |
+          go test -run='^$' -fuzz=FuzzUnwrap -fuzztime=60s ./internal/obfuscator/
+          go test -run='^$' -fuzz=FuzzWrapUnwrapRoundTrip -fuzztime=60s ./internal/obfuscator/
+          go test -run='^$' -fuzz=FuzzReadFrame -fuzztime=60s ./internal/transport/
+          go test -run='^$' -fuzz=FuzzCannedResponse -fuzztime=60s ./internal/transport/
+
+  rekey:
+    # The rekey test spends 2.5 minutes proving a WireGuard session
+    # renegotiates mid-flight without the tunnel losing the peer. Too slow
+    # for every push, too important to never run.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: WireGuard rekey endurance
+        run: (cd test/wireguard && go test -count=1 -timeout 10m -run TestRealWireGuardSurvivesRekey ./...)

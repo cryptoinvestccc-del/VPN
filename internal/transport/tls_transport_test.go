@@ -11,17 +11,6 @@ import (
 	"github.com/cryptoinvestccc-del/vpn/internal/tlscert"
 )
 
-func freeTCPAddr(t *testing.T) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := ln.Addr().String()
-	ln.Close()
-	return addr
-}
-
 func TestTLSClientServerRoundTrip(t *testing.T) {
 	ctx := testContext(t)
 	var psk [32]byte

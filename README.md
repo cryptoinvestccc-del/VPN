@@ -57,8 +57,14 @@ go test -run='^$' -fuzz=FuzzUnwrap -fuzztime=60s ./internal/obfuscator/
 go test -run='^$' -fuzz=FuzzReadFrame -fuzztime=60s ./internal/transport/
 ```
 
-Результаты аудита продукта и список исправленных дефектов —
-в [`docs/AUDIT.md`](docs/AUDIT.md).
+Всё перечисленное выполняется в CI на каждый push
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): сборка, vet,
+gofmt, тесты под race-детектором, интеграция с настоящим WireGuard,
+сквозной прогон и фаззинг. Отдельной задачей — длинный тест на
+переустановку сессии WireGuard.
+
+Результаты аудита продукта, список исправленных дефектов и честный
+перечень того, чего в продукте нет — в [`docs/AUDIT.md`](docs/AUDIT.md).
 
 ## Разворачивание (быстрый способ)
 

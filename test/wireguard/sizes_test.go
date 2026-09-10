@@ -207,3 +207,77 @@ func TestObservedWireGuardPacketSizes(t *testing.T) {
 			handshakeInitiation, len(wrappedSizes))
 	}
 }
+
+// TestRecommendedMTUEliminatesOversizedPackets checks the advice the
+// project gives operators, rather than trusting the arithmetic behind it.
+//
+// RecommendedWireGuardMTU was derived on paper from the header sizes. If
+// that derivation were off by even a few bytes — WireGuard's own 16-byte
+// padding makes it easy to be — operators following the documentation
+// would still be fragmenting, and nothing would tell them.
+func TestRecommendedMTUEliminatesOversizedPackets(t *testing.T) {
+	psk := testPSK(t)
+
+	for _, tc := range []struct {
+		name          string
+		mtu           int
+		wantOversized bool
+	}{
+		{"wireguard default", wireGuardDefaultMTU, true},
+		{"recommended", transport.RecommendedWireGuardMTU, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var tap *packetTap
+
+			peer := buildTunnelMTU(t, tc.mtu, func(t *testing.T, wgServerPort int, clientEntry string) {
+				ctx := testContext(t)
+				wireAddr := fmt.Sprintf("127.0.0.1:%d", freeUDPPort(t))
+				tap = startPacketTap(t, wgServerPort)
+
+				go func() {
+					_ = transport.RunServer(ctx, transport.Config{
+						PSKs:           [][32]byte{psk},
+						LocalAddr:      tap.addr,
+						ListenWireAddr: wireAddr,
+					})
+				}()
+				go func() {
+					_ = transport.RunClient(ctx, transport.Config{
+						PSKs:           [][32]byte{psk},
+						LocalAddr:      clientEntry,
+						RemoteWireAddr: wireAddr,
+					})
+				}()
+				time.Sleep(200 * time.Millisecond)
+			})
+
+			c := dialThroughTunnel(t, peer.net, 30*time.Second)
+			defer c.Close()
+
+			// Enough traffic to reach full-size packets.
+			exchange(t, c, 256<<10)
+			time.Sleep(300 * time.Millisecond)
+
+			sizes := tap.observed()
+			if len(sizes) == 0 {
+				t.Fatal("the tap saw no WireGuard packets")
+			}
+			largest := sizes[len(sizes)-1]
+			wrapped := largest + obfuscator.Overhead
+
+			t.Logf("MTU %d: largest WireGuard packet %d, wrapped %d (budget %d)",
+				tc.mtu, largest, wrapped, obfuscator.SafeWireSize)
+
+			oversized := wrapped > obfuscator.SafeWireSize
+			if oversized != tc.wantOversized {
+				if tc.wantOversized {
+					t.Fatalf("expected MTU %d to produce oversized packets, but the largest wrapped packet was %d",
+						tc.mtu, wrapped)
+				}
+				t.Fatalf("MTU %d is documented as safe, but a wrapped packet reached %d bytes, "+
+					"above the %d-byte budget: following the documentation would still fragment",
+					tc.mtu, wrapped, obfuscator.SafeWireSize)
+			}
+		})
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -107,6 +108,11 @@ var ErrPinMismatch = errors.New("transport: server certificate pin mismatch (pos
 // an outage.
 var errFrameTooLarge = errors.New("transport: frame exceeds maximum tunnel packet size")
 
+// tooManySessions keeps the session-limit notice to one line per process
+// rather than one per refused connection, which under a flood would be
+// the flood.
+var tooManySessions sync.Once
+
 // frame format on the TLS stream: 2-byte big-endian length || payload
 func writeFrame(w io.Writer, payload []byte) error {
 	if len(payload) > maxFrameSize {
@@ -153,6 +159,9 @@ func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
 	if err != nil {
 		return err
 	}
+	if len(cert.Certificate) > 0 {
+		warnOnCertificateExpiry(cert.Certificate[0])
+	}
 
 	ln, err := tls.Listen("tcp", cfg.ListenTLSAddr, &tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -165,16 +174,35 @@ func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
 
 	go closeOnDone(ctx, ln)
 
+	sessions := newSemaphore(maxConcurrentSessions)
+	handshakes := newSemaphore(maxConcurrentHandshakes)
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return ctxErrOr(ctx, err)
 		}
-		go handleTLSConn(ctx, conn, cfg)
+
+		// Refuse rather than queue when the session table is full: a
+		// connection admitted here would sit unserved anyway, and the
+		// bound exists precisely so that cannot happen.
+		if !sessions.tryAcquire() {
+			tooManySessions.Do(func() {
+				log.Printf("transport: at the %d-session limit; further connections are "+
+					"refused until sessions free up", maxConcurrentSessions)
+			})
+			conn.Close()
+			continue
+		}
+
+		go func() {
+			defer sessions.release()
+			handleTLSConn(ctx, conn, cfg, handshakes)
+		}()
 	}
 }
 
-func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig) {
+func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, handshakes semaphore) {
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {
 		conn.Close()
@@ -187,7 +215,15 @@ func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig) {
 		conn.Close()
 		return
 	}
-	if err := tlsConn.HandshakeContext(ctx); err != nil {
+
+	// Bound how many handshakes run at once. The signature each one costs
+	// is the expensive part of accepting a connection, and a flood of
+	// them is the cheapest way to attack a TLS listener.
+	handshakes.acquire()
+	err := tlsConn.HandshakeContext(ctx)
+	handshakes.release()
+
+	if err != nil {
 		// A failed handshake is routine here: DPI probes and internet
 		// background scanning both produce them.
 		conn.Close()
