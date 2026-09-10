@@ -55,12 +55,12 @@ func TestClientServerRoundTrip(t *testing.T) {
 	clientLocalAddr := freeUDPAddr(t)
 
 	serverCfg := Config{
-		PSK:            psk,
+		PSKs:           [][32]byte{psk},
 		LocalAddr:      peerAddr,
 		ListenWireAddr: serverWireAddr,
 	}
 	clientCfg := Config{
-		PSK:            psk,
+		PSKs:           [][32]byte{psk},
 		LocalAddr:      clientLocalAddr,
 		RemoteWireAddr: serverWireAddr,
 	}

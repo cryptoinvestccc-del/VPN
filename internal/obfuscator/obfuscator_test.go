@@ -106,3 +106,73 @@ func TestWrapRejectsOversizedPlaintext(t *testing.T) {
 		t.Fatal("expected oversized plaintext to be rejected")
 	}
 }
+
+// TestKeyRotationWithoutDowntime simulates rotating the PSK: the server
+// picks up a new current key while still accepting the old one, and
+// clients on either key keep working until they're redeployed.
+func TestKeyRotationWithoutDowntime(t *testing.T) {
+	var oldKey, newKey [32]byte
+	if _, err := rand.Read(oldKey[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rand.Read(newKey[:]); err != nil {
+		t.Fatal(err)
+	}
+
+	oldClient, err := New(oldKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newClient, err := New(newKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Server during the rotation window: new key current, old key kept
+	// as fallback.
+	server, err := NewMulti([][32]byte{newKey, oldKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		client *Obfuscator
+	}{
+		{"still-on-old-key", oldClient},
+		{"already-on-new-key", newClient},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plaintext := []byte("wg packet from " + tc.name)
+			wrapped, err := tc.client.Wrap(plaintext)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := server.Unwrap(wrapped)
+			if err != nil {
+				t.Fatalf("server failed to accept packet during rotation: %v", err)
+			}
+			if !bytes.Equal(got, plaintext) {
+				t.Fatalf("got %q want %q", got, plaintext)
+			}
+		})
+	}
+
+	// Once the old key is dropped, packets under it must be rejected.
+	serverAfterRotation, err := NewMulti([][32]byte{newKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrappedOld, err := oldClient.Wrap([]byte("stale key packet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := serverAfterRotation.Unwrap(wrappedOld); err == nil {
+		t.Fatal("expected packet under dropped old key to be rejected")
+	}
+}
+
+func TestNewMultiRequiresAtLeastOneKey(t *testing.T) {
+	if _, err := NewMulti(nil); err == nil {
+		t.Fatal("expected error constructing Obfuscator with no keys")
+	}
+}

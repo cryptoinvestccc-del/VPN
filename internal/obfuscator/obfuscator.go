@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	nonceSize = chacha20poly1305.NonceSize // 12
-	tagSize   = chacha20poly1305.Overhead  // 16
+	nonceSize  = chacha20poly1305.NonceSize // 12
+	tagSize    = chacha20poly1305.Overhead  // 16
 	padLenSize = 1
 
 	// MaxPadding bounds the random padding added to each packet.
@@ -29,18 +29,36 @@ const (
 
 var ErrInvalidPacket = errors.New("obfuscator: invalid or forged packet")
 
-// Obfuscator wraps/unwraps packets using a pre-shared key.
+// Obfuscator wraps/unwraps packets using one or more pre-shared keys.
+// Wrap always uses the first (current) key. Unwrap tries every key in
+// order, which is what makes key rotation possible without downtime: the
+// operator adds a new current key while keeping the old one as a
+// fallback, redeploys both ends, and only drops the old key once every
+// peer has picked up the new one.
 type Obfuscator struct {
-	aead cipher.AEAD
+	aeads []cipher.AEAD
 }
 
-// New builds an Obfuscator from a 32-byte pre-shared key.
+// New builds an Obfuscator from a single 32-byte pre-shared key.
 func New(psk [32]byte) (*Obfuscator, error) {
-	aead, err := chacha20poly1305.New(psk[:])
-	if err != nil {
-		return nil, err
+	return NewMulti([][32]byte{psk})
+}
+
+// NewMulti builds an Obfuscator from one or more pre-shared keys, ordered
+// current-first. At least one key is required.
+func NewMulti(keys [][32]byte) (*Obfuscator, error) {
+	if len(keys) == 0 {
+		return nil, errors.New("obfuscator: at least one key is required")
 	}
-	return &Obfuscator{aead: aead}, nil
+	aeads := make([]cipher.AEAD, 0, len(keys))
+	for _, k := range keys {
+		aead, err := chacha20poly1305.New(k[:])
+		if err != nil {
+			return nil, err
+		}
+		aeads = append(aeads, aead)
+	}
+	return &Obfuscator{aeads: aeads}, nil
 }
 
 // Wrap encrypts and pads plaintext into a wire-ready packet:
@@ -69,14 +87,14 @@ func (o *Obfuscator) Wrap(plaintext []byte) ([]byte, error) {
 
 	out := make([]byte, 0, nonceSize+len(inner)+tagSize)
 	out = append(out, nonce...)
-	out = o.aead.Seal(out, nonce, inner, nil)
+	out = o.aeads[0].Seal(out, nonce, inner, nil)
 	return out, nil
 }
 
-// Unwrap authenticates and decrypts a wire packet produced by Wrap.
-// Callers MUST treat any error as "drop the packet silently" — it may be
-// a junk packet injected deliberately to defeat traffic analysis, not an
-// attack.
+// Unwrap authenticates and decrypts a wire packet produced by Wrap, trying
+// each configured key in order (current key first). Callers MUST treat
+// any error as "drop the packet silently" — it may be a junk packet
+// injected deliberately to defeat traffic analysis, not an attack.
 func (o *Obfuscator) Unwrap(packet []byte) ([]byte, error) {
 	if len(packet) < nonceSize+padLenSize+tagSize {
 		return nil, ErrInvalidPacket
@@ -85,8 +103,15 @@ func (o *Obfuscator) Unwrap(packet []byte) ([]byte, error) {
 	nonce := packet[:nonceSize]
 	ciphertext := packet[nonceSize:]
 
-	inner, err := o.aead.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
+	var inner []byte
+	for _, aead := range o.aeads {
+		var err error
+		inner, err = aead.Open(nil, nonce, ciphertext, nil)
+		if err == nil {
+			break
+		}
+	}
+	if inner == nil {
 		return nil, ErrInvalidPacket
 	}
 

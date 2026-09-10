@@ -47,7 +47,7 @@ func TestTLSClientServerRoundTrip(t *testing.T) {
 
 	go func() {
 		if err := RunServerTLS(TLSConfig{
-			PSK:           psk,
+			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
 			CertFile:      certPath,
@@ -60,7 +60,7 @@ func TestTLSClientServerRoundTrip(t *testing.T) {
 
 	go func() {
 		if err := RunClientTLS(TLSConfig{
-			PSK:              psk,
+			PSKs:             [][32]byte{psk},
 			LocalAddr:        clientLocalAddr,
 			RemoteTLSAddr:    serverTLSAddr,
 			ServerName:       "test.local",
@@ -116,7 +116,7 @@ func TestTLSClientRejectsWrongPin(t *testing.T) {
 
 	go func() {
 		_ = RunServerTLS(TLSConfig{
-			PSK:           psk,
+			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
 			CertFile:      certPath,
@@ -126,7 +126,7 @@ func TestTLSClientRejectsWrongPin(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	err := RunClientTLS(TLSConfig{
-		PSK:              psk,
+		PSKs:             [][32]byte{psk},
 		LocalAddr:        clientLocalAddr,
 		RemoteTLSAddr:    serverTLSAddr,
 		ServerName:       "test.local",

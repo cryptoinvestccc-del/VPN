@@ -12,8 +12,11 @@ import (
 
 // Config configures one end of the obfuscated tunnel.
 type Config struct {
-	// PSK is the shared secret used to wrap/unwrap packets.
-	PSK [32]byte
+	// PSKs are the shared secrets used to wrap/unwrap packets, current
+	// key first. Wrap uses PSKs[0]; Unwrap accepts any of them, which is
+	// what allows rotating to a new key without downtime (see
+	// config.File.PSKs).
+	PSKs [][32]byte
 
 	// LocalAddr is where we listen for/send plaintext WireGuard packets
 	// (typically 127.0.0.1:<wg-port> on the client, or forwards to the
@@ -41,7 +44,7 @@ const maxUDPPacket = 65535
 // client (connected to LocalAddr) out to RemoteWireAddr in obfuscated form,
 // and delivers obfuscated responses back as plaintext.
 func RunClient(cfg Config) error {
-	obf, err := obfuscator.New(cfg.PSK)
+	obf, err := obfuscator.NewMulti(cfg.PSKs)
 	if err != nil {
 		return err
 	}
@@ -114,7 +117,7 @@ func RunClient(cfg Config) error {
 // WireGuard packets to a local WireGuard server, relaying responses back
 // in obfuscated form.
 func RunServer(cfg Config) error {
-	obf, err := obfuscator.New(cfg.PSK)
+	obf, err := obfuscator.NewMulti(cfg.PSKs)
 	if err != nil {
 		return err
 	}

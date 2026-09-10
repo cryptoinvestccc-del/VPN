@@ -20,7 +20,7 @@ func main() {
 		log.Fatalf("obfsclient: failed to load config: %v", err)
 	}
 
-	psk, err := cfg.PSK()
+	psks, err := cfg.PSKs()
 	if err != nil {
 		log.Fatalf("obfsclient: invalid psk: %v", err)
 	}
@@ -36,7 +36,7 @@ func main() {
 		}
 		log.Printf("obfsclient: [udp] local=%s -> remote=%s (junk=%d)", cfg.LocalAddr, cfg.RemoteWireAddr, cfg.JunkPackets)
 		err = transport.RunClient(transport.Config{
-			PSK:            psk,
+			PSKs:           psks,
 			LocalAddr:      cfg.LocalAddr,
 			RemoteWireAddr: cfg.RemoteWireAddr,
 			JunkPackets:    cfg.JunkPackets,
@@ -47,7 +47,7 @@ func main() {
 		}
 		log.Printf("obfsclient: [tls] local=%s -> remote=%s (sni=%s)", cfg.LocalAddr, cfg.RemoteTLSAddr, cfg.ServerName)
 		err = transport.RunClientTLS(transport.TLSConfig{
-			PSK:              psk,
+			PSKs:             psks,
 			LocalAddr:        cfg.LocalAddr,
 			RemoteTLSAddr:    cfg.RemoteTLSAddr,
 			ServerName:       cfg.ServerName,

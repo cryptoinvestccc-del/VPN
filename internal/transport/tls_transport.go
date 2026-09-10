@@ -16,7 +16,9 @@ import (
 // plain UDP transport, TCP-over-TLS requires framing (length prefixes)
 // since TLS delivers a byte stream, not discrete packets.
 type TLSConfig struct {
-	PSK [32]byte
+	// PSKs are the shared secrets used to wrap/unwrap packets, current
+	// key first — see Config.PSKs for the rotation rationale.
+	PSKs [][32]byte
 
 	// LocalAddr: same meaning as in Config (local WireGuard endpoint).
 	LocalAddr string
@@ -70,7 +72,7 @@ func readFrame(r io.Reader) ([]byte, error) {
 // legitimate TLS handshake) and relays obfuscated frames to/from a local
 // WireGuard server.
 func RunServerTLS(cfg TLSConfig) error {
-	obf, err := obfuscator.New(cfg.PSK)
+	obf, err := obfuscator.NewMulti(cfg.PSKs)
 	if err != nil {
 		return err
 	}
@@ -164,7 +166,7 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string) e
 // SHA-256 fingerprint, since it's self-signed) and bridges local
 // WireGuard traffic through it.
 func RunClientTLS(cfg TLSConfig) error {
-	obf, err := obfuscator.New(cfg.PSK)
+	obf, err := obfuscator.NewMulti(cfg.PSKs)
 	if err != nil {
 		return err
 	}

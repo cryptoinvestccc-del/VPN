@@ -1,0 +1,23 @@
+[Unit]
+Description=WireGuard traffic obfuscator (client side)
+Before=wg-quick@wg0.service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=obfsvpn
+Group=obfsvpn
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/etc/obfsvpn
+
+WorkingDirectory=/etc/obfsvpn
+ExecStart=/usr/local/bin/obfsclient -config /etc/obfsvpn/obfsclient.yaml
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
