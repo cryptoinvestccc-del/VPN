@@ -439,6 +439,43 @@ pass "no per-client usage is published unless enabled"
 kill -TERM $metrics_server_pid 2>/dev/null || true
 
 ##############################################################################
+echo "==> WireGuard provisioning"
+##############################################################################
+# The generated server config is checked for the two properties that are
+# easy to get wrong by hand and fatal when wrong: WireGuard reachable only
+# over loopback, and an MTU that leaves room for the wrapper. Both fail
+# silently in production — the tunnel keeps working while the protection
+# is gone — so they are asserted here rather than left to review.
+provision="$repo_dir/deploy/provision-wireguard.sh"
+server_cfg="$("$provision" init --dry-run 2>/dev/null)"
+
+grep -q "MTU = 1376" <<<"$server_cfg" \
+	|| fail "the generated WireGuard config does not set the MTU the obfuscator needs"
+pass "generated server config sets MTU 1376"
+
+grep -q -- "--dport 51821 ! -s 127.0.0.1 -j DROP" <<<"$server_cfg" \
+	|| fail "the generated config does not block outside traffic to the WireGuard port"
+pass "generated server config blocks direct access to WireGuard"
+
+grep -q "MASQUERADE" <<<"$server_cfg" \
+	|| fail "the generated config gives tunnelled clients no route out"
+pass "generated server config routes client traffic out"
+
+client_cfg="$("$provision" add-client testclient vpn.example.com --dry-run 2>/dev/null)"
+grep -q "MTU = 1376" <<<"$client_cfg" \
+	|| fail "the generated client config does not match the server MTU"
+grep -q "Endpoint = 127.0.0.1:51821" <<<"$client_cfg" \
+	|| fail "the client config points WireGuard somewhere other than the local obfuscator"
+pass "generated client config points WireGuard at the local obfuscator"
+
+# A client config that named the server directly would bypass the tunnel
+# entirely while looking like it worked.
+if grep -qE "^Endpoint = vpn\.example\.com" <<<"$client_cfg"; then
+	fail "the client config sends WireGuard straight to the server, bypassing the obfuscator"
+fi
+pass "generated client config does not bypass the obfuscator"
+
+##############################################################################
 echo "==> real WireGuard integration"
 ##############################################################################
 # Separate module: it runs a genuine WireGuard implementation in userspace
