@@ -39,6 +39,7 @@ type Registry struct {
 	replaysRejected  atomic.Int64
 	revocationsFired atomic.Int64
 	fallbackServed   atomic.Int64
+	trialsThrottled  atomic.Int64
 
 	// perClient is populated only when the operator opts in.
 	perClientEnabled bool
@@ -124,6 +125,17 @@ func (r *Registry) RevocationEnforced(n int) {
 	r.revocationsFired.Add(int64(n))
 }
 
+// TrialThrottled counts peers turned away because identifying them would
+// have exceeded the CPU budget for authenticating strangers. A steady
+// nonzero rate means something is flooding the port — or that the client
+// list has grown enough to warrant more headroom.
+func (r *Registry) TrialThrottled() {
+	if r == nil {
+		return
+	}
+	r.trialsThrottled.Add(1)
+}
+
 func (r *Registry) FallbackServed() {
 	if r == nil {
 		return
@@ -174,6 +186,9 @@ func (r *Registry) Expose() string {
 		"Packets refused because they had already opened a session.", r.replaysRejected.Load())
 	counter("obfsvpn_revocations_enforced_total",
 		"Sessions closed because their client's credential was withdrawn.", r.revocationsFired.Load())
+	counter("obfsvpn_trials_throttled_total",
+		"Unknown peers turned away because authenticating them would exceed the CPU budget.",
+		r.trialsThrottled.Load())
 	counter("obfsvpn_fallback_served_total",
 		"Unauthorized connections handed to the web-server fallback.", r.fallbackServed.Load())
 

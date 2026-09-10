@@ -195,6 +195,12 @@ func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
 	sessions := newSemaphore(maxConcurrentSessions)
 	handshakes := newSemaphore(maxConcurrentHandshakes)
 
+	// Identifying a peer costs one decryption per credential, so a flood
+	// of connections that never authenticate is work an attacker can
+	// provoke cheaply. Cap it; established sessions never come through
+	// here, so a flood cannot disturb traffic already flowing.
+	trials := newTrialLimiter(len(registry.Current().Credentials()))
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -215,12 +221,12 @@ func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
 
 		go func() {
 			defer sessions.release()
-			handleTLSConn(ctx, conn, cfg, registry, handshakes)
+			handleTLSConn(ctx, conn, cfg, registry, handshakes, trials)
 		}()
 	}
 }
 
-func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, registry *clients.Registry, handshakes semaphore) {
+func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, registry *clients.Registry, handshakes semaphore, trials *trialLimiter) {
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {
 		conn.Close()
@@ -252,7 +258,23 @@ func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, registry *
 		return
 	}
 
-	auth, err := newTLSAuthenticator(tlsConn, registry.Current())
+	// Over budget: hand the peer to the fallback rather than spending the
+	// credential search on it. A legitimate client retries; a flood gets
+	// the same web-server response any other unauthorized peer gets, so
+	// the throttling is not visible as a change in behaviour.
+	// Size the budget to the credential list as it stands now: a list that
+	// just grew has to tighten the rate before the next attempt is
+	// admitted, not after it.
+	current := registry.Current()
+	trials.resize(len(current.Credentials()))
+
+	if !trials.allow() {
+		cfg.Metrics.TrialThrottled()
+		serveFallback(tlsConn, newRecordingReader(tlsConn), cfg.FallbackAddr)
+		return
+	}
+
+	auth, err := newTLSAuthenticator(tlsConn, current)
 	if err != nil {
 		log.Printf("transport: failed to establish session keys: %v", err)
 		conn.Close()

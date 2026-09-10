@@ -107,6 +107,7 @@ func RunClient(ctx context.Context, cfg Config) error {
 		return err
 	}
 	defer localConn.Close()
+	tuneSocketBuffers(localConn)
 
 	remoteAddr, err := net.ResolveUDPAddr("udp", cfg.RemoteWireAddr)
 	if err != nil {
@@ -117,6 +118,7 @@ func RunClient(ctx context.Context, cfg Config) error {
 		return err
 	}
 	defer wireConn.Close()
+	tuneUDPBuffers(wireConn)
 
 	if cfg.JunkPackets > 0 {
 		if err := sendJunk(wireConn, cfg.JunkPackets); err != nil {
@@ -211,6 +213,7 @@ func RunServer(ctx context.Context, cfg Config) error {
 		return err
 	}
 	defer wireConn.Close()
+	tuneSocketBuffers(wireConn)
 
 	sessions := newSessionTable(wireConn, localAddr, registry)
 	sessions.metrics = cfg.Metrics
@@ -247,7 +250,17 @@ func RunServer(ctx context.Context, cfg Config) error {
 		// is allocated: a spoofed source address that fails to
 		// authenticate leaves nothing behind, and gets no reply that
 		// would tell a prober it found the right port.
-		plaintext, clientID, obf, ok := sessions.authenticator().authenticate(wirePacket)
+		//
+		// It is also the one path an attacker can make expensive, so it
+		// is rate limited. Dropping here costs nothing and stays silent,
+		// exactly like any other unauthenticated packet.
+		auth := sessions.authenticator()
+		if !sessions.trials.allow() {
+			cfg.Metrics.TrialThrottled()
+			continue
+		}
+
+		plaintext, clientID, obf, ok := auth.authenticate(wirePacket)
 		if !ok {
 			cfg.Metrics.AuthFailure()
 			continue
@@ -301,6 +314,7 @@ type sessionTable struct {
 	maxSessions int
 	replay      *replayGuard
 	metrics     *metrics.Registry
+	trials      *trialLimiter
 
 	// auth is rebuilt whenever the credential set changes, so a reload
 	// costs one rebuild rather than a comparison on every packet.
@@ -317,6 +331,7 @@ func newSessionTable(wireConn net.PacketConn, localAddr *net.UDPAddr, registry *
 		registry:    registry,
 		maxSessions: maxSessions,
 		replay:      newReplayGuard(replayCacheSize, replayWindow),
+		trials:      newTrialLimiter(len(registry.Current().Credentials())),
 	}
 }
 
@@ -343,6 +358,7 @@ func (t *sessionTable) authenticator() *authenticator {
 		return &authenticator{}
 	}
 	t.authSet, t.authCache = set, auth
+	t.trials.resize(len(set.Credentials()))
 	return auth
 }
 
@@ -392,6 +408,7 @@ func (t *sessionTable) open(peerAddr net.Addr, wirePacket []byte, clientID strin
 	if err != nil {
 		return nil, err
 	}
+	tuneUDPBuffers(localConn)
 
 	s := &session{
 		localConn: localConn,
