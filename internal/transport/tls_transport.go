@@ -19,13 +19,12 @@ import (
 // plain UDP transport, TCP-over-TLS requires framing (length prefixes)
 // since TLS delivers a byte stream, not discrete packets.
 type TLSConfig struct {
-	// PSKs are the shared secrets used to wrap/unwrap packets, current
-	// key first — see Config.PSKs for the rotation rationale. Leave this
-	// empty to auto-derive the obfuscation key from each TLS session
-	// instead (see deriveSessionObfuscator): no manual key distribution
-	// needed, and the key changes on every reconnect automatically. An
-	// explicit PSK is still supported for defense-in-depth or if you
-	// want a stable key across reconnects for some reason.
+	// PSKs are the shared secrets that authorize a peer, current key
+	// first — see Config.PSKs for the rotation rationale. Required: the
+	// per-connection packet keys are derived from a PSK together with
+	// the TLS session (see deriveTrafficObfuscator), and without one any
+	// stranger who completes a handshake could send traffic into the
+	// WireGuard server behind this tunnel.
 	PSKs [][32]byte
 
 	// LocalAddr: same meaning as in Config (local WireGuard endpoint).
@@ -35,6 +34,13 @@ type TLSConfig struct {
 	ListenTLSAddr string
 	CertFile      string
 	KeyFile       string
+
+	// FallbackAddr is a real HTTP server that unauthorized connections
+	// are handed to, so the port answers probes exactly as the site
+	// behind it would. Optional: without it, a canned nginx-style
+	// response is returned instead, which is plausible but not
+	// indistinguishable from a genuine site.
+	FallbackAddr string
 
 	// Client side.
 	RemoteTLSAddr string
@@ -133,40 +139,6 @@ func readFrame(r io.Reader, buf []byte) ([]byte, error) {
 	return buf[:size], nil
 }
 
-// deriveSessionObfuscator derives the obfuscation key for one TLS
-// connection from the already-established TLS session secret (RFC 5705
-// exporter), instead of requiring a manually shared PSK. Both ends call
-// this with the same label after their own handshake completes and get
-// the same 32 bytes, because it's derived from the TLS master secret
-// they just agreed on via ECDHE — no separate key exchange needed, and a
-// fresh key is produced on every reconnect for free.
-//
-// This does not add confidentiality beyond what TLS itself provides
-// against an on-path attacker: anyone who can decrypt the TLS session
-// (e.g. by possessing its private key) can compute the same exporter
-// value. Its purpose is automating key *management* for the padding/
-// obfuscation layer, not adding a second independent secret.
-func deriveSessionObfuscator(conn *tls.Conn) (*obfuscator.Obfuscator, error) {
-	state := conn.ConnectionState()
-	material, err := state.ExportKeyingMaterial(keyExportLabel, nil, 32)
-	if err != nil {
-		return nil, err
-	}
-	var key [32]byte
-	copy(key[:], material)
-	return obfuscator.New(key)
-}
-
-// obfuscatorFor returns a ready-to-use Obfuscator for a TLS connection:
-// the statically configured one when PSKs were supplied, or one derived
-// per-session from the TLS exporter otherwise.
-func obfuscatorFor(conn *tls.Conn, staticPSKs [][32]byte) (*obfuscator.Obfuscator, error) {
-	if len(staticPSKs) > 0 {
-		return obfuscator.NewMulti(staticPSKs)
-	}
-	return deriveSessionObfuscator(conn)
-}
-
 // RunServerTLS accepts real TLS connections (so active DPI probing sees a
 // legitimate TLS handshake) and relays obfuscated frames to/from a local
 // WireGuard server. Each connection gets its own socket to the local
@@ -226,19 +198,31 @@ func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig) {
 		return
 	}
 
-	obf, err := obfuscatorFor(tlsConn, cfg.PSKs)
+	obf, err := deriveTrafficObfuscator(tlsConn, cfg.PSKs)
 	if err != nil {
 		log.Printf("transport: failed to establish session key: %v", err)
 		conn.Close()
 		return
 	}
 
-	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr); err != nil {
+	// A peer must prove it holds the pre-shared key before it gets a path
+	// to the WireGuard server. Anything else — a censor probing the port,
+	// a scanner, a browser that wandered in — is handed to the fallback,
+	// which answers the way an ordinary web server would.
+	recorder := newRecordingReader(tlsConn)
+	firstPacket, err := authenticatePeer(tlsConn, obf, recorder)
+	if err != nil {
+		serveFallback(tlsConn, recorder, cfg.FallbackAddr)
+		return
+	}
+	recorder.stop()
+
+	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr, firstPacket); err != nil {
 		log.Printf("transport: tls session ended: %v", err)
 	}
 }
 
-func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string) error {
+func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, firstPacket []byte) error {
 	defer conn.Close()
 
 	udpAddr, err := net.ResolveUDPAddr("udp", localAddr)
@@ -250,6 +234,14 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string) e
 		return err
 	}
 	defer localConn.Close()
+
+	// The packet that authenticated this peer is ordinary traffic and
+	// still has to reach WireGuard.
+	if len(firstPacket) > 0 {
+		if _, err := localConn.Write(firstPacket); err != nil {
+			return err
+		}
+	}
 
 	errCh := make(chan error, 2)
 
@@ -432,7 +424,7 @@ func runClientTLSSession(ctx context.Context, cfg TLSConfig, localConn net.Packe
 	conn := rawConn.(*tls.Conn)
 	defer conn.Close()
 
-	obf, err := obfuscatorFor(conn, cfg.PSKs)
+	obf, err := deriveTrafficObfuscator(conn, cfg.PSKs)
 	if err != nil {
 		return err
 	}

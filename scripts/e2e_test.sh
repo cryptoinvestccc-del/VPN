@@ -131,16 +131,19 @@ else
 fi
 
 ##############################################################################
-echo "==> TLS mode (no PSK: key derived from the TLS session)"
+echo "==> TLS mode"
 ##############################################################################
-pin="$("$work_dir/gencert" -cn www.example.com \
-	-cert "$work_dir/server.crt" -key "$work_dir/server.key" \
-	| grep pinned_cert_sha256 | awk '{print $2}')"
+gencert_out="$("$work_dir/gencert" -cn www.example.com \
+	-cert "$work_dir/server.crt" -key "$work_dir/server.key")"
+pin="$(echo "$gencert_out" | grep pinned_cert_sha256 | awk '{print $2}')"
+tls_psk="$(echo "$gencert_out" | grep '^psk:' | sed 's/^psk: "//; s/"$//')"
 [[ -n "$pin" ]] || fail "gencert did not print a certificate pin"
-pass "gencert produced a certificate and pin"
+[[ -n "$tls_psk" ]] || fail "gencert did not print a pre-shared key"
+pass "gencert produced a certificate, pin and pre-shared key"
 
 cat > "$work_dir/obfsserver-tls.yaml" <<EOF
 mode: "tls"
+psk: "$tls_psk"
 local_addr: "127.0.0.1:$wg_port"
 listen_tls_addr: "127.0.0.1:$tls_port"
 cert_file: "$work_dir/server.crt"
@@ -149,6 +152,7 @@ EOF
 
 cat > "$work_dir/obfsclient-tls.yaml" <<EOF
 mode: "tls"
+psk: "$tls_psk"
 local_addr: "127.0.0.1:$tls_client_port"
 remote_tls_addr: "127.0.0.1:$tls_port"
 server_name: "www.example.com"
@@ -178,6 +182,50 @@ else
 	fail "port did not present a certificate to a TLS prober"
 fi
 
+# Probe resistance: an unauthorized peer must be answered the way a real
+# web server answers, not with silence. A port that accepts bytes, replies
+# to nothing and never hangs up identifies itself by how it fails.
+cat > "$work_dir/http_probe.py" <<'PROBE'
+import socket, ssl, sys
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+sock = ctx.wrap_socket(
+    socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=10),
+    server_hostname="www.example.com")
+sock.settimeout(15)
+sock.send(b"GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n")
+try:
+    print(sock.recv(256).decode("latin-1").split("\r\n")[0])
+except Exception as exc:
+    print("NO_RESPONSE %s" % exc)
+PROBE
+
+probe_out="$(python3 "$work_dir/http_probe.py" "$tls_port")"
+case "$probe_out" in
+	HTTP/1.1*) pass "unauthorized probe gets a web-server response ($probe_out)" ;;
+	*) fail "probe got no plausible web response: $probe_out" ;;
+esac
+
+# An unauthorized peer must not be able to push traffic to WireGuard.
+cat > "$work_dir/obfsclient-wrongpsk.yaml" <<EOF
+mode: "tls"
+psk: "$(openssl rand -base64 32)"
+local_addr: "127.0.0.1:51907"
+remote_tls_addr: "127.0.0.1:$tls_port"
+server_name: "www.example.com"
+pinned_cert_sha256: "$pin"
+EOF
+"$work_dir/obfsclient" -config "$work_dir/obfsclient-wrongpsk.yaml" >"$work_dir/client-wrongpsk.log" 2>&1 &
+wrongpsk_pid=$!
+pids+=($wrongpsk_pid)
+sleep 1
+if [[ "$(python3 "$work_dir/probe.py" 51907 128 2>/dev/null)" == "OK" ]]; then
+	fail "a client with the wrong PSK tunnelled traffic through"
+fi
+pass "a client with the wrong PSK cannot tunnel"
+kill -TERM $wrongpsk_pid 2>/dev/null || true
+
 # Server restart: the client must recover on its own.
 kill -TERM $tls_server_pid
 wait $tls_server_pid 2>/dev/null || true
@@ -201,6 +249,7 @@ pass "client reconnects by itself after a server restart"
 # forever against a possible interceptor.
 cat > "$work_dir/obfsclient-badpin.yaml" <<EOF
 mode: "tls"
+psk: "$tls_psk"
 local_addr: "127.0.0.1:51905"
 remote_tls_addr: "127.0.0.1:$tls_port"
 server_name: "www.example.com"
@@ -228,6 +277,19 @@ if "$work_dir/obfsclient" -config "$work_dir/bad.yaml" >"$work_dir/bad.log" 2>&1
 fi
 grep -q "psk is required" "$work_dir/bad.log" || fail "missing PSK was not reported clearly"
 pass "UDP mode without a PSK is rejected with a clear message"
+
+cat > "$work_dir/bad-tls.yaml" <<EOF
+mode: "tls"
+local_addr: "127.0.0.1:51908"
+remote_tls_addr: "127.0.0.1:$tls_port"
+server_name: "www.example.com"
+pinned_cert_sha256: "$pin"
+EOF
+if "$work_dir/obfsclient" -config "$work_dir/bad-tls.yaml" >"$work_dir/bad-tls.log" 2>&1; then
+	fail "client started in TLS mode without a PSK"
+fi
+grep -q "psk is required" "$work_dir/bad-tls.log" || fail "missing PSK in TLS mode was not reported clearly"
+pass "TLS mode without a PSK is rejected with a clear message"
 
 echo
 echo "All end-to-end checks passed."

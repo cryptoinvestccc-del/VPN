@@ -55,11 +55,10 @@ func main() {
 		if cfg.RemoteTLSAddr == "" || cfg.PinnedCertSHA256 == "" {
 			log.Fatal("obfsclient: remote_tls_addr and pinned_cert_sha256 are required in tls mode")
 		}
-		keySource := "auto-derived from TLS session"
-		if len(psks) > 0 {
-			keySource = "static psk"
+		if len(psks) == 0 {
+			log.Fatal("obfsclient: psk is required in tls mode")
 		}
-		log.Printf("obfsclient: [tls] local=%s -> remote=%s (sni=%s, key=%s)", cfg.LocalAddr, cfg.RemoteTLSAddr, cfg.ServerName, keySource)
+		log.Printf("obfsclient: [tls] local=%s -> remote=%s (sni=%s)", cfg.LocalAddr, cfg.RemoteTLSAddr, cfg.ServerName)
 		err = transport.RunClientTLS(ctx, transport.TLSConfig{
 			PSKs:             psks,
 			LocalAddr:        cfg.LocalAddr,

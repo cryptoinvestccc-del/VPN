@@ -16,6 +16,16 @@ import (
 	"github.com/cryptoinvestccc-del/vpn/internal/tlscert"
 )
 
+// testPSK returns a random pre-shared key for tests.
+func testPSK(t *testing.T) [32]byte {
+	t.Helper()
+	var psk [32]byte
+	if _, err := rand.Read(psk[:]); err != nil {
+		t.Fatal(err)
+	}
+	return psk
+}
+
 func testCert(t *testing.T) (certPath, keyPath, pin string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -60,6 +70,7 @@ func exchange(t *testing.T, entrance string, payload []byte, timeout time.Durati
 // their own traffic back.
 func TestTLSConcurrentClients(t *testing.T) {
 	ctx := testContext(t)
+	psk := testPSK(t)
 	certPath, keyPath, pin := testCert(t)
 
 	peerAddr, _, closePeer := realisticWireGuardPeer(t)
@@ -68,6 +79,7 @@ func TestTLSConcurrentClients(t *testing.T) {
 	serverTLSAddr := freeTCPAddr(t)
 	go func() {
 		_ = RunServerTLS(ctx, TLSConfig{
+			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
 			CertFile:      certPath,
@@ -82,6 +94,7 @@ func TestTLSConcurrentClients(t *testing.T) {
 		entrances[i] = freeUDPAddr(t)
 		go func(local string) {
 			_ = RunClientTLS(ctx, TLSConfig{
+				PSKs:             [][32]byte{psk},
 				LocalAddr:        local,
 				RemoteTLSAddr:    serverTLSAddr,
 				ServerName:       "test.local",
@@ -139,6 +152,7 @@ func TestTLSConcurrentClients(t *testing.T) {
 // someone restarts it.
 func TestTLSClientReconnectsAfterServerRestart(t *testing.T) {
 	ctx := testContext(t)
+	psk := testPSK(t)
 	certPath, keyPath, pin := testCert(t)
 
 	peerAddr, _, closePeer := realisticWireGuardPeer(t)
@@ -152,6 +166,7 @@ func TestTLSClientReconnectsAfterServerRestart(t *testing.T) {
 	go func() {
 		defer close(serverDone)
 		_ = RunServerTLS(serverCtx, TLSConfig{
+			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
 			CertFile:      certPath,
@@ -162,6 +177,7 @@ func TestTLSClientReconnectsAfterServerRestart(t *testing.T) {
 
 	go func() {
 		_ = RunClientTLS(ctx, TLSConfig{
+			PSKs:             [][32]byte{psk},
 			LocalAddr:        clientLocalAddr,
 			RemoteTLSAddr:    serverTLSAddr,
 			ServerName:       "test.local",
@@ -182,6 +198,7 @@ func TestTLSClientReconnectsAfterServerRestart(t *testing.T) {
 	// Same address, fresh server process.
 	go func() {
 		_ = RunServerTLS(ctx, TLSConfig{
+			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
 			CertFile:      certPath,
@@ -219,6 +236,7 @@ func TestTLSClientReconnectsAfterServerRestart(t *testing.T) {
 // reconnect loop against a possible interceptor.
 func TestTLSPinMismatchIsFatal(t *testing.T) {
 	ctx := testContext(t)
+	psk := testPSK(t)
 	certPath, keyPath, _ := testCert(t)
 
 	peerAddr, _, closePeer := realisticWireGuardPeer(t)
@@ -227,6 +245,7 @@ func TestTLSPinMismatchIsFatal(t *testing.T) {
 	serverTLSAddr := freeTCPAddr(t)
 	go func() {
 		_ = RunServerTLS(ctx, TLSConfig{
+			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
 			CertFile:      certPath,
@@ -238,6 +257,7 @@ func TestTLSPinMismatchIsFatal(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- RunClientTLS(ctx, TLSConfig{
+			PSKs:             [][32]byte{psk},
 			LocalAddr:        freeUDPAddr(t),
 			RemoteTLSAddr:    serverTLSAddr,
 			ServerName:       "test.local",
@@ -258,10 +278,7 @@ func TestTLSPinMismatchIsFatal(t *testing.T) {
 // TestServerReapsIdleSessions verifies the session table doesn't grow
 // without bound as peers come and go.
 func TestServerReapsIdleSessions(t *testing.T) {
-	var psk [32]byte
-	if _, err := rand.Read(psk[:]); err != nil {
-		t.Fatal(err)
-	}
+	psk := testPSK(t)
 	obf, err := obfuscator.New(psk)
 	if err != nil {
 		t.Fatal(err)
@@ -317,10 +334,7 @@ func TestServerReapsIdleSessions(t *testing.T) {
 // proxies promptly and reports cancellation rather than a socket error,
 // so systemd sees a clean exit on SIGTERM.
 func TestGracefulShutdown(t *testing.T) {
-	var psk [32]byte
-	if _, err := rand.Read(psk[:]); err != nil {
-		t.Fatal(err)
-	}
+	psk := testPSK(t)
 
 	peerAddr, _, closePeer := realisticWireGuardPeer(t)
 	defer closePeer()

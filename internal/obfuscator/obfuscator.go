@@ -24,6 +24,12 @@ const (
 	tagSize    = chacha20poly1305.Overhead   // 16
 	padLenSize = 2
 
+	// NonceSize is the length of the per-packet nonce that prefixes every
+	// wrapped packet. Callers that need to identify a packet without
+	// being able to decrypt it — replay detection, for instance — can
+	// read it from the first NonceSize bytes.
+	NonceSize = nonceSize
+
 	// Overhead is what wrapping adds to a packet before padding.
 	Overhead = nonceSize + padLenSize + tagSize
 

@@ -54,17 +54,22 @@ func main() {
 		if cfg.ListenTLSAddr == "" || cfg.CertFile == "" || cfg.KeyFile == "" {
 			log.Fatal("obfsserver: listen_tls_addr, cert_file and key_file are required in tls mode")
 		}
-		keySource := "auto-derived from TLS session"
-		if len(psks) > 0 {
-			keySource = "static psk"
+		if len(psks) == 0 {
+			log.Fatal("obfsserver: psk is required in tls mode (it is what authorizes a peer; " +
+				"the certificate is public, so its pin cannot serve that purpose)")
 		}
-		log.Printf("obfsserver: [tls] listen=%s -> local=%s (key=%s)", cfg.ListenTLSAddr, cfg.LocalAddr, keySource)
+		fallback := cfg.FallbackAddr
+		if fallback == "" {
+			fallback = "none (canned response)"
+		}
+		log.Printf("obfsserver: [tls] listen=%s -> local=%s (fallback=%s)", cfg.ListenTLSAddr, cfg.LocalAddr, fallback)
 		err = transport.RunServerTLS(ctx, transport.TLSConfig{
 			PSKs:          psks,
 			LocalAddr:     cfg.LocalAddr,
 			ListenTLSAddr: cfg.ListenTLSAddr,
 			CertFile:      cfg.CertFile,
 			KeyFile:       cfg.KeyFile,
+			FallbackAddr:  cfg.FallbackAddr,
 		})
 	default:
 		log.Fatalf("obfsserver: unknown mode %q (want \"udp\" or \"tls\")", cfg.Mode)

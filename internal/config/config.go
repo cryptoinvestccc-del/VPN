@@ -36,6 +36,7 @@ type File struct {
 	ListenTLSAddr    string `yaml:"listen_tls_addr,omitempty"`
 	CertFile         string `yaml:"cert_file,omitempty"`
 	KeyFile          string `yaml:"key_file,omitempty"`
+	FallbackAddr     string `yaml:"fallback_addr,omitempty"`
 	RemoteTLSAddr    string `yaml:"remote_tls_addr,omitempty"`
 	ServerName       string `yaml:"server_name,omitempty"`
 	PinnedCertSHA256 string `yaml:"pinned_cert_sha256,omitempty"`
@@ -50,13 +51,10 @@ func (f File) PSK() ([32]byte, error) {
 // psk_previous when set. Pass this to obfuscator.NewMulti so Unwrap
 // accepts either key during a rotation window.
 //
-// An empty psk field returns (nil, nil) rather than an error — in TLS
-// mode this means "auto-derive the obfuscation key from the TLS session"
-// (see internal/transport's use of tls.Conn.ExportKeyingMaterial), so the
-// operator never has to generate or copy a PSK by hand for that mode.
-// UDP mode has no handshake to derive a key from, so it must reject an
-// empty psk itself (checked by the caller, since config doesn't know the
-// selected mode).
+// An empty psk field returns (nil, nil) rather than an error, so callers
+// can produce a message naming the mode they are in. Both modes require a
+// key: it is what authorizes a peer, in TLS mode just as much as in UDP
+// mode.
 func (f File) PSKs() ([][32]byte, error) {
 	if f.PSKBase64 == "" {
 		return nil, nil

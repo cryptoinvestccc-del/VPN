@@ -15,7 +15,12 @@ import (
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 )
 
-var errTooManySessions = errors.New("transport: session table is full")
+var (
+	errReplayedPacket = errors.New("transport: packet already opened a session")
+
+	// ErrInvalidPacket reports a packet too short to be one of ours.
+	ErrInvalidPacket = errors.New("transport: malformed packet")
+)
 
 // Config configures one end of the obfuscated tunnel.
 type Config struct {
@@ -57,12 +62,16 @@ const (
 	// sessionSweepInterval is how often expired sessions are reaped.
 	sessionSweepInterval = 30 * time.Second
 
-	// maxSessions bounds the session table. Sessions are only created
-	// for peers whose packets already passed AEAD authentication, so
-	// reaching this limit means a large legitimate deployment rather
-	// than an attack; the cap exists so a bug or a key leak can't
-	// exhaust file descriptors on the host.
+	// maxSessions bounds the session table so a bug or a key leak can't
+	// exhaust file descriptors on the host. Reaching it evicts the
+	// quietest peer rather than refusing the newest one.
 	maxSessions = 4096
+
+	// replayCacheSize and replayWindow bound the memory the replay guard
+	// uses. Only session-opening packets are recorded, so this covers
+	// far more peers than maxSessions allows to exist at once.
+	replayCacheSize = 16384
+	replayWindow    = 10 * time.Minute
 )
 
 // RunClient proxies plaintext WireGuard packets from a local WireGuard
@@ -207,14 +216,17 @@ func RunServer(ctx context.Context, cfg Config) error {
 		// resources. Junk packets and DPI probes land here too and
 		// are dropped without any response, which is what keeps the
 		// port from behaving like an oracle.
-		plaintext, err := obf.Unwrap(buf[:n])
+		wirePacket := buf[:n]
+		plaintext, err := obf.Unwrap(wirePacket)
 		if err != nil {
 			continue
 		}
 
-		session, err := sessions.get(addr)
+		session, err := sessions.getForPacket(addr, wirePacket)
 		if err != nil {
-			log.Printf("transport: cannot serve peer %s: %v", addr, err)
+			if !errors.Is(err, errReplayedPacket) {
+				log.Printf("transport: cannot serve peer %s: %v", addr, err)
+			}
 			continue
 		}
 		if _, err := session.localConn.Write(plaintext); err != nil {
@@ -245,20 +257,49 @@ func (s *session) close() {
 }
 
 type sessionTable struct {
-	mu        sync.Mutex
-	sessions  map[string]*session
-	wireConn  net.PacketConn
-	localAddr *net.UDPAddr
-	obf       *obfuscator.Obfuscator
+	mu          sync.Mutex
+	sessions    map[string]*session
+	wireConn    net.PacketConn
+	localAddr   *net.UDPAddr
+	obf         *obfuscator.Obfuscator
+	maxSessions int
+	replay      *replayGuard
 }
 
 func newSessionTable(wireConn net.PacketConn, localAddr *net.UDPAddr, obf *obfuscator.Obfuscator) *sessionTable {
 	return &sessionTable{
-		sessions:  make(map[string]*session),
-		wireConn:  wireConn,
-		localAddr: localAddr,
-		obf:       obf,
+		sessions:    make(map[string]*session),
+		wireConn:    wireConn,
+		localAddr:   localAddr,
+		obf:         obf,
+		maxSessions: maxSessions,
+		replay:      newReplayGuard(replayCacheSize, replayWindow),
 	}
+}
+
+// getForPacket resolves the session for a peer, given the wire packet that
+// arrived from it. Known peers are served directly; an unknown peer opens
+// a session only if its packet is not one we have already seen open a
+// session, which is what stops a captured packet from being replayed into
+// unlimited server state.
+func (t *sessionTable) getForPacket(peerAddr net.Addr, wirePacket []byte) (*session, error) {
+	key := peerAddr.String()
+
+	t.mu.Lock()
+	if s, ok := t.sessions[key]; ok {
+		t.mu.Unlock()
+		s.touch()
+		return s, nil
+	}
+	t.mu.Unlock()
+
+	if len(wirePacket) < obfuscator.NonceSize {
+		return nil, ErrInvalidPacket
+	}
+	if !t.replay.admit(wirePacket[:obfuscator.NonceSize]) {
+		return nil, errReplayedPacket
+	}
+	return t.get(peerAddr)
 }
 
 // get returns the session for peerAddr, creating one (with its own socket
@@ -273,9 +314,14 @@ func (t *sessionTable) get(peerAddr net.Addr) (*session, error) {
 		s.touch()
 		return s, nil
 	}
-	if len(t.sessions) >= maxSessions {
-		t.mu.Unlock()
-		return nil, errTooManySessions
+	if len(t.sessions) >= t.maxSessions {
+		// Evict the least recently active peer rather than turning the
+		// newcomer away: refusing would let whoever filled the table
+		// lock out every client that arrives afterwards.
+		if victim := t.leastRecentlyActiveLocked(); victim != nil {
+			delete(t.sessions, victim.peerAddr.String())
+			defer victim.close()
+		}
 	}
 	t.mu.Unlock()
 
@@ -375,6 +421,18 @@ func (t *sessionTable) closeAll() {
 	for _, s := range all {
 		s.close()
 	}
+}
+
+// leastRecentlyActiveLocked returns the session that has been quiet
+// longest. The caller must hold t.mu.
+func (t *sessionTable) leastRecentlyActiveLocked() *session {
+	var oldest *session
+	for _, s := range t.sessions {
+		if oldest == nil || s.lastActive.Load() < oldest.lastActive.Load() {
+			oldest = s
+		}
+	}
+	return oldest
 }
 
 // count reports how many sessions are currently live (used by tests).
