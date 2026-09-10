@@ -41,12 +41,7 @@ chmod 750 "$config_dir"
 
 if [[ ! -f "$config_path" ]]; then
 	echo "==> installing config template (EDIT THIS before starting the service)"
-	template="${repo_dir}/examples/${bin_name}.yaml"
-	if [[ "$role" == "server" ]]; then
-		# default template is UDP mode; TLS template is opt-in
-		template="${repo_dir}/examples/${bin_name}.yaml"
-	fi
-	cp "$template" "$config_path"
+	cp "${repo_dir}/examples/${bin_name}.yaml" "$config_path"
 	chown root:obfsvpn "$config_path"
 	chmod 640 "$config_path"
 else

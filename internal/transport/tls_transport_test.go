@@ -23,6 +23,7 @@ func freeTCPAddr(t *testing.T) string {
 }
 
 func TestTLSClientServerRoundTrip(t *testing.T) {
+	ctx := testContext(t)
 	var psk [32]byte
 	if _, err := rand.Read(psk[:]); err != nil {
 		t.Fatal(err)
@@ -46,7 +47,7 @@ func TestTLSClientServerRoundTrip(t *testing.T) {
 	clientLocalAddr := freeUDPAddr(t)
 
 	go func() {
-		if err := RunServerTLS(TLSConfig{
+		if err := RunServerTLS(ctx, TLSConfig{
 			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
@@ -59,7 +60,7 @@ func TestTLSClientServerRoundTrip(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	go func() {
-		if err := RunClientTLS(TLSConfig{
+		if err := RunClientTLS(ctx, TLSConfig{
 			PSKs:             [][32]byte{psk},
 			LocalAddr:        clientLocalAddr,
 			RemoteTLSAddr:    serverTLSAddr,
@@ -99,6 +100,7 @@ func TestTLSClientServerRoundTrip(t *testing.T) {
 // psk, so both must derive the same obfuscation key from the TLS session
 // via RFC 5705 keying material export and still round-trip successfully.
 func TestTLSAutoDerivedKey(t *testing.T) {
+	ctx := testContext(t)
 	dir := t.TempDir()
 	certPath := filepath.Join(dir, "server.crt")
 	keyPath := filepath.Join(dir, "server.key")
@@ -117,7 +119,7 @@ func TestTLSAutoDerivedKey(t *testing.T) {
 	clientLocalAddr := freeUDPAddr(t)
 
 	go func() {
-		if err := RunServerTLS(TLSConfig{
+		if err := RunServerTLS(ctx, TLSConfig{
 			// PSKs intentionally left empty.
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
@@ -130,7 +132,7 @@ func TestTLSAutoDerivedKey(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	go func() {
-		if err := RunClientTLS(TLSConfig{
+		if err := RunClientTLS(ctx, TLSConfig{
 			// PSKs intentionally left empty.
 			LocalAddr:        clientLocalAddr,
 			RemoteTLSAddr:    serverTLSAddr,
@@ -167,6 +169,7 @@ func TestTLSAutoDerivedKey(t *testing.T) {
 }
 
 func TestTLSClientRejectsWrongPin(t *testing.T) {
+	ctx := testContext(t)
 	dir := t.TempDir()
 	certPath := filepath.Join(dir, "server.crt")
 	keyPath := filepath.Join(dir, "server.key")
@@ -186,7 +189,7 @@ func TestTLSClientRejectsWrongPin(t *testing.T) {
 	clientLocalAddr := freeUDPAddr(t)
 
 	go func() {
-		_ = RunServerTLS(TLSConfig{
+		_ = RunServerTLS(ctx, TLSConfig{
 			PSKs:          [][32]byte{psk},
 			LocalAddr:     peerAddr,
 			ListenTLSAddr: serverTLSAddr,
@@ -196,7 +199,7 @@ func TestTLSClientRejectsWrongPin(t *testing.T) {
 	}()
 	time.Sleep(150 * time.Millisecond)
 
-	err := RunClientTLS(TLSConfig{
+	err := RunClientTLS(ctx, TLSConfig{
 		PSKs:             [][32]byte{psk},
 		LocalAddr:        clientLocalAddr,
 		RemoteTLSAddr:    serverTLSAddr,

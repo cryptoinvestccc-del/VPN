@@ -4,8 +4,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"log"
+	"os/signal"
+	"syscall"
 
 	"github.com/cryptoinvestccc-del/vpn/internal/config"
 	"github.com/cryptoinvestccc-del/vpn/internal/transport"
@@ -29,6 +33,9 @@ func main() {
 		log.Fatal("obfsserver: local_addr is required")
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	switch cfg.Mode {
 	case "", "udp":
 		if cfg.ListenWireAddr == "" {
@@ -38,7 +45,7 @@ func main() {
 			log.Fatal("obfsserver: psk is required in udp mode (no handshake exists yet to auto-derive one from)")
 		}
 		log.Printf("obfsserver: [udp] listen=%s -> local=%s", cfg.ListenWireAddr, cfg.LocalAddr)
-		err = transport.RunServer(transport.Config{
+		err = transport.RunServer(ctx, transport.Config{
 			PSKs:           psks,
 			LocalAddr:      cfg.LocalAddr,
 			ListenWireAddr: cfg.ListenWireAddr,
@@ -52,7 +59,7 @@ func main() {
 			keySource = "static psk"
 		}
 		log.Printf("obfsserver: [tls] listen=%s -> local=%s (key=%s)", cfg.ListenTLSAddr, cfg.LocalAddr, keySource)
-		err = transport.RunServerTLS(transport.TLSConfig{
+		err = transport.RunServerTLS(ctx, transport.TLSConfig{
 			PSKs:          psks,
 			LocalAddr:     cfg.LocalAddr,
 			ListenTLSAddr: cfg.ListenTLSAddr,
@@ -63,7 +70,8 @@ func main() {
 		log.Fatalf("obfsserver: unknown mode %q (want \"udp\" or \"tls\")", cfg.Mode)
 	}
 
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("obfsserver: %v", err)
 	}
+	log.Print("obfsserver: shut down")
 }

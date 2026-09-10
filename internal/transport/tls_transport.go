@@ -1,12 +1,15 @@
 package transport
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"io"
 	"log"
 	"net"
+	"sync/atomic"
+	"time"
 
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 	"github.com/cryptoinvestccc-del/vpn/internal/tlscert"
@@ -44,12 +47,91 @@ type TLSConfig struct {
 	PinnedCertSHA256 string
 }
 
-const maxFrameSize = 2048 // generous bound for an obfuscated WG packet
+const (
+	// MaxTunnelPacket is the largest plaintext packet the tunnel carries.
+	// It covers jumbo frames, well past any WireGuard MTU in practice,
+	// and bounds per-session buffers so a few thousand concurrent
+	// sessions can't exhaust memory.
+	MaxTunnelPacket = 9000
+
+	// maxFrameSize bounds a single framed packet on the TLS stream. It
+	// covers the largest packet Wrap can emit for a MaxTunnelPacket
+	// payload, so framing never becomes the reason a legitimate packet
+	// is dropped.
+	maxFrameSize = MaxTunnelPacket + obfuscator.Overhead + obfuscator.MaxPadding
+
+	// handshakeTimeout caps how long a connection may take to complete
+	// its TLS handshake. Without it a probe can hold sockets open
+	// indefinitely by starting handshakes it never finishes.
+	handshakeTimeout = 15 * time.Second
+
+	// idleTimeout closes TLS sessions that stop carrying traffic. The
+	// client's keepalive-free WireGuard peer still re-handshakes every
+	// couple of minutes, so this only reaps genuinely dead sessions.
+	idleTimeout = 5 * time.Minute
+
+	// idleCheckInterval is how often an idle session wakes to check
+	// whether it has been quiet long enough to close.
+	idleCheckInterval = 30 * time.Second
+
+	// Reconnect backoff bounds for the client.
+	reconnectMinDelay = 500 * time.Millisecond
+	reconnectMaxDelay = 30 * time.Second
+
+	// healthySessionDuration is how long a session must last to count as
+	// working, which resets the reconnect backoff.
+	healthySessionDuration = 60 * time.Second
+)
 
 // keyExportLabel identifies our use of RFC 5705 TLS keying material
 // export. Both sides must use the same label/context to derive the same
 // key; it carries no secrecy itself.
 const keyExportLabel = "obfsvpn obfuscation key v1"
+
+// ErrPinMismatch reports that the server presented a certificate other
+// than the pinned one. It is deliberately fatal to the client rather than
+// retryable: the benign explanations (a rotated certificate) and the
+// hostile one (an interceptor) are indistinguishable from here, and only
+// the operator can tell them apart.
+var ErrPinMismatch = errors.New("transport: server certificate pin mismatch (possible MITM)")
+
+// errFrameTooLarge marks a packet the framing can't carry. It is a
+// per-packet fault, not a session fault: tearing down a working tunnel
+// because one oversized datagram arrived would turn a dropped packet into
+// an outage.
+var errFrameTooLarge = errors.New("transport: frame exceeds maximum tunnel packet size")
+
+// frame format on the TLS stream: 2-byte big-endian length || payload
+func writeFrame(w io.Writer, payload []byte) error {
+	if len(payload) > maxFrameSize {
+		return errFrameTooLarge
+	}
+	frame := make([]byte, 2+len(payload))
+	binary.BigEndian.PutUint16(frame[:2], uint16(len(payload)))
+	copy(frame[2:], payload)
+
+	// One Write, so a frame always lands in a single TLS record: two
+	// writes would split the length prefix and body into separate
+	// records, handing a traffic analyst a fixed 2-byte record pattern
+	// before every packet.
+	_, err := w.Write(frame)
+	return err
+}
+
+func readFrame(r io.Reader, buf []byte) ([]byte, error) {
+	var hdr [2]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return nil, err
+	}
+	size := int(binary.BigEndian.Uint16(hdr[:]))
+	if size > len(buf) {
+		return nil, errors.New("transport: frame exceeds buffer")
+	}
+	if _, err := io.ReadFull(r, buf[:size]); err != nil {
+		return nil, err
+	}
+	return buf[:size], nil
+}
 
 // deriveSessionObfuscator derives the obfuscation key for one TLS
 // connection from the already-established TLS session secret (RFC 5705
@@ -65,9 +147,6 @@ const keyExportLabel = "obfsvpn obfuscation key v1"
 // value. Its purpose is automating key *management* for the padding/
 // obfuscation layer, not adding a second independent secret.
 func deriveSessionObfuscator(conn *tls.Conn) (*obfuscator.Obfuscator, error) {
-	if err := conn.Handshake(); err != nil {
-		return nil, err
-	}
 	state := conn.ConnectionState()
 	material, err := state.ExportKeyingMaterial(keyExportLabel, nil, 32)
 	if err != nil {
@@ -88,37 +167,16 @@ func obfuscatorFor(conn *tls.Conn, staticPSKs [][32]byte) (*obfuscator.Obfuscato
 	return deriveSessionObfuscator(conn)
 }
 
-// frame format on the TLS stream: 2-byte big-endian length || payload
-func writeFrame(w io.Writer, payload []byte) error {
-	if len(payload) > maxFrameSize {
-		return errors.New("transport: frame too large")
-	}
-	var hdr [2]byte
-	binary.BigEndian.PutUint16(hdr[:], uint16(len(payload)))
-	if _, err := w.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err := w.Write(payload)
-	return err
-}
-
-func readFrame(r io.Reader) ([]byte, error) {
-	var hdr [2]byte
-	if _, err := io.ReadFull(r, hdr[:]); err != nil {
-		return nil, err
-	}
-	size := binary.BigEndian.Uint16(hdr[:])
-	buf := make([]byte, size)
-	if _, err := io.ReadFull(r, buf); err != nil {
-		return nil, err
-	}
-	return buf, nil
-}
-
 // RunServerTLS accepts real TLS connections (so active DPI probing sees a
 // legitimate TLS handshake) and relays obfuscated frames to/from a local
-// WireGuard server.
-func RunServerTLS(cfg TLSConfig) error {
+// WireGuard server. Each connection gets its own socket to the local
+// WireGuard server, so concurrent clients never share a reply path.
+func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
+	// Derived so in-flight handshakes and the shutdown watcher end when
+	// this function returns.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
 		return err
@@ -133,28 +191,50 @@ func RunServerTLS(cfg TLSConfig) error {
 	}
 	defer ln.Close()
 
+	go closeOnDone(ctx, ln)
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			return err
+			return ctxErrOr(ctx, err)
 		}
-		go func() {
-			tlsConn, ok := conn.(*tls.Conn)
-			if !ok {
-				log.Printf("transport: unexpected connection type from tls.Listen")
-				conn.Close()
-				return
-			}
-			obf, err := obfuscatorFor(tlsConn, cfg.PSKs)
-			if err != nil {
-				log.Printf("transport: failed to establish session key: %v", err)
-				conn.Close()
-				return
-			}
-			if err := serveTLSConn(conn, obf, cfg.LocalAddr); err != nil {
-				log.Printf("transport: tls session ended: %v", err)
-			}
-		}()
+		go handleTLSConn(ctx, conn, cfg)
+	}
+}
+
+func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig) {
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		conn.Close()
+		return
+	}
+
+	// Complete the handshake under a deadline before doing anything
+	// else, then clear it: the session itself is long-lived.
+	if err := tlsConn.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil {
+		conn.Close()
+		return
+	}
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		// A failed handshake is routine here: DPI probes and internet
+		// background scanning both produce them.
+		conn.Close()
+		return
+	}
+	if err := tlsConn.SetDeadline(time.Time{}); err != nil {
+		conn.Close()
+		return
+	}
+
+	obf, err := obfuscatorFor(tlsConn, cfg.PSKs)
+	if err != nil {
+		log.Printf("transport: failed to establish session key: %v", err)
+		conn.Close()
+		return
+	}
+
+	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr); err != nil {
+		log.Printf("transport: tls session ended: %v", err)
 	}
 }
 
@@ -173,20 +253,44 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string) e
 
 	errCh := make(chan error, 2)
 
+	// Tracks traffic in *either* direction. Timing the session out on
+	// silence from the local WireGuard server alone would tear down a
+	// tunnel that is actively carrying packets toward it — for instance
+	// while a peer retries a handshake that isn't being answered yet.
+	var lastActivity atomic.Int64
+	lastActivity.Store(time.Now().UnixNano())
+
 	go func() {
-		buf := make([]byte, maxUDPPacket)
+		buf := make([]byte, MaxTunnelPacket)
 		for {
-			n, err := localConn.Read(buf)
-			if err != nil {
+			// A coarse deadline keeps this loop interruptible
+			// without paying for a syscall on every packet.
+			if err := localConn.SetReadDeadline(time.Now().Add(idleCheckInterval)); err != nil {
 				errCh <- err
 				return
 			}
+			n, err := localConn.Read(buf)
+			if err != nil {
+				if isTimeout(err) {
+					idle := time.Since(time.Unix(0, lastActivity.Load()))
+					if idle < idleTimeout {
+						continue
+					}
+				}
+				errCh <- err
+				return
+			}
+			lastActivity.Store(time.Now().UnixNano())
 			wrapped, err := obf.Wrap(buf[:n])
 			if err != nil {
 				log.Printf("transport: wrap failed: %v", err)
 				continue
 			}
 			if err := writeFrame(conn, wrapped); err != nil {
+				if errors.Is(err, errFrameTooLarge) {
+					log.Printf("transport: dropping oversized packet (%d bytes)", n)
+					continue
+				}
 				errCh <- err
 				return
 			}
@@ -194,8 +298,9 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string) e
 	}()
 
 	go func() {
+		buf := make([]byte, maxFrameSize)
 		for {
-			frame, err := readFrame(conn)
+			frame, err := readFrame(conn, buf)
 			if err != nil {
 				errCh <- err
 				return
@@ -207,28 +312,91 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string) e
 				// input would itself be a signal to a prober).
 				continue
 			}
+			lastActivity.Store(time.Now().UnixNano())
 			if _, err := localConn.Write(plaintext); err != nil {
 				log.Printf("transport: write to local failed: %v", err)
 			}
 		}
 	}()
 
+	// Closing the connections on return unblocks whichever pump is still
+	// running, so neither goroutine outlives the session.
 	return <-errCh
 }
 
 // RunClientTLS dials the server over real TLS (certificate pinned by
 // SHA-256 fingerprint, since it's self-signed) and bridges local
-// WireGuard traffic through it.
-func RunClientTLS(cfg TLSConfig) error {
+// WireGuard traffic through it, reconnecting with backoff whenever the
+// session drops. A VPN client that gave up on the first network blip
+// would leave the user's tunnel dead until someone restarted the service.
+func RunClientTLS(ctx context.Context, cfg TLSConfig) error {
 	if cfg.PinnedCertSHA256 == "" {
 		return errors.New("transport: pinned_cert_sha256 is required for TLS client mode")
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	localConn, err := net.ListenPacket("udp", cfg.LocalAddr)
 	if err != nil {
 		return err
 	}
 	defer localConn.Close()
+
+	go closeOnDone(ctx, localConn)
+
+	// Learned from the local WireGuard peer's first packet and shared
+	// across reconnects, so replies keep flowing to the right socket.
+	var localPeer atomic.Pointer[net.Addr]
+
+	delay := reconnectMinDelay
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		startedAt := time.Now()
+		err := runClientTLSSession(ctx, cfg, localConn, &localPeer)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		// A session that stayed up is evidence the server is healthy,
+		// so the next reconnect starts fast again. Without this reset
+		// a single earlier outage would leave every later reconnect
+		// waiting the maximum backoff.
+		if time.Since(startedAt) > healthySessionDuration {
+			delay = reconnectMinDelay
+		}
+		if errors.Is(err, ErrPinMismatch) {
+			// Not a transient fault: the server presented a
+			// certificate we don't trust. Retrying would just keep
+			// handing traffic to whoever is impersonating it.
+			return err
+		}
+		if err != nil {
+			log.Printf("transport: tls session lost (%v); reconnecting in %s", err, delay)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+
+		delay *= 2
+		if delay > reconnectMaxDelay {
+			delay = reconnectMaxDelay
+		}
+	}
+}
+
+// runClientTLSSession runs one TLS session to completion, returning when
+// it drops so the caller can reconnect.
+func runClientTLSSession(ctx context.Context, cfg TLSConfig, localConn net.PacketConn, localPeer *atomic.Pointer[net.Addr]) error {
+	// crypto/tls does not preserve error identity through the handshake,
+	// so the verifier records the mismatch here for the caller to see.
+	var pinMismatch atomic.Bool
 
 	tlsConf := &tls.Config{
 		ServerName:         cfg.ServerName,
@@ -240,16 +408,28 @@ func RunClientTLS(cfg TLSConfig) error {
 				return err
 			}
 			if pin != cfg.PinnedCertSHA256 {
-				return errors.New("transport: server certificate pin mismatch (possible MITM)")
+				pinMismatch.Store(true)
+				return ErrPinMismatch
 			}
 			return nil
 		},
 	}
 
-	conn, err := tls.Dial("tcp", cfg.RemoteTLSAddr, tlsConf)
+	dialer := &tls.Dialer{
+		NetDialer: &net.Dialer{Timeout: handshakeTimeout},
+		Config:    tlsConf,
+	}
+	dialCtx, cancelDial := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancelDial()
+
+	rawConn, err := dialer.DialContext(dialCtx, "tcp", cfg.RemoteTLSAddr)
 	if err != nil {
+		if pinMismatch.Load() {
+			return ErrPinMismatch
+		}
 		return err
 	}
+	conn := rawConn.(*tls.Conn)
 	defer conn.Close()
 
 	obf, err := obfuscatorFor(conn, cfg.PSKs)
@@ -257,24 +437,51 @@ func RunClientTLS(cfg TLSConfig) error {
 		return err
 	}
 
-	var lastLocalAddr net.Addr
+	// Ends this session's pumps when the process is shutting down.
+	sessionCtx, endSession := context.WithCancel(ctx)
+	defer endSession()
+	go func() {
+		<-sessionCtx.Done()
+		conn.Close()
+	}()
+
 	errCh := make(chan error, 2)
 
+	// Local reads are shared across reconnects (the socket outlives the
+	// session), so this pump must stop when the session ends rather than
+	// keep consuming packets meant for the next connection. A short read
+	// deadline lets it notice.
 	go func() {
 		buf := make([]byte, maxUDPPacket)
 		for {
-			n, addr, err := localConn.ReadFrom(buf)
-			if err != nil {
+			if sessionCtx.Err() != nil {
+				errCh <- sessionCtx.Err()
+				return
+			}
+			if err := localConn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 				errCh <- err
 				return
 			}
-			lastLocalAddr = addr
+			n, addr, err := localConn.ReadFrom(buf)
+			if err != nil {
+				if isTimeout(err) {
+					continue
+				}
+				errCh <- err
+				return
+			}
+			localPeer.Store(&addr)
+
 			wrapped, err := obf.Wrap(buf[:n])
 			if err != nil {
 				log.Printf("transport: wrap failed: %v", err)
 				continue
 			}
 			if err := writeFrame(conn, wrapped); err != nil {
+				if errors.Is(err, errFrameTooLarge) {
+					log.Printf("transport: dropping oversized packet (%d bytes)", n)
+					continue
+				}
 				errCh <- err
 				return
 			}
@@ -282,8 +489,9 @@ func RunClientTLS(cfg TLSConfig) error {
 	}()
 
 	go func() {
+		buf := make([]byte, maxFrameSize)
 		for {
-			frame, err := readFrame(conn)
+			frame, err := readFrame(conn, buf)
 			if err != nil {
 				errCh <- err
 				return
@@ -292,14 +500,26 @@ func RunClientTLS(cfg TLSConfig) error {
 			if err != nil {
 				continue
 			}
-			if lastLocalAddr == nil {
+			peer := localPeer.Load()
+			if peer == nil {
 				continue
 			}
-			if _, err := localConn.WriteTo(plaintext, lastLocalAddr); err != nil {
+			if _, err := localConn.WriteTo(plaintext, *peer); err != nil {
 				log.Printf("transport: write to local failed: %v", err)
 			}
 		}
 	}()
 
-	return <-errCh
+	err = <-errCh
+	endSession()
+	// Wait for the local pump to observe the cancellation before
+	// returning, so the next session starts with sole ownership of the
+	// local socket.
+	<-errCh
+	return err
+}
+
+func isTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }

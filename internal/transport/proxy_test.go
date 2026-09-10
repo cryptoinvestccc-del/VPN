@@ -2,11 +2,21 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"net"
 	"testing"
 	"time"
 )
+
+// testContext returns a context cancelled when the test finishes, so the
+// proxies under test shut down instead of leaking into later tests.
+func testContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return ctx
+}
 
 // fakeWireGuardPeer is a bare UDP echo responder standing in for a real
 // WireGuard endpoint, so we can test the obfuscated proxy pair end-to-end
@@ -43,6 +53,7 @@ func freeUDPAddr(t *testing.T) string {
 }
 
 func TestClientServerRoundTrip(t *testing.T) {
+	ctx := testContext(t)
 	var psk [32]byte
 	if _, err := rand.Read(psk[:]); err != nil {
 		t.Fatal(err)
@@ -66,12 +77,12 @@ func TestClientServerRoundTrip(t *testing.T) {
 	}
 
 	go func() {
-		if err := RunServer(serverCfg); err != nil {
+		if err := RunServer(ctx, serverCfg); err != nil {
 			t.Logf("server exited: %v", err)
 		}
 	}()
 	go func() {
-		if err := RunClient(clientCfg); err != nil {
+		if err := RunClient(ctx, clientCfg); err != nil {
 			t.Logf("client exited: %v", err)
 		}
 	}()
