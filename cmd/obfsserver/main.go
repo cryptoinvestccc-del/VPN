@@ -14,6 +14,7 @@ import (
 
 	"github.com/cryptoinvestccc-del/vpn/internal/clients"
 	"github.com/cryptoinvestccc-del/vpn/internal/config"
+	"github.com/cryptoinvestccc-del/vpn/internal/metrics"
 	"github.com/cryptoinvestccc-del/vpn/internal/transport"
 )
 
@@ -79,6 +80,20 @@ func main() {
 	defer stop()
 	watchForReload(ctx, registry)
 
+	var stats *metrics.Registry
+	if cfg.MetricsAddr != "" {
+		stats = metrics.New(cfg.PerClientMetrics)
+		if cfg.PerClientMetrics {
+			log.Print("obfsserver: per-client metrics are on — the server will keep " +
+				"per-device usage counters, which is a usage log in all but name")
+		}
+		go func() {
+			if err := metrics.Serve(ctx, cfg.MetricsAddr, stats); err != nil {
+				log.Printf("obfsserver: metrics endpoint stopped: %v", err)
+			}
+		}()
+	}
+
 	switch cfg.Mode {
 	case "", "udp":
 		if cfg.ListenWireAddr == "" {
@@ -91,6 +106,7 @@ func main() {
 		err = transport.RunServer(ctx, transport.Config{
 			PSKs:           psks,
 			Clients:        registry,
+			Metrics:        stats,
 			LocalAddr:      cfg.LocalAddr,
 			ListenWireAddr: cfg.ListenWireAddr,
 		})
@@ -110,6 +126,7 @@ func main() {
 		err = transport.RunServerTLS(ctx, transport.TLSConfig{
 			PSKs:          psks,
 			Clients:       registry,
+			Metrics:       stats,
 			LocalAddr:     cfg.LocalAddr,
 			ListenTLSAddr: cfg.ListenTLSAddr,
 			CertFile:      cfg.CertFile,

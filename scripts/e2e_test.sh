@@ -388,6 +388,57 @@ pass "a revoked client cannot reconnect"
 pass "obfsctl list reports who has access"
 
 ##############################################################################
+echo "==> metrics"
+##############################################################################
+metrics_port=51920
+metrics_wire_port=51921
+metrics_client_port=51922
+metrics_psk="$(openssl rand -base64 32)"
+
+cat > "$work_dir/obfsserver-metrics.yaml" <<EOF
+mode: "udp"
+psk: "$metrics_psk"
+local_addr: "127.0.0.1:$wg_port"
+listen_wire_addr: "127.0.0.1:$metrics_wire_port"
+metrics_addr: "127.0.0.1:$metrics_port"
+EOF
+
+cat > "$work_dir/obfsclient-metrics.yaml" <<EOF
+mode: "udp"
+psk: "$metrics_psk"
+local_addr: "127.0.0.1:$metrics_client_port"
+remote_wire_addr: "127.0.0.1:$metrics_wire_port"
+EOF
+
+"$work_dir/obfsserver" -config "$work_dir/obfsserver-metrics.yaml" >"$work_dir/server-metrics.log" 2>&1 &
+metrics_server_pid=$!
+pids+=($metrics_server_pid)
+"$work_dir/obfsclient" -config "$work_dir/obfsclient-metrics.yaml" >"$work_dir/client-metrics.log" 2>&1 &
+pids+=($!)
+sleep 1
+
+[[ "$(python3 "$work_dir/probe.py" "$metrics_client_port" 512)" == "OK" ]] \
+	|| fail "the tunnel did not carry traffic in the metrics run"
+
+scrape="$(curl -fsS "http://127.0.0.1:$metrics_port/metrics")" \
+	|| fail "the metrics endpoint did not respond"
+grep -q "^obfsvpn_sessions_active 1$" <<<"$scrape" || fail "sessions_active is not 1: $(grep obfsvpn_sessions_active <<<"$scrape")"
+grep -q "^obfsvpn_bytes_received_total 512$" <<<"$scrape" || fail "byte counter is wrong: $(grep bytes_received <<<"$scrape")"
+pass "metrics endpoint reports live traffic accurately"
+
+curl -fsS "http://127.0.0.1:$metrics_port/healthz" >/dev/null || fail "healthz did not respond"
+pass "health endpoint responds"
+
+# Privacy default: without per_client_metrics the server must not publish
+# per-device usage, which would be a usage log in all but name.
+if grep -q "obfsvpn_client_" <<<"$scrape"; then
+	fail "per-client usage counters were published without being enabled"
+fi
+pass "no per-client usage is published unless enabled"
+
+kill -TERM $metrics_server_pid 2>/dev/null || true
+
+##############################################################################
 echo "==> real WireGuard integration"
 ##############################################################################
 # Separate module: it runs a genuine WireGuard implementation in userspace

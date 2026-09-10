@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cryptoinvestccc-del/vpn/internal/clients"
+	"github.com/cryptoinvestccc-del/vpn/internal/metrics"
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 )
 
@@ -56,6 +57,11 @@ type Config struct {
 	// before the first real packet, to break "first packet looks like a
 	// WG handshake" fingerprinting. 0 disables it.
 	JunkPackets int
+
+	// Metrics records what an operator needs to see. Nil is fine: every
+	// recording method is safe on a nil registry, so there is nothing to
+	// guard at the call sites.
+	Metrics *metrics.Registry
 }
 
 const (
@@ -207,6 +213,7 @@ func RunServer(ctx context.Context, cfg Config) error {
 	defer wireConn.Close()
 
 	sessions := newSessionTable(wireConn, localAddr, registry)
+	sessions.metrics = cfg.Metrics
 	defer sessions.closeAll()
 
 	go sessions.reapLoop(ctx)
@@ -228,6 +235,7 @@ func RunServer(ctx context.Context, cfg Config) error {
 				continue
 			}
 			session.touch()
+			cfg.Metrics.PacketIn(session.clientID, len(plaintext))
 			if _, err := session.localConn.Write(plaintext); err != nil {
 				log.Printf("transport: write to local failed: %v", err)
 			}
@@ -241,16 +249,20 @@ func RunServer(ctx context.Context, cfg Config) error {
 		// would tell a prober it found the right port.
 		plaintext, clientID, obf, ok := sessions.authenticator().authenticate(wirePacket)
 		if !ok {
+			cfg.Metrics.AuthFailure()
 			continue
 		}
 
 		session, err := sessions.open(addr, wirePacket, clientID, obf)
 		if err != nil {
-			if !errors.Is(err, errReplayedPacket) {
+			if errors.Is(err, errReplayedPacket) {
+				cfg.Metrics.ReplayRejected()
+			} else {
 				log.Printf("transport: cannot serve peer %s: %v", addr, err)
 			}
 			continue
 		}
+		cfg.Metrics.PacketIn(clientID, len(plaintext))
 		if _, err := session.localConn.Write(plaintext); err != nil {
 			log.Printf("transport: write to local failed: %v", err)
 		}
@@ -288,6 +300,7 @@ type sessionTable struct {
 	registry    *clients.Registry
 	maxSessions int
 	replay      *replayGuard
+	metrics     *metrics.Registry
 
 	// auth is rebuilt whenever the credential set changes, so a reload
 	// costs one rebuild rather than a comparison on every packet.
@@ -400,6 +413,7 @@ func (t *sessionTable) open(peerAddr net.Addr, wirePacket []byte, clientID strin
 	t.sessions[key] = s
 	t.mu.Unlock()
 
+	t.metrics.SessionOpened(clientID)
 	go t.pumpReplies(s, key)
 	return s, nil
 }
@@ -414,6 +428,7 @@ func (t *sessionTable) pumpReplies(s *session, key string) {
 			delete(t.sessions, key)
 		}
 		t.mu.Unlock()
+		t.metrics.SessionClosed()
 	}()
 
 	buf := make([]byte, maxUDPPacket)
@@ -430,6 +445,7 @@ func (t *sessionTable) pumpReplies(s *session, key string) {
 			continue
 		}
 		warnIfOversized(len(wrapped))
+		t.metrics.PacketOut(s.clientID, n)
 		if _, err := t.wireConn.WriteTo(wrapped, s.peerAddr); err != nil {
 			log.Printf("transport: write to wire failed: %v", err)
 			return
@@ -456,6 +472,7 @@ func (t *sessionTable) disconnectRevoked() int {
 		log.Printf("transport: disconnecting %s: client %q was revoked", s.peerAddr, s.clientID)
 		s.close()
 	}
+	t.metrics.RevocationEnforced(len(revoked))
 	return len(revoked)
 }
 

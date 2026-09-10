@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cryptoinvestccc-del/vpn/internal/clients"
+	"github.com/cryptoinvestccc-del/vpn/internal/metrics"
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 	"github.com/cryptoinvestccc-del/vpn/internal/tlscert"
 )
@@ -57,6 +58,9 @@ type TLSConfig struct {
 	// self-signed and only exists to make the handshake look like real
 	// TLS to on-path observers.
 	PinnedCertSHA256 string
+
+	// Metrics records what an operator needs to see; nil is fine.
+	Metrics *metrics.Registry
 }
 
 const (
@@ -262,17 +266,22 @@ func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, registry *
 	recorder := newRecordingReader(tlsConn)
 	firstPacket, clientID, obf, err := authenticatePeer(tlsConn, auth, recorder)
 	if err != nil {
+		cfg.Metrics.AuthFailure()
+		cfg.Metrics.FallbackServed()
 		serveFallback(tlsConn, recorder, cfg.FallbackAddr)
 		return
 	}
 	recorder.stop()
 
-	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr, firstPacket, clientID, registry); err != nil {
+	cfg.Metrics.SessionOpened(clientID)
+	defer cfg.Metrics.SessionClosed()
+
+	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr, firstPacket, clientID, registry, cfg.Metrics); err != nil {
 		log.Printf("transport: tls session for %q ended: %v", clientID, err)
 	}
 }
 
-func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, firstPacket []byte, clientID string, registry *clients.Registry) error {
+func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, firstPacket []byte, clientID string, registry *clients.Registry, stats *metrics.Registry) error {
 	defer conn.Close()
 
 	udpAddr, err := net.ResolveUDPAddr("udp", localAddr)
@@ -288,6 +297,7 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 	// The packet that authenticated this peer is ordinary traffic and
 	// still has to reach WireGuard.
 	if len(firstPacket) > 0 {
+		stats.PacketIn(clientID, len(firstPacket))
 		if _, err := localConn.Write(firstPacket); err != nil {
 			return err
 		}
@@ -331,6 +341,7 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 				return
 			}
 			lastActivity.Store(time.Now().UnixNano())
+			stats.PacketOut(clientID, n)
 			wrapped, err := obf.Wrap(buf[:n])
 			if err != nil {
 				log.Printf("transport: wrap failed: %v", err)
@@ -364,6 +375,7 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 				continue
 			}
 			lastActivity.Store(time.Now().UnixNano())
+			stats.PacketIn(clientID, len(plaintext))
 			if _, err := localConn.Write(plaintext); err != nil {
 				log.Printf("transport: write to local failed: %v", err)
 			}

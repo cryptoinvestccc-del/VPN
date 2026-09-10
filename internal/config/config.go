@@ -38,6 +38,17 @@ type File struct {
 	// rekeying every device.
 	ClientsFile string `yaml:"clients_file,omitempty"`
 
+	// MetricsAddr exposes operational counters over HTTP when set.
+	// Bind it to loopback: a public metrics endpoint announces that this
+	// host runs a VPN, which is the one thing the rest of the project
+	// works to hide.
+	MetricsAddr string `yaml:"metrics_addr,omitempty"`
+
+	// PerClientMetrics adds per-device traffic counters. Off by default:
+	// counting bytes per client is a record of who used the service and
+	// when, which is a log in all but name.
+	PerClientMetrics bool `yaml:"per_client_metrics,omitempty"`
+
 	// TLS mode fields.
 	ListenTLSAddr    string `yaml:"listen_tls_addr,omitempty"`
 	CertFile         string `yaml:"cert_file,omitempty"`
