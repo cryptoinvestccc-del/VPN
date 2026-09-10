@@ -109,9 +109,17 @@ func NewSet(list []Client) (*Set, error) {
 		}
 	}
 
-	if len(set.credentials) == 0 {
-		return nil, errors.New("clients: no enabled clients — every connection would be refused")
-	}
+	// A file in which every client is revoked is not an error. It is the
+	// state an operator is in the moment after withdrawing the last
+	// credential, and refusing to load it would mean the revocation
+	// silently did not happen — the previous set would stay in force and
+	// the device being cut off would keep working.
+	//
+	// Refusing everyone is an outage, which is loud and noticed within
+	// minutes. Continuing to admit a credential somebody just revoked is
+	// silent, and revocation is most often reached for precisely when
+	// silence is the thing that costs. Callers that want to treat an
+	// empty set as a startup mistake can ask with Empty.
 	return set, nil
 }
 
@@ -145,6 +153,12 @@ func (s *Set) Credentials() []Credential { return s.credentials }
 func (s *Set) IsEnabled(clientID string) bool { return s.enabled[clientID] }
 
 // Count is the number of clients currently allowed in.
+// Empty reports that no client currently has access, so every connection
+// would be refused. Distinguishing this from a load failure is what lets
+// a caller treat "the file is broken" and "everyone is revoked"
+// differently, which they are.
+func (s *Set) Empty() bool { return s == nil || len(s.credentials) == 0 }
+
 func (s *Set) Count() int { return len(s.enabled) }
 
 func decodeKey(b64, clientID, field string) ([32]byte, error) {

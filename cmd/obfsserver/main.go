@@ -42,6 +42,15 @@ func watchForReload(ctx context.Context, registry *clients.Registry) {
 					log.Printf("obfsserver: reload failed, keeping the previous credentials: %v", err)
 					continue
 				}
+				if set := registry.Current(); set.Empty() {
+					// Deliberate and honoured, but never quiet: from here
+					// on the server refuses everyone, and an operator who
+					// meant to revoke one client needs to see that they
+					// revoked the last one.
+					log.Print("obfsserver: credentials reloaded — NO CLIENTS ARE ENABLED. " +
+						"Every connection will now be refused, and sessions still open are closed within seconds.")
+					continue
+				}
 				log.Printf("obfsserver: credentials reloaded, %d clients enabled",
 					registry.Current().Count())
 			}
@@ -78,6 +87,14 @@ func main() {
 		registry, err = clients.NewRegistry(cfg.ClientsFile)
 		if err != nil {
 			log.Fatalf("obfsserver: %v", err)
+		}
+		if registry.Current().Empty() {
+			// At startup an empty list is a mistake rather than a
+			// decision: nobody starts a server intending it to refuse
+			// every client. Saying so now beats a server that runs
+			// perfectly and serves no one.
+			log.Fatalf("obfsserver: %s has no enabled clients, so every connection would be refused; "+
+				"add one with 'obfsctl -file %s add <id>'", cfg.ClientsFile, cfg.ClientsFile)
 		}
 		log.Printf("obfsserver: %d clients enabled from %s (SIGHUP reloads)",
 			registry.Current().Count(), cfg.ClientsFile)

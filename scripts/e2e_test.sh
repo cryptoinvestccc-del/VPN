@@ -387,6 +387,138 @@ pass "a revoked client cannot reconnect"
 	|| fail "obfsctl list does not show the revocation"
 pass "obfsctl list reports who has access"
 
+# Alice's tunnel was still open and carrying traffic when she was
+# revoked. The check used to sit in a read-timeout branch, so a busy
+# session was never re-checked and ran on indefinitely — which is the
+# case revocation exists for. Bob stays busy here too, to be sure the
+# cut is aimed at one client and not at whoever happens to be talking.
+alice_still_up=""
+for _ in $(seq 1 20); do
+	if [[ "$(python3 "$work_dir/probe.py" "$alice_port" 256 2>/dev/null)" != "OK" ]]; then
+		alice_still_up="no"
+		break
+	fi
+	alice_still_up="yes"
+	sleep 0.5
+done
+[[ "$alice_still_up" == "no" ]] || fail "a revoked client's open session kept carrying traffic"
+pass "revoking a client cuts the session it already had open"
+
+[[ "$(python3 "$work_dir/probe.py" "$bob_port" 256)" == "OK" ]] \
+	|| fail "cutting alice's session also cut bob's"
+pass "the cut was aimed at the revoked client only"
+
+# Revoking the last client used to be refused as an invalid credential
+# file, so the server kept the previous list and the device being cut
+# off went on working while the log said only that a reload had failed.
+"$work_dir/obfsctl" -file "$clients_file" revoke bob >/dev/null
+kill -HUP $multi_server_pid
+sleep 1
+grep -q "NO CLIENTS ARE ENABLED" "$work_dir/server-multi.log" \
+	|| fail "revoking the last client did not take effect"
+pass "revoking the last client is honoured, not refused"
+
+if [[ "$(python3 "$work_dir/probe.py" "$bob_port" 256 2>/dev/null)" == "OK" ]]; then
+	sleep 6
+	if [[ "$(python3 "$work_dir/probe.py" "$bob_port" 256 2>/dev/null)" == "OK" ]]; then
+		fail "the last client kept tunnelling after being revoked"
+	fi
+fi
+pass "the last client stops tunnelling once revoked"
+
+##############################################################################
+echo "==> connection profiles"
+##############################################################################
+# One artifact instead of three files and a fingerprint to retype. Every
+# value copied by hand is a value that can be copied wrong, and a wrong
+# pin or MTU does not look like a mistake — it looks like a server that
+# is down.
+profile_clients="$work_dir/profile-clients.yaml"
+profile_wire_port=51930
+profile_tls_port=51931
+profile_local_port=51932
+
+"$work_dir/obfsctl" -file "$profile_clients" add carol >/dev/null
+
+python3 "$work_dir/echo_peer.py" "$profile_wire_port" &
+pids+=($!)
+
+cat > "$work_dir/carol-wg.conf" <<EOF
+[Interface]
+PrivateKey = $(openssl rand -base64 32)
+Address = 10.9.0.2/32
+DNS = 1.1.1.1
+MTU = 1376
+
+[Peer]
+PublicKey = $(openssl rand -base64 32)
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = 127.0.0.1:$profile_local_port
+PersistentKeepalive = 25
+EOF
+
+"$work_dir/obfsctl" -file "$profile_clients" profile carol \
+	-wg "$work_dir/carol-wg.conf" \
+	-endpoint "127.0.0.1:$profile_tls_port" \
+	-mode tls -pin "$pin" -sni "www.example.com" \
+	-name "E2E" -out "$work_dir/carol.profile" >/dev/null 2>&1 \
+	|| fail "obfsctl could not build a profile"
+
+grep -q '^obfsvpn://v1/' "$work_dir/carol.profile" || fail "the profile is not a link"
+[[ "$(stat -c '%a' "$work_dir/carol.profile")" == "600" ]] \
+	|| fail "the profile holds this device's keys and must not be world-readable"
+pass "obfsctl built a profile the client can import"
+
+cat > "$work_dir/obfsserver-profile.yaml" <<EOF
+mode: "tls"
+clients_file: "$profile_clients"
+local_addr: "127.0.0.1:$profile_wire_port"
+listen_tls_addr: "127.0.0.1:$profile_tls_port"
+cert_file: "$work_dir/server.crt"
+key_file: "$work_dir/server.key"
+EOF
+"$work_dir/obfsserver" -config "$work_dir/obfsserver-profile.yaml" >"$work_dir/server-profile.log" 2>&1 &
+pids+=($!)
+sleep 1
+
+"$work_dir/obfsclient" -profile "$work_dir/carol.profile" \
+	-write-wireguard "$work_dir/carol-out.conf" >"$work_dir/client-profile.log" 2>&1 &
+pids+=($!)
+sleep 1.5
+
+[[ "$(python3 "$work_dir/probe.py" "$profile_local_port" 1200)" == "OK" ]] \
+	|| fail "a client configured only from a profile could not tunnel"
+pass "a client configured only from a profile carries traffic"
+
+grep -q "MTU = 1376" "$work_dir/carol-out.conf" \
+	|| fail "the written WireGuard config lost its MTU"
+grep -q "Endpoint = 127.0.0.1:$profile_local_port" "$work_dir/carol-out.conf" \
+	|| fail "the written WireGuard config does not point at the local obfuscator"
+pass "the client wrote a WireGuard config pointing at the obfuscator, not the server"
+
+# A damaged link must be refused rather than half-applied.
+python3 - "$work_dir/carol.profile" "$work_dir/tampered.profile" <<'PY2'
+import sys
+text = open(sys.argv[1]).read().strip()
+body = list(text[len("obfsvpn://v1/"):])
+body[30] = "A" if body[30] != "A" else "B"
+open(sys.argv[2], "w").write("obfsvpn://v1/" + "".join(body))
+PY2
+if "$work_dir/obfsclient" -profile "$work_dir/tampered.profile" >"$work_dir/tampered.log" 2>&1; then
+	fail "a damaged profile was accepted"
+fi
+grep -qi "not a profile" "$work_dir/tampered.log" \
+	|| fail "a damaged profile was refused without saying why"
+pass "a damaged profile is refused with a clear message"
+
+# A pin in udp mode is a protection nobody is running.
+if "$work_dir/obfsctl" -file "$profile_clients" profile carol \
+	-wg "$work_dir/carol-wg.conf" -endpoint "127.0.0.1:$profile_tls_port" \
+	-mode udp -pin "$pin" >/dev/null 2>&1; then
+	fail "a udp profile carrying a certificate pin was built"
+fi
+pass "a profile that would mislead its owner about pinning is refused"
+
 ##############################################################################
 echo "==> metrics"
 ##############################################################################

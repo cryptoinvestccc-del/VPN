@@ -499,10 +499,20 @@ func (t *sessionTable) reapLoop(ctx context.Context) {
 	ticker := time.NewTicker(sessionSweepInterval)
 	defer ticker.Stop()
 
+	// Revocation runs on its own, faster clock. Reaping idle sessions can
+	// afford to be lazy — a socket held a little longer costs a socket.
+	// A credential that keeps carrying traffic after being withdrawn
+	// costs whatever it was withdrawn to prevent, so the two are not the
+	// same deadline and should not share one.
+	revocations := time.NewTicker(revocationCheckInterval)
+	defer revocations.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-revocations.C:
+			t.disconnectRevoked()
 		case now := <-ticker.C:
 			t.disconnectRevoked()
 

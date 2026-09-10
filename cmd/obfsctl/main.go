@@ -33,6 +33,8 @@ Usage:
   obfsctl -file clients.yaml revoke <client-id>  withdraw access
   obfsctl -file clients.yaml restore <client-id> give it back
   obfsctl -file clients.yaml list                show who has access
+  obfsctl -file clients.yaml profile <client-id> -wg <client.conf> -endpoint <host:port>
+                                                 build one file the client can import
 
 After add, revoke or restore, tell a running server to pick up the
 change with: systemctl reload obfsserver  (or: kill -HUP <pid>)
@@ -87,6 +89,12 @@ Flags:
 		}
 		fmt.Printf("%s: %s\n", args[1], map[bool]string{true: "revoked", false: "restored"}[args[0] == "revoke"])
 		fmt.Println("\nReload the server to apply: systemctl reload obfsserver")
+
+	case "profile":
+		if err := profileCommand(file, args[1:]); err != nil {
+			log("obfsctl: %v", err)
+			os.Exit(1)
+		}
 
 	case "list":
 		listClients(file)

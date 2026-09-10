@@ -17,11 +17,35 @@ import (
 
 func main() {
 	configPath := flag.String("config", "obfsclient.yaml", "path to config file")
+	profileArg := flag.String("profile", "", "connection profile: an obfsvpn:// link, or a file holding one")
+	writeWG := flag.String("write-wireguard", "", "write the profile's WireGuard config here before connecting")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("obfsclient: failed to load config: %v", err)
+	var (
+		cfg config.File
+		err error
+	)
+	if *profileArg != "" {
+		p, perr := loadProfile(*profileArg)
+		if perr != nil {
+			log.Fatalf("obfsclient: %v", perr)
+		}
+		log.Printf("obfsclient: %s", p)
+		cfg = configFromProfile(p)
+
+		if *writeWG != "" {
+			if err := writeWireGuardConfig(p, *writeWG); err != nil {
+				log.Fatalf("obfsclient: %v", err)
+			}
+		}
+	} else {
+		if *writeWG != "" {
+			log.Fatal("obfsclient: -write-wireguard needs -profile; a YAML config carries no WireGuard settings")
+		}
+		cfg, err = config.Load(*configPath)
+		if err != nil {
+			log.Fatalf("obfsclient: failed to load config: %v", err)
+		}
 	}
 
 	psks, err := cfg.PSKs()

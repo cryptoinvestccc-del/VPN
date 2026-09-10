@@ -136,14 +136,68 @@ clients:
 	}
 }
 
-func TestEmptySetRejected(t *testing.T) {
-	if _, err := Load(writeFile(t, "clients: []\n")); err == nil {
-		t.Fatal("a set with no enabled clients would refuse every connection and must be rejected")
+// TestRevokingTheLastClientIsHonoured is a fix for a fault found by
+// running the real thing: an all-revoked file used to be refused as
+// invalid, so the registry kept the previous set and the device that had
+// just been cut off kept working — while the log said only that a reload
+// had failed.
+//
+// Refusing everyone is an outage: loud, and noticed in minutes.
+// Continuing to admit a credential somebody just revoked is silent, and
+// revocation is reached for exactly when silence is what costs.
+func TestRevokingTheLastClientIsHonoured(t *testing.T) {
+	set, err := Load(writeFile(t, "clients:\n  - id: only\n    psk: \""+key(1)+"\"\n    disabled: true\n"))
+	if err != nil {
+		t.Fatalf("a file revoking the last client was refused: %v", err)
+	}
+	if !set.Empty() {
+		t.Fatal("the set is not reported as empty")
+	}
+	if set.IsEnabled("only") {
+		t.Fatal("a revoked client is still enabled")
+	}
+	if len(set.Credentials()) != 0 {
+		t.Fatalf("a revoked client left %d credentials behind", len(set.Credentials()))
+	}
+}
+
+// TestReloadAppliesAnEmptySet is the same property one level up: the
+// registry has to swap the empty set in, not treat it as a failed load.
+func TestReloadAppliesAnEmptySet(t *testing.T) {
+	path := writeFile(t, "clients:\n  - id: laptop\n    psk: \""+key(1)+"\"\n")
+	registry, err := NewRegistry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.Current().Empty() {
+		t.Fatal("the starting set should not be empty")
 	}
 
-	path := writeFile(t, "clients:\n  - id: only\n    psk: \""+key(1)+"\"\n    disabled: true\n")
-	if _, err := Load(path); err == nil {
-		t.Fatal("a set where every client is revoked must be rejected too")
+	rewrite(t, path, "clients:\n  - id: laptop\n    psk: \""+key(1)+"\"\n    disabled: true\n")
+	if err := registry.Reload(); err != nil {
+		t.Fatalf("reloading an all-revoked file failed: %v", err)
+	}
+
+	if !registry.Current().Empty() {
+		t.Fatal("the revocation was not applied; the previous set is still in force")
+	}
+	if registry.Current().IsEnabled("laptop") {
+		t.Fatal("the revoked client can still authenticate")
+	}
+}
+
+// TestEmptyFileStillLoads: a file with no clients at all is the same
+// state as a file where all of them are revoked, and is treated the same
+// way. What must not load is a file that cannot be parsed — that is a
+// mistake, not a decision, and TestReloadKeepsPreviousSetOnError covers
+// it.
+func TestEmptyFileStillLoads(t *testing.T) {
+	set, err := Load(writeFile(t, "clients: []\n"))
+	if err != nil {
+		t.Fatalf("an empty client list was refused: %v", err)
+	}
+	if !set.Empty() {
+		t.Fatal("an empty client list did not produce an empty set")
 	}
 }
 
@@ -213,5 +267,14 @@ func TestStaticRegistryHasNoFileToReload(t *testing.T) {
 	}
 	if err := NewStaticRegistry(set).Reload(); err == nil {
 		t.Fatal("a registry with no file should report that it cannot reload")
+	}
+}
+
+// rewrite replaces a credential file in place, which is what an operator
+// running obfsctl does between reloads.
+func rewrite(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }

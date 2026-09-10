@@ -90,6 +90,12 @@ const (
 	// whether it has been quiet long enough to close.
 	idleCheckInterval = 30 * time.Second
 
+	// revocationCheckInterval bounds how long a withdrawn credential
+	// keeps carrying traffic. It is deliberately short: the cost is a
+	// map lookup per session, and the thing being bounded is how long a
+	// device stays connected after somebody decided it should not be.
+	revocationCheckInterval = 5 * time.Second
+
 	// Reconnect backoff bounds for the client.
 	reconnectMinDelay = 500 * time.Millisecond
 	reconnectMaxDelay = 30 * time.Second
@@ -325,7 +331,20 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 		}
 	}
 
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
+
+	// Revocation is watched on its own clock, not as a side effect of a
+	// read timing out.
+	//
+	// It used to live in the local-read loop's timeout branch, which
+	// meant it was reached only while the tunnel was quiet: a session
+	// carrying traffic never timed out, so its credential was never
+	// re-checked and it ran on indefinitely after being revoked. That is
+	// the case revocation exists for — a device is cut off precisely
+	// when somebody is using it.
+	done := make(chan struct{})
+	defer close(done)
+	go watchRevocation(done, clientID, registry, errCh)
 
 	// Tracks traffic in *either* direction. Timing the session out on
 	// silence from the local WireGuard server alone would tear down a
@@ -346,14 +365,6 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 			n, err := localConn.Read(buf)
 			if err != nil {
 				if isTimeout(err) {
-					// The same tick that checks for idleness checks
-					// whether this client still has access, so revoking
-					// a credential ends the tunnel it is holding open
-					// instead of only refusing the next connection.
-					if registry != nil && !registry.Current().IsEnabled(clientID) {
-						errCh <- ErrRevoked
-						return
-					}
 					idle := time.Since(time.Unix(0, lastActivity.Load()))
 					if idle < idleTimeout {
 						continue
@@ -608,4 +619,34 @@ func runClientTLSSession(ctx context.Context, cfg TLSConfig, localConn net.Packe
 func isTimeout(err error) bool {
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+// watchRevocation ends a session whose client has lost access.
+//
+// It runs on a fixed tick regardless of what the tunnel is doing, which
+// is the whole point: an active session must be cut as promptly as an
+// idle one. The check is an atomic load and a map lookup, so running it
+// often costs nothing worth measuring, and the interval is what bounds
+// how long a withdrawn credential keeps working.
+func watchRevocation(done <-chan struct{}, clientID string, registry *clients.Registry, errCh chan<- error) {
+	if registry == nil {
+		return
+	}
+	ticker := time.NewTicker(revocationCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			if !registry.Current().IsEnabled(clientID) {
+				select {
+				case errCh <- ErrRevoked:
+				case <-done:
+				}
+				return
+			}
+		}
+	}
 }
