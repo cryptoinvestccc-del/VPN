@@ -54,6 +54,12 @@ jobs:
       - name: End-to-end
         run: ./scripts/e2e_test.sh
 
+      # The runtime image has no shell and no libc, so a binary that
+      # quietly regained a cgo dependency would produce an image that
+      # cannot start. Building it here is what catches that.
+      - name: Container image
+        run: docker build -t obfsvpn:ci .
+
   fuzz:
     runs-on: ubuntu-latest
     steps:

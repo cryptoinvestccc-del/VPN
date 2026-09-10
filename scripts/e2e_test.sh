@@ -476,6 +476,52 @@ fi
 pass "generated client config does not bypass the obfuscator"
 
 ##############################################################################
+echo "==> packaging and config validation"
+##############################################################################
+# -check does the same loading a real start does, then exits. It is what
+# an operator runs before restarting a server that is carrying traffic.
+if ! "$work_dir/obfsserver" -config "$work_dir/obfsserver.yaml" -check >"$work_dir/check-ok.log" 2>&1; then
+	fail "-check rejected a configuration that works: $(cat "$work_dir/check-ok.log")"
+fi
+grep -q "configuration is valid" "$work_dir/check-ok.log" || fail "-check gave no verdict"
+pass "-check accepts a working configuration"
+
+cat > "$work_dir/broken-clients.yaml" <<'BROKEN'
+clients:
+  - id: a
+    psk: "not base64 at all!!"
+BROKEN
+cat > "$work_dir/obfsserver-broken.yaml" <<EOF
+mode: "udp"
+clients_file: "$work_dir/broken-clients.yaml"
+local_addr: "127.0.0.1:$wg_port"
+listen_wire_addr: "127.0.0.1:51930"
+EOF
+if "$work_dir/obfsserver" -config "$work_dir/obfsserver-broken.yaml" -check >"$work_dir/check-bad.log" 2>&1; then
+	fail "-check accepted a credential file with an unusable key"
+fi
+pass "-check catches a broken credential file before a restart would"
+
+# The container image builds from a static binary on a base with no shell
+# and no libc; if CGO ever crept back in, the image would not run at all.
+for binary in obfsserver obfsclient gencert obfsctl; do
+	CGO_ENABLED=0 go build -trimpath -o "$work_dir/static-$binary" "./cmd/$binary" \
+		|| fail "$binary does not build without cgo, so the scratch image would not run"
+done
+pass "all binaries build statically for the container image"
+
+if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+	if docker build -q -t obfsvpn:e2e "$repo_dir" >"$work_dir/docker-build.log" 2>&1; then
+		pass "container image builds"
+	else
+		tail -20 "$work_dir/docker-build.log" >&2
+		fail "container image failed to build"
+	fi
+else
+	echo "  SKIP: no Docker daemon here, so the image build is unverified"
+fi
+
+##############################################################################
 echo "==> real WireGuard integration"
 ##############################################################################
 # Separate module: it runs a genuine WireGuard implementation in userspace

@@ -1,0 +1,53 @@
+# Runs the obfuscator in a container alongside a WireGuard server.
+#
+#   docker compose up -d obfsserver
+#
+# The WireGuard side is deliberately not containerised here: it needs the
+# host's network stack and kernel module, and putting it in a container
+# mostly moves that complexity rather than removing it. Set it up with
+# deploy/provision-wireguard.sh and let the container reach it over the
+# host's loopback.
+
+services:
+  obfsserver:
+    build: .
+    image: obfsvpn:latest
+    restart: unless-stopped
+
+    # The container shares the host's network so it can reach the
+    # WireGuard server on 127.0.0.1. The alternative — a bridge network —
+    # would need WireGuard exposed on an address the container can see,
+    # which means exposing it more widely than loopback. That is exactly
+    # what must not happen: a reachable WireGuard port makes the
+    # obfuscation pointless while the tunnel still appears to work.
+    network_mode: host
+
+    # Binding 443 needs this one capability, not root. Everything else is
+    # dropped.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+    # A VPN server faces the internet by design, so the blast radius of a
+    # compromise is worth constraining: nothing in the container may be
+    # written, and no process may gain privileges it did not start with.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+    volumes:
+      # Config, credentials and the certificate. Read-only: the server
+      # never writes here, and obfsctl runs on the host.
+      - ./deploy/config:/etc/obfsvpn:ro
+
+    # Reloads credentials without restarting, so revoking one client does
+    # not drop everyone else's tunnel:
+    #   docker compose kill -s HUP obfsserver
+
+    # No healthcheck: the image has no shell and no HTTP client, so there
+    # is nothing in it that can probe the metrics endpoint. Validate the
+    # configuration before starting instead:
+    #   docker compose run --rm obfsserver -check
+    # and watch liveness from outside, by scraping metrics_addr on the
+    # host.

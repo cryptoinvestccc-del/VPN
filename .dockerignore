@@ -1,0 +1,10 @@
+.git
+test/wireguard
+scripts
+docs
+*.log
+obfsserver.yaml
+obfsclient.yaml
+clients.yaml
+server.crt
+server.key

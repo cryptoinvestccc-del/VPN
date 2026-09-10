@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -48,8 +49,18 @@ func watchForReload(ctx context.Context, registry *clients.Registry) {
 	}()
 }
 
+// modeName renders the transport for a human, filling in the default.
+func modeName(mode string) string {
+	if mode == "" {
+		return "udp"
+	}
+	return mode
+}
+
 func main() {
 	configPath := flag.String("config", "obfsserver.yaml", "path to config file")
+	checkOnly := flag.Bool("check", false,
+		"validate the configuration and credentials, then exit without serving")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -74,6 +85,21 @@ func main() {
 
 	if cfg.LocalAddr == "" {
 		log.Fatal("obfsserver: local_addr is required")
+	}
+
+	// Validating without serving lets an operator catch a typo before
+	// restarting a server that is carrying traffic. Everything above this
+	// point is the same work a real start does, so a clean -check means
+	// the config and credentials actually load.
+	if *checkOnly {
+		credentials := "one shared psk"
+		if registry != nil {
+			credentials = fmt.Sprintf("%d clients from %s",
+				registry.Current().Count(), cfg.ClientsFile)
+		}
+		log.Printf("obfsserver: configuration is valid (mode=%s, %s)",
+			modeName(cfg.Mode), credentials)
+		return
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
