@@ -34,6 +34,9 @@ func main() {
 		if cfg.RemoteWireAddr == "" {
 			log.Fatal("obfsclient: remote_wire_addr is required in udp mode")
 		}
+		if len(psks) == 0 {
+			log.Fatal("obfsclient: psk is required in udp mode (no handshake exists yet to auto-derive one from)")
+		}
 		log.Printf("obfsclient: [udp] local=%s -> remote=%s (junk=%d)", cfg.LocalAddr, cfg.RemoteWireAddr, cfg.JunkPackets)
 		err = transport.RunClient(transport.Config{
 			PSKs:           psks,
@@ -45,7 +48,11 @@ func main() {
 		if cfg.RemoteTLSAddr == "" || cfg.PinnedCertSHA256 == "" {
 			log.Fatal("obfsclient: remote_tls_addr and pinned_cert_sha256 are required in tls mode")
 		}
-		log.Printf("obfsclient: [tls] local=%s -> remote=%s (sni=%s)", cfg.LocalAddr, cfg.RemoteTLSAddr, cfg.ServerName)
+		keySource := "auto-derived from TLS session"
+		if len(psks) > 0 {
+			keySource = "static psk"
+		}
+		log.Printf("obfsclient: [tls] local=%s -> remote=%s (sni=%s, key=%s)", cfg.LocalAddr, cfg.RemoteTLSAddr, cfg.ServerName, keySource)
 		err = transport.RunClientTLS(transport.TLSConfig{
 			PSKs:             psks,
 			LocalAddr:        cfg.LocalAddr,

@@ -34,6 +34,9 @@ func main() {
 		if cfg.ListenWireAddr == "" {
 			log.Fatal("obfsserver: listen_wire_addr is required in udp mode")
 		}
+		if len(psks) == 0 {
+			log.Fatal("obfsserver: psk is required in udp mode (no handshake exists yet to auto-derive one from)")
+		}
 		log.Printf("obfsserver: [udp] listen=%s -> local=%s", cfg.ListenWireAddr, cfg.LocalAddr)
 		err = transport.RunServer(transport.Config{
 			PSKs:           psks,
@@ -44,7 +47,11 @@ func main() {
 		if cfg.ListenTLSAddr == "" || cfg.CertFile == "" || cfg.KeyFile == "" {
 			log.Fatal("obfsserver: listen_tls_addr, cert_file and key_file are required in tls mode")
 		}
-		log.Printf("obfsserver: [tls] listen=%s -> local=%s", cfg.ListenTLSAddr, cfg.LocalAddr)
+		keySource := "auto-derived from TLS session"
+		if len(psks) > 0 {
+			keySource = "static psk"
+		}
+		log.Printf("obfsserver: [tls] listen=%s -> local=%s (key=%s)", cfg.ListenTLSAddr, cfg.LocalAddr, keySource)
 		err = transport.RunServerTLS(transport.TLSConfig{
 			PSKs:          psks,
 			LocalAddr:     cfg.LocalAddr,

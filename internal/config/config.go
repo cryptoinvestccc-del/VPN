@@ -49,7 +49,18 @@ func (f File) PSK() ([32]byte, error) {
 // PSKs returns the configured keys, current key first, followed by
 // psk_previous when set. Pass this to obfuscator.NewMulti so Unwrap
 // accepts either key during a rotation window.
+//
+// An empty psk field returns (nil, nil) rather than an error — in TLS
+// mode this means "auto-derive the obfuscation key from the TLS session"
+// (see internal/transport's use of tls.Conn.ExportKeyingMaterial), so the
+// operator never has to generate or copy a PSK by hand for that mode.
+// UDP mode has no handshake to derive a key from, so it must reject an
+// empty psk itself (checked by the caller, since config doesn't know the
+// selected mode).
 func (f File) PSKs() ([][32]byte, error) {
+	if f.PSKBase64 == "" {
+		return nil, nil
+	}
 	current, err := decodeKey(f.PSKBase64, "psk")
 	if err != nil {
 		return nil, err
