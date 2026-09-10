@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cryptoinvestccc-del/vpn/internal/clients"
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 	"github.com/cryptoinvestccc-del/vpn/internal/tlscert"
 )
@@ -20,13 +21,17 @@ import (
 // plain UDP transport, TCP-over-TLS requires framing (length prefixes)
 // since TLS delivers a byte stream, not discrete packets.
 type TLSConfig struct {
-	// PSKs are the shared secrets that authorize a peer, current key
-	// first — see Config.PSKs for the rotation rationale. Required: the
-	// per-connection packet keys are derived from a PSK together with
-	// the TLS session (see deriveTrafficObfuscator), and without one any
-	// stranger who completes a handshake could send traffic into the
-	// WireGuard server behind this tunnel.
+	// PSKs is the single-key configuration: one secret shared by every
+	// client. Required unless Clients is set — the per-connection packet
+	// keys are derived from a credential together with the TLS session
+	// (see newTLSAuthenticator), and without one any stranger who
+	// completes a handshake could send traffic into the WireGuard server
+	// behind this tunnel.
 	PSKs [][32]byte
+
+	// Clients is the per-client configuration: each device has its own
+	// credential and can be revoked without touching the others.
+	Clients *clients.Registry
 
 	// LocalAddr: same meaning as in Config (local WireGuard endpoint).
 	LocalAddr string
@@ -108,6 +113,10 @@ var ErrPinMismatch = errors.New("transport: server certificate pin mismatch (pos
 // an outage.
 var errFrameTooLarge = errors.New("transport: frame exceeds maximum tunnel packet size")
 
+// ErrRevoked reports that a session was closed because its client's
+// credential was withdrawn.
+var ErrRevoked = errors.New("transport: client credential was revoked")
+
 // tooManySessions keeps the session-limit notice to one line per process
 // rather than one per refused connection, which under a flood would be
 // the flood.
@@ -155,6 +164,11 @@ func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	registry, err := registryFor(cfg.Clients, cfg.PSKs)
+	if err != nil {
+		return err
+	}
+
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
 		return err
@@ -197,12 +211,12 @@ func RunServerTLS(ctx context.Context, cfg TLSConfig) error {
 
 		go func() {
 			defer sessions.release()
-			handleTLSConn(ctx, conn, cfg, handshakes)
+			handleTLSConn(ctx, conn, cfg, registry, handshakes)
 		}()
 	}
 }
 
-func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, handshakes semaphore) {
+func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, registry *clients.Registry, handshakes semaphore) {
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {
 		conn.Close()
@@ -234,31 +248,31 @@ func handleTLSConn(ctx context.Context, conn net.Conn, cfg TLSConfig, handshakes
 		return
 	}
 
-	obf, err := deriveTrafficObfuscator(tlsConn, cfg.PSKs)
+	auth, err := newTLSAuthenticator(tlsConn, registry.Current())
 	if err != nil {
-		log.Printf("transport: failed to establish session key: %v", err)
+		log.Printf("transport: failed to establish session keys: %v", err)
 		conn.Close()
 		return
 	}
 
-	// A peer must prove it holds the pre-shared key before it gets a path
-	// to the WireGuard server. Anything else — a censor probing the port,
-	// a scanner, a browser that wandered in — is handed to the fallback,
+	// A peer must prove it holds a credential before it gets a path to
+	// the WireGuard server. Anything else — a censor probing the port, a
+	// scanner, a browser that wandered in — is handed to the fallback,
 	// which answers the way an ordinary web server would.
 	recorder := newRecordingReader(tlsConn)
-	firstPacket, err := authenticatePeer(tlsConn, obf, recorder)
+	firstPacket, clientID, obf, err := authenticatePeer(tlsConn, auth, recorder)
 	if err != nil {
 		serveFallback(tlsConn, recorder, cfg.FallbackAddr)
 		return
 	}
 	recorder.stop()
 
-	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr, firstPacket); err != nil {
-		log.Printf("transport: tls session ended: %v", err)
+	if err := serveTLSConn(tlsConn, obf, cfg.LocalAddr, firstPacket, clientID, registry); err != nil {
+		log.Printf("transport: tls session for %q ended: %v", clientID, err)
 	}
 }
 
-func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, firstPacket []byte) error {
+func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, firstPacket []byte, clientID string, registry *clients.Registry) error {
 	defer conn.Close()
 
 	udpAddr, err := net.ResolveUDPAddr("udp", localAddr)
@@ -300,6 +314,14 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 			n, err := localConn.Read(buf)
 			if err != nil {
 				if isTimeout(err) {
+					// The same tick that checks for idleness checks
+					// whether this client still has access, so revoking
+					// a credential ends the tunnel it is holding open
+					// instead of only refusing the next connection.
+					if registry != nil && !registry.Current().IsEnabled(clientID) {
+						errCh <- ErrRevoked
+						return
+					}
 					idle := time.Since(time.Unix(0, lastActivity.Load()))
 					if idle < idleTimeout {
 						continue
@@ -461,7 +483,7 @@ func runClientTLSSession(ctx context.Context, cfg TLSConfig, localConn net.Packe
 	conn := rawConn.(*tls.Conn)
 	defer conn.Close()
 
-	obf, err := deriveTrafficObfuscator(conn, cfg.PSKs)
+	obf, err := clientObfuscator(conn, cfg.PSKs)
 	if err != nil {
 		return err
 	}

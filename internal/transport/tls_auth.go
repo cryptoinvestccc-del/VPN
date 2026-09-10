@@ -10,6 +10,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cryptoinvestccc-del/vpn/internal/clients"
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 )
 
@@ -39,8 +40,8 @@ const (
 // pre-shared key.
 var ErrUnauthenticated = errors.New("transport: peer did not authenticate")
 
-// deriveTrafficObfuscator derives this connection's packet keys from two
-// inputs that must both be present:
+// newTLSAuthenticator derives this connection's candidate packet keys.
+// Each key comes from two inputs that must both be present:
 //
 //   - the TLS session's exporter value (RFC 5705), which binds the keys to
 //     this specific connection, so frames captured from one session cannot
@@ -54,30 +55,54 @@ var ErrUnauthenticated = errors.New("transport: peer did not authenticate")
 // server does. The pre-shared key is the only input an unauthorized peer
 // cannot supply.
 //
-// One key is derived per configured PSK, so key rotation keeps working:
-// the server accepts frames under the current or the previous key.
-func deriveTrafficObfuscator(conn *tls.Conn, psks [][32]byte) (*obfuscator.Obfuscator, error) {
-	if len(psks) == 0 {
-		return nil, errors.New("transport: a pre-shared key is required in TLS mode")
-	}
-
+// One key is derived per configured credential, so both key rotation and
+// per-client credentials keep working: the server tries each client's
+// current and previous key, and whichever opens the first frame is the
+// client it is talking to.
+func newTLSAuthenticator(conn *tls.Conn, set *clients.Set) (*authenticator, error) {
 	state := conn.ConnectionState()
 	exporter, err := state.ExportKeyingMaterial(keyExportLabel, nil, 32)
 	if err != nil {
 		return nil, err
 	}
 
-	keys := make([][32]byte, 0, len(psks))
-	for _, psk := range psks {
+	return newAuthenticator(set, func(psk [32]byte) ([32]byte, error) {
+		var key [32]byte
 		derived, err := hkdf.Key(sha256.New, exporter, psk[:], trafficKeyLabel, 32)
 		if err != nil {
-			return nil, err
+			return key, err
 		}
-		var key [32]byte
 		copy(key[:], derived)
-		keys = append(keys, key)
+		return key, nil
+	})
+}
+
+// clientObfuscator derives the single key a client uses for its own
+// connection. A client holds one credential — its own — so unlike the
+// server it has nothing to search: the first key is the only candidate,
+// and a second entry appears only while its key is being rotated.
+func clientObfuscator(conn *tls.Conn, psks [][32]byte) (*obfuscator.Obfuscator, error) {
+	if len(psks) == 0 {
+		return nil, errors.New("transport: a pre-shared key is required in TLS mode")
 	}
-	return obfuscator.NewMulti(keys)
+
+	credentials := make([]clients.Credential, 0, len(psks))
+	for _, psk := range psks {
+		credentials = append(credentials, clients.Credential{ClientID: sharedClientID, Key: psk})
+	}
+	set, err := clients.NewSetFromCredentials(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	auth, err := newTLSAuthenticator(conn, set)
+	if err != nil {
+		return nil, err
+	}
+	if len(auth.entries) == 0 {
+		return nil, errors.New("transport: no usable credential for this connection")
+	}
+	return auth.entries[0].obf, nil
 }
 
 // recordingReader passes reads through while keeping a copy of everything
@@ -111,26 +136,26 @@ func (rr *recordingReader) stop() { rr.enabled = false }
 // packet is returned so it can be forwarded — it is ordinary traffic, not
 // a separate authentication handshake, which keeps the exchange
 // indistinguishable from the rest of the session.
-func authenticatePeer(conn *tls.Conn, obf *obfuscator.Obfuscator, r io.Reader) ([]byte, error) {
+func authenticatePeer(conn *tls.Conn, auth *authenticator, r io.Reader) (packet []byte, clientID string, obf *obfuscator.Obfuscator, err error) {
 	if err := conn.SetReadDeadline(time.Now().Add(authTimeout)); err != nil {
-		return nil, err
+		return nil, "", nil, err
 	}
 
 	buf := make([]byte, maxFrameSize)
 	frame, err := readFrame(r, buf)
 	if err != nil {
-		return nil, err
+		return nil, "", nil, err
 	}
 
-	packet, err := obf.Unwrap(frame)
-	if err != nil {
-		return nil, ErrUnauthenticated
+	packet, clientID, obf, ok := auth.authenticate(frame)
+	if !ok {
+		return nil, "", nil, ErrUnauthenticated
 	}
 
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
-		return nil, err
+		return nil, "", nil, err
 	}
-	return packet, nil
+	return packet, clientID, obf, nil
 }
 
 // serveFallback makes an unauthorized connection look like what a censor

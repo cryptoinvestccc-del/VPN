@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cryptoinvestccc-del/vpn/internal/clients"
 	"github.com/cryptoinvestccc-del/vpn/internal/obfuscator"
 )
 
@@ -24,11 +25,18 @@ var (
 
 // Config configures one end of the obfuscated tunnel.
 type Config struct {
-	// PSKs are the shared secrets used to wrap/unwrap packets, current
-	// key first. Wrap uses PSKs[0]; Unwrap accepts any of them, which is
-	// what allows rotating to a new key without downtime (see
-	// config.File.PSKs).
+	// PSKs is the single-key configuration: one secret shared by every
+	// client, current key first. Convenient for a few personal devices,
+	// but revoking one of them means rekeying all of them.
+	//
+	// Ignored when Clients is set.
 	PSKs [][32]byte
+
+	// Clients is the per-client configuration, where each device has its
+	// own credential and can be revoked on its own. Internally this is
+	// the only mechanism: a shared PSK is served as a set containing one
+	// client.
+	Clients *clients.Registry
 
 	// LocalAddr is where we listen for/send plaintext WireGuard packets
 	// (typically 127.0.0.1:<wg-port> on the client, or forwards to the
@@ -182,7 +190,7 @@ func RunServer(ctx context.Context, cfg Config) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	obf, err := obfuscator.NewMulti(cfg.PSKs)
+	registry, err := registryFor(cfg.Clients, cfg.PSKs)
 	if err != nil {
 		return err
 	}
@@ -198,7 +206,7 @@ func RunServer(ctx context.Context, cfg Config) error {
 	}
 	defer wireConn.Close()
 
-	sessions := newSessionTable(wireConn, localAddr, obf)
+	sessions := newSessionTable(wireConn, localAddr, registry)
 	defer sessions.closeAll()
 
 	go sessions.reapLoop(ctx)
@@ -210,20 +218,33 @@ func RunServer(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return ctxErrOr(ctx, err)
 		}
-
-		// Authenticate before touching the session table: an
-		// unauthenticated packet must never cause us to allocate a
-		// socket, so spoofed source addresses can't exhaust
-		// resources. Junk packets and DPI probes land here too and
-		// are dropped without any response, which is what keeps the
-		// port from behaving like an oracle.
 		wirePacket := buf[:n]
-		plaintext, err := obf.Unwrap(wirePacket)
-		if err != nil {
+
+		// A peer we already know decrypts under the key it authenticated
+		// with — one AEAD attempt, however many clients are configured.
+		if session, ok := sessions.lookup(addr); ok {
+			plaintext, err := session.obf.Unwrap(wirePacket)
+			if err != nil {
+				continue
+			}
+			session.touch()
+			if _, err := session.localConn.Write(plaintext); err != nil {
+				log.Printf("transport: write to local failed: %v", err)
+			}
 			continue
 		}
 
-		session, err := sessions.getForPacket(addr, wirePacket)
+		// An unknown peer costs one attempt per credential. This is the
+		// only place that search happens, and it runs before any state
+		// is allocated: a spoofed source address that fails to
+		// authenticate leaves nothing behind, and gets no reply that
+		// would tell a prober it found the right port.
+		plaintext, clientID, obf, ok := sessions.authenticator().authenticate(wirePacket)
+		if !ok {
+			continue
+		}
+
+		session, err := sessions.open(addr, wirePacket, clientID, obf)
 		if err != nil {
 			if !errors.Is(err, errReplayedPacket) {
 				log.Printf("transport: cannot serve peer %s: %v", addr, err)
@@ -237,10 +258,12 @@ func RunServer(ctx context.Context, cfg Config) error {
 }
 
 // session is one remote peer's private path to the local WireGuard
-// server.
+// server, together with the credential that peer authenticated under.
 type session struct {
 	localConn  *net.UDPConn
 	peerAddr   net.Addr
+	clientID   string
+	obf        *obfuscator.Obfuscator
 	lastActive atomic.Int64 // unix nanoseconds
 	closeOnce  sync.Once
 }
@@ -262,58 +285,84 @@ type sessionTable struct {
 	sessions    map[string]*session
 	wireConn    net.PacketConn
 	localAddr   *net.UDPAddr
-	obf         *obfuscator.Obfuscator
+	registry    *clients.Registry
 	maxSessions int
 	replay      *replayGuard
+
+	// auth is rebuilt whenever the credential set changes, so a reload
+	// costs one rebuild rather than a comparison on every packet.
+	authMu    sync.Mutex
+	authSet   *clients.Set
+	authCache *authenticator
 }
 
-func newSessionTable(wireConn net.PacketConn, localAddr *net.UDPAddr, obf *obfuscator.Obfuscator) *sessionTable {
+func newSessionTable(wireConn net.PacketConn, localAddr *net.UDPAddr, registry *clients.Registry) *sessionTable {
 	return &sessionTable{
 		sessions:    make(map[string]*session),
 		wireConn:    wireConn,
 		localAddr:   localAddr,
-		obf:         obf,
+		registry:    registry,
 		maxSessions: maxSessions,
 		replay:      newReplayGuard(replayCacheSize, replayWindow),
 	}
 }
 
-// getForPacket resolves the session for a peer, given the wire packet that
-// arrived from it. Known peers are served directly; an unknown peer opens
-// a session only if its packet is not one we have already seen open a
-// session, which is what stops a captured packet from being replayed into
-// unlimited server state.
-func (t *sessionTable) getForPacket(peerAddr net.Addr, wirePacket []byte) (*session, error) {
-	key := peerAddr.String()
+// authenticator returns the current candidate keys, rebuilding them only
+// when the credential set has actually been swapped.
+func (t *sessionTable) authenticator() *authenticator {
+	set := t.registry.Current()
 
-	t.mu.Lock()
-	if s, ok := t.sessions[key]; ok {
-		t.mu.Unlock()
-		s.touch()
-		return s, nil
+	t.authMu.Lock()
+	defer t.authMu.Unlock()
+
+	if t.authCache != nil && t.authSet == set {
+		return t.authCache
 	}
-	t.mu.Unlock()
+	auth, err := newAuthenticator(set, nil)
+	if err != nil {
+		// Only possible from a malformed key, which the credential
+		// loader already rejects. Keep serving the previous set rather
+		// than locking every client out.
+		log.Printf("transport: could not rebuild credentials: %v", err)
+		if t.authCache != nil {
+			return t.authCache
+		}
+		return &authenticator{}
+	}
+	t.authSet, t.authCache = set, auth
+	return auth
+}
 
+// lookup returns an established session for a peer, without creating one.
+func (t *sessionTable) lookup(peerAddr net.Addr) (*session, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s, ok := t.sessions[peerAddr.String()]
+	return s, ok
+}
+
+// open creates a session for a peer that has just authenticated, keeping
+// the credential it used so every later packet costs a single decryption.
+//
+// The replay check happens here rather than at authentication: a packet
+// that has already opened a session must not open another from a
+// different source address, which is how one captured packet would
+// otherwise be turned into unlimited server state.
+func (t *sessionTable) open(peerAddr net.Addr, wirePacket []byte, clientID string, obf *obfuscator.Obfuscator) (*session, error) {
 	if len(wirePacket) < obfuscator.NonceSize {
 		return nil, ErrInvalidPacket
 	}
 	if !t.replay.admit(wirePacket[:obfuscator.NonceSize]) {
 		return nil, errReplayedPacket
 	}
-	return t.get(peerAddr)
-}
 
-// get returns the session for peerAddr, creating one (with its own socket
-// to the local WireGuard server and a goroutine pumping replies back) if
-// this peer hasn't been seen before.
-func (t *sessionTable) get(peerAddr net.Addr) (*session, error) {
 	key := peerAddr.String()
 
 	t.mu.Lock()
-	if s, ok := t.sessions[key]; ok {
+	if existing, ok := t.sessions[key]; ok {
 		t.mu.Unlock()
-		s.touch()
-		return s, nil
+		existing.touch()
+		return existing, nil
 	}
 	if len(t.sessions) >= t.maxSessions {
 		// Evict the least recently active peer rather than turning the
@@ -331,7 +380,12 @@ func (t *sessionTable) get(peerAddr net.Addr) (*session, error) {
 		return nil, err
 	}
 
-	s := &session{localConn: localConn, peerAddr: peerAddr}
+	s := &session{
+		localConn: localConn,
+		peerAddr:  peerAddr,
+		clientID:  clientID,
+		obf:       obf,
+	}
 	s.touch()
 
 	t.mu.Lock()
@@ -351,7 +405,7 @@ func (t *sessionTable) get(peerAddr net.Addr) (*session, error) {
 }
 
 // pumpReplies forwards everything the local WireGuard server sends back to
-// the peer that owns this session, wrapped for the wire.
+// the peer that owns this session, wrapped under that peer's own key.
 func (t *sessionTable) pumpReplies(s *session, key string) {
 	defer func() {
 		s.close()
@@ -370,7 +424,7 @@ func (t *sessionTable) pumpReplies(s *session, key string) {
 		}
 		s.touch()
 
-		wrapped, err := t.obf.Wrap(buf[:n])
+		wrapped, err := s.obf.Wrap(buf[:n])
 		if err != nil {
 			log.Printf("transport: wrap failed: %v", err)
 			continue
@@ -381,6 +435,28 @@ func (t *sessionTable) pumpReplies(s *session, key string) {
 			return
 		}
 	}
+}
+
+// disconnectRevoked closes sessions whose client no longer has access, so
+// revoking a credential ends the tunnel that credential is holding open
+// rather than only refusing the next one. Reports how many were closed.
+func (t *sessionTable) disconnectRevoked() int {
+	set := t.registry.Current()
+
+	var revoked []*session
+	t.mu.Lock()
+	for _, s := range t.sessions {
+		if !set.IsEnabled(s.clientID) {
+			revoked = append(revoked, s)
+		}
+	}
+	t.mu.Unlock()
+
+	for _, s := range revoked {
+		log.Printf("transport: disconnecting %s: client %q was revoked", s.peerAddr, s.clientID)
+		s.close()
+	}
+	return len(revoked)
 }
 
 // reapLoop closes sessions that have gone quiet, so a server that has
@@ -394,6 +470,8 @@ func (t *sessionTable) reapLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
+			t.disconnectRevoked()
+
 			var expired []*session
 			t.mu.Lock()
 			for _, s := range t.sessions {

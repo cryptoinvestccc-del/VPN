@@ -297,12 +297,16 @@ func TestServerReapsIdleSessions(t *testing.T) {
 	}
 	defer wireConn.Close()
 
-	table := newSessionTable(wireConn, localAddr, obf)
+	table := newSessionTable(wireConn, localAddr, singleClientRegistry(t, psk))
 	defer table.closeAll()
 
 	for i := 0; i < 3; i++ {
 		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 40000 + i}
-		if _, err := table.get(addr); err != nil {
+		packet, err := obf.Wrap([]byte{byte(i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := table.open(addr, packet, sharedClientID, obf); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -312,7 +316,11 @@ func TestServerReapsIdleSessions(t *testing.T) {
 
 	// Re-fetching a known peer must reuse its session rather than
 	// opening a second socket for it.
-	if _, err := table.get(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 40000}); err != nil {
+	repeat, err := obf.Wrap([]byte("same peer again"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := table.open(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 40000}, repeat, sharedClientID, obf); err != nil {
 		t.Fatal(err)
 	}
 	if got := table.count(); got != 3 {

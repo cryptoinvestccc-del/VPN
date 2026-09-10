@@ -32,6 +32,12 @@ type File struct {
 	// connection — stronger against active DPI probing).
 	Mode string `yaml:"mode,omitempty"`
 
+	// ClientsFile lists per-client credentials, each revocable on its
+	// own. When set it replaces psk/psk_previous: a shared key cannot
+	// express revocation, since withdrawing access from one device means
+	// rekeying every device.
+	ClientsFile string `yaml:"clients_file,omitempty"`
+
 	// TLS mode fields.
 	ListenTLSAddr    string `yaml:"listen_tls_addr,omitempty"`
 	CertFile         string `yaml:"cert_file,omitempty"`

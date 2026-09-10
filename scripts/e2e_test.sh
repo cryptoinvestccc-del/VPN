@@ -27,6 +27,7 @@ cd "$repo_dir"
 go build -o "$work_dir/obfsserver" ./cmd/obfsserver
 go build -o "$work_dir/obfsclient" ./cmd/obfsclient
 go build -o "$work_dir/gencert" ./cmd/gencert
+go build -o "$work_dir/obfsctl" ./cmd/obfsctl
 
 # A stand-in for the WireGuard server: echoes datagrams back.
 cat > "$work_dir/echo_peer.py" <<'PY'
@@ -291,6 +292,100 @@ fi
 grep -q "psk is required" "$work_dir/bad-tls.log" || fail "missing PSK in TLS mode was not reported clearly"
 pass "TLS mode without a PSK is rejected with a clear message"
 
+
+##############################################################################
+echo "==> per-client credentials and revocation"
+##############################################################################
+# What a shared key cannot do: take access away from one device without
+# rekeying every device. Exercised through the shipped tools and a real
+# SIGHUP, the way an operator would do it.
+clients_file="$work_dir/clients.yaml"
+alice_psk="$("$work_dir/obfsctl" -file "$clients_file" add alice | grep '^psk:' | sed 's/^psk: "//; s/"$//')"
+bob_psk="$("$work_dir/obfsctl" -file "$clients_file" add bob | grep '^psk:' | sed 's/^psk: "//; s/"$//')"
+[[ -n "$alice_psk" && -n "$bob_psk" ]] || fail "obfsctl did not generate client keys"
+[[ "$alice_psk" != "$bob_psk" ]] || fail "two clients were given the same key"
+pass "obfsctl issued distinct credentials per client"
+
+[[ "$(stat -c '%a' "$clients_file")" == "600" ]] || fail "the credential file is readable by others"
+pass "the credential file is not world-readable"
+
+multi_port=51910
+alice_port=51911
+bob_port=51912
+
+cat > "$work_dir/obfsserver-multi.yaml" <<EOF
+mode: "tls"
+clients_file: "$clients_file"
+local_addr: "127.0.0.1:$wg_port"
+listen_tls_addr: "127.0.0.1:$multi_port"
+cert_file: "$work_dir/server.crt"
+key_file: "$work_dir/server.key"
+EOF
+
+for name in alice bob; do
+	port_var="${name}_port"; psk_var="${name}_psk"
+	cat > "$work_dir/obfsclient-$name.yaml" <<EOF
+mode: "tls"
+psk: "${!psk_var}"
+local_addr: "127.0.0.1:${!port_var}"
+remote_tls_addr: "127.0.0.1:$multi_port"
+server_name: "www.example.com"
+pinned_cert_sha256: "$pin"
+EOF
+done
+
+"$work_dir/obfsserver" -config "$work_dir/obfsserver-multi.yaml" >"$work_dir/server-multi.log" 2>&1 &
+multi_server_pid=$!
+pids+=($multi_server_pid)
+sleep 1
+
+for name in alice bob; do
+	"$work_dir/obfsclient" -config "$work_dir/obfsclient-$name.yaml" >"$work_dir/client-$name.log" 2>&1 &
+	pids+=($!)
+done
+sleep 1.5
+
+for name in alice bob; do
+	port_var="${name}_port"
+	[[ "$(python3 "$work_dir/probe.py" "${!port_var}" 256)" == "OK" ]] \
+		|| fail "$name could not reach the tunnel with their own credential"
+	pass "$name reaches the tunnel with their own credential"
+done
+
+# Revoke one client and reload the running server, as an operator would.
+"$work_dir/obfsctl" -file "$clients_file" revoke alice >/dev/null
+kill -HUP $multi_server_pid
+sleep 1
+grep -q "credentials reloaded" "$work_dir/server-multi.log" \
+	|| fail "the server did not report reloading its credentials"
+pass "server reloaded credentials on SIGHUP without restarting"
+
+# Bob must be undisturbed: this is the entire reason per-client
+# credentials exist.
+[[ "$(python3 "$work_dir/probe.py" "$bob_port" 256)" == "OK" ]] \
+	|| fail "revoking alice cut off bob"
+pass "revoking one client left the other connected"
+
+# Alice must not be able to come back.
+cat > "$work_dir/obfsclient-alice2.yaml" <<EOF
+mode: "tls"
+psk: "$alice_psk"
+local_addr: "127.0.0.1:51913"
+remote_tls_addr: "127.0.0.1:$multi_port"
+server_name: "www.example.com"
+pinned_cert_sha256: "$pin"
+EOF
+"$work_dir/obfsclient" -config "$work_dir/obfsclient-alice2.yaml" >"$work_dir/client-alice2.log" 2>&1 &
+pids+=($!)
+sleep 1.5
+if [[ "$(python3 "$work_dir/probe.py" 51913 256 2>/dev/null)" == "OK" ]]; then
+	fail "a revoked client reconnected successfully"
+fi
+pass "a revoked client cannot reconnect"
+
+"$work_dir/obfsctl" -file "$clients_file" list | grep -q "alice.*revoked" \
+	|| fail "obfsctl list does not show the revocation"
+pass "obfsctl list reports who has access"
 
 ##############################################################################
 echo "==> real WireGuard integration"

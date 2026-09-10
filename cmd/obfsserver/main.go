@@ -8,12 +8,44 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/cryptoinvestccc-del/vpn/internal/clients"
 	"github.com/cryptoinvestccc-del/vpn/internal/config"
 	"github.com/cryptoinvestccc-del/vpn/internal/transport"
 )
+
+// watchForReload re-reads the credential file on SIGHUP, so granting or
+// revoking access does not require restarting the server and dropping
+// every other client's tunnel with it.
+func watchForReload(ctx context.Context, registry *clients.Registry) {
+	if registry == nil {
+		return
+	}
+	hangup := make(chan os.Signal, 1)
+	signal.Notify(hangup, syscall.SIGHUP)
+
+	go func() {
+		defer signal.Stop(hangup)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hangup:
+				if err := registry.Reload(); err != nil {
+					// The previous set stays in force: a typo in the
+					// credential file must not lock everyone out.
+					log.Printf("obfsserver: reload failed, keeping the previous credentials: %v", err)
+					continue
+				}
+				log.Printf("obfsserver: credentials reloaded, %d clients enabled",
+					registry.Current().Count())
+			}
+		}
+	}()
+}
 
 func main() {
 	configPath := flag.String("config", "obfsserver.yaml", "path to config file")
@@ -29,24 +61,36 @@ func main() {
 		log.Fatalf("obfsserver: invalid psk: %v", err)
 	}
 
+	var registry *clients.Registry
+	if cfg.ClientsFile != "" {
+		registry, err = clients.NewRegistry(cfg.ClientsFile)
+		if err != nil {
+			log.Fatalf("obfsserver: %v", err)
+		}
+		log.Printf("obfsserver: %d clients enabled from %s (SIGHUP reloads)",
+			registry.Current().Count(), cfg.ClientsFile)
+	}
+
 	if cfg.LocalAddr == "" {
 		log.Fatal("obfsserver: local_addr is required")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	watchForReload(ctx, registry)
 
 	switch cfg.Mode {
 	case "", "udp":
 		if cfg.ListenWireAddr == "" {
 			log.Fatal("obfsserver: listen_wire_addr is required in udp mode")
 		}
-		if len(psks) == 0 {
-			log.Fatal("obfsserver: psk is required in udp mode (no handshake exists yet to auto-derive one from)")
+		if len(psks) == 0 && registry == nil {
+			log.Fatal("obfsserver: udp mode needs either psk or clients_file")
 		}
 		log.Printf("obfsserver: [udp] listen=%s -> local=%s", cfg.ListenWireAddr, cfg.LocalAddr)
 		err = transport.RunServer(ctx, transport.Config{
 			PSKs:           psks,
+			Clients:        registry,
 			LocalAddr:      cfg.LocalAddr,
 			ListenWireAddr: cfg.ListenWireAddr,
 		})
@@ -54,9 +98,9 @@ func main() {
 		if cfg.ListenTLSAddr == "" || cfg.CertFile == "" || cfg.KeyFile == "" {
 			log.Fatal("obfsserver: listen_tls_addr, cert_file and key_file are required in tls mode")
 		}
-		if len(psks) == 0 {
-			log.Fatal("obfsserver: psk is required in tls mode (it is what authorizes a peer; " +
-				"the certificate is public, so its pin cannot serve that purpose)")
+		if len(psks) == 0 && registry == nil {
+			log.Fatal("obfsserver: tls mode needs either psk or clients_file — a credential is what " +
+				"authorizes a peer, and the certificate is public, so its pin cannot serve that purpose")
 		}
 		fallback := cfg.FallbackAddr
 		if fallback == "" {
@@ -65,6 +109,7 @@ func main() {
 		log.Printf("obfsserver: [tls] listen=%s -> local=%s (fallback=%s)", cfg.ListenTLSAddr, cfg.LocalAddr, fallback)
 		err = transport.RunServerTLS(ctx, transport.TLSConfig{
 			PSKs:          psks,
+			Clients:       registry,
 			LocalAddr:     cfg.LocalAddr,
 			ListenTLSAddr: cfg.ListenTLSAddr,
 			CertFile:      cfg.CertFile,

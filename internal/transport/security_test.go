@@ -52,7 +52,7 @@ func TestSessionTableRejectsReplayedPacket(t *testing.T) {
 	}
 	defer wireConn.Close()
 
-	table := newSessionTable(wireConn, localAddr, obf)
+	table := newSessionTable(wireConn, localAddr, singleClientRegistry(t, psk))
 	defer table.closeAll()
 
 	captured, err := obf.Wrap([]byte("captured packet"))
@@ -61,14 +61,14 @@ func TestSessionTableRejectsReplayedPacket(t *testing.T) {
 	}
 
 	// First arrival: legitimate, opens a session.
-	if _, err := table.getForPacket(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 40001}, captured); err != nil {
+	if _, err := table.open(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 40001}, captured, sharedClientID, obf); err != nil {
 		t.Fatalf("first delivery should be accepted: %v", err)
 	}
 
 	// The same bytes replayed from other addresses must be refused.
 	for i := 2; i <= 20; i++ {
 		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 40000 + i}
-		_, err := table.getForPacket(addr, captured)
+		_, err := table.open(addr, captured, sharedClientID, obf)
 		if !errors.Is(err, errReplayedPacket) {
 			t.Fatalf("replay from %s was accepted (err=%v); one captured packet can spawn unlimited sessions", addr, err)
 		}
@@ -102,7 +102,7 @@ func TestSessionTableEvictsRatherThanRefusing(t *testing.T) {
 	}
 	defer wireConn.Close()
 
-	table := newSessionTable(wireConn, localAddr, obf)
+	table := newSessionTable(wireConn, localAddr, singleClientRegistry(t, psk))
 	table.maxSessions = 8
 	defer table.closeAll()
 
@@ -112,7 +112,7 @@ func TestSessionTableEvictsRatherThanRefusing(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := table.getForPacket(addr, packet); err != nil {
+		if _, err := table.open(addr, packet, sharedClientID, obf); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,7 +123,7 @@ func TestSessionTableEvictsRatherThanRefusing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := table.getForPacket(newcomer, packet); err != nil {
+	if _, err := table.open(newcomer, packet, sharedClientID, obf); err != nil {
 		t.Fatalf("a full session table locked out a new client: %v", err)
 	}
 	if got := table.count(); got > 8 {
@@ -176,7 +176,7 @@ func TestAnonymousClientCannotTunnelWithoutPSK(t *testing.T) {
 	// value — but without the pre-shared key that is not enough to
 	// derive the packet keys. Their best attempt uses a key of their own.
 	var guessed [32]byte
-	obf, err := deriveTrafficObfuscator(conn, [][32]byte{guessed})
+	obf, err := clientObfuscator(conn, [][32]byte{guessed})
 	if err != nil {
 		t.Fatal(err)
 	}

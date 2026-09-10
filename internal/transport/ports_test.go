@@ -4,6 +4,8 @@ import (
 	"net"
 	"sync"
 	"testing"
+
+	"github.com/cryptoinvestccc-del/vpn/internal/clients"
 )
 
 var (
@@ -61,3 +63,16 @@ func reserveAddr(t *testing.T, network string) string {
 
 func freeUDPAddr(t *testing.T) string { return reserveAddr(t, "udp") }
 func freeTCPAddr(t *testing.T) string { return reserveAddr(t, "tcp") }
+
+// singleClientRegistry serves one credential, the shape a shared psk
+// takes internally.
+func singleClientRegistry(t *testing.T, psk [32]byte) *clients.Registry {
+	t.Helper()
+	set, err := clients.NewSetFromCredentials([]clients.Credential{
+		{ClientID: sharedClientID, Key: psk},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return clients.NewStaticRegistry(set)
+}
