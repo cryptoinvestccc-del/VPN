@@ -291,5 +291,24 @@ fi
 grep -q "psk is required" "$work_dir/bad-tls.log" || fail "missing PSK in TLS mode was not reported clearly"
 pass "TLS mode without a PSK is rejected with a clear message"
 
+
+##############################################################################
+echo "==> real WireGuard integration"
+##############################################################################
+# Separate module: it runs a genuine WireGuard implementation in userspace
+# (wireguard-go + gVisor netstack), which the production module must not
+# depend on. Skipped when its dependencies are unavailable offline.
+if (cd "$repo_dir/test/wireguard" && go test -count=1 -short ./... >"$work_dir/wg-integration.log" 2>&1); then
+	pass "real WireGuard carries traffic through both transports"
+else
+	if grep -qiE "cannot find module|no required module|dial tcp|proxyconnect" "$work_dir/wg-integration.log"; then
+		echo "  SKIP: real-WireGuard tests need network access to fetch wireguard-go"
+	else
+		echo "--- test/wireguard output ---" >&2
+		tail -30 "$work_dir/wg-integration.log" >&2
+		fail "real WireGuard could not use the tunnel"
+	fi
+fi
+
 echo
 echo "All end-to-end checks passed."

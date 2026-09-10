@@ -136,6 +136,7 @@ func RunClient(ctx context.Context, cfg Config) error {
 				log.Printf("transport: wrap failed: %v", err)
 				continue
 			}
+			warnIfOversized(len(wrapped))
 			if _, err := wireConn.Write(wrapped); err != nil {
 				log.Printf("transport: write to wire failed: %v", err)
 			}
@@ -374,6 +375,7 @@ func (t *sessionTable) pumpReplies(s *session, key string) {
 			log.Printf("transport: wrap failed: %v", err)
 			continue
 		}
+		warnIfOversized(len(wrapped))
 		if _, err := t.wireConn.WriteTo(wrapped, s.peerAddr); err != nil {
 			log.Printf("transport: write to wire failed: %v", err)
 			return

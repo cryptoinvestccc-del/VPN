@@ -278,6 +278,7 @@ func serveTLSConn(conn net.Conn, obf *obfuscator.Obfuscator, localAddr string, f
 				log.Printf("transport: wrap failed: %v", err)
 				continue
 			}
+			warnIfOversized(len(wrapped))
 			if err := writeFrame(conn, wrapped); err != nil {
 				if errors.Is(err, errFrameTooLarge) {
 					log.Printf("transport: dropping oversized packet (%d bytes)", n)
@@ -469,6 +470,7 @@ func runClientTLSSession(ctx context.Context, cfg TLSConfig, localConn net.Packe
 				log.Printf("transport: wrap failed: %v", err)
 				continue
 			}
+			warnIfOversized(len(wrapped))
 			if err := writeFrame(conn, wrapped); err != nil {
 				if errors.Is(err, errFrameTooLarge) {
 					log.Printf("transport: dropping oversized packet (%d bytes)", n)
