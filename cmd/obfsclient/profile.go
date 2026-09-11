@@ -55,11 +55,32 @@ func remoteFor(p profile.Profile, mode string) string {
 // writeWireGuardConfig saves the tunnel half of the profile where
 // wg-quick can find it. 0600 because it contains this device's private
 // key, and wg-quick refuses a world-readable config anyway.
-func writeWireGuardConfig(p profile.Profile, path string) error {
-	if err := os.WriteFile(path, []byte(p.WireGuardConfig()), 0o600); err != nil {
+func writeWireGuardConfig(p profile.Profile, path string, style profile.Style) error {
+	if err := os.WriteFile(path, []byte(p.WireGuardConfigFor(style)), 0o600); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "obfsclient: wrote %s\n", path)
+
+	if style == profile.StyleApp {
+		fmt.Fprint(os.Stderr, "obfsclient: import it into the WireGuard app, then exclude this\n"+
+			"obfsclient: program's application from the tunnel in the app's settings —\n"+
+			"obfsclient: without that, its traffic is captured by the tunnel it carries.\n")
+		return nil
+	}
 	fmt.Fprintf(os.Stderr, "obfsclient: bring the tunnel up with: wg-quick up %s\n", path)
 	return nil
+}
+
+// wireGuardStyle maps the flag onto a dialect, refusing anything else
+// rather than quietly picking one: a config in the wrong dialect fails
+// to import in a way that looks like a damaged file.
+func wireGuardStyle(name string) (profile.Style, error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "wg-quick", "wgquick", "desktop", "":
+		return profile.StyleWgQuick, nil
+	case "app", "android", "ios", "phone":
+		return profile.StyleApp, nil
+	default:
+		return 0, fmt.Errorf("unknown -wireguard-style %q; it is \"wg-quick\" or \"app\"", name)
+	}
 }

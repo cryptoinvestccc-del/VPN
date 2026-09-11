@@ -313,3 +313,49 @@ func TestScriptWritesTheRouteExclusion(t *testing.T) {
 		t.Errorf("the script writes a full-tunnel config with no route to the server:\n%s", config)
 	}
 }
+
+// TestAppStyleCarriesNoHooks: the WireGuard mobile apps reject a key
+// their parser does not know, so a config with PostUp does not import at
+// all — it fails in a way that looks like a corrupt file rather than
+// like an unsupported feature.
+func TestAppStyleCarriesNoHooks(t *testing.T) {
+	p := validTLS()
+	p.Transport.EndpointIP = "198.51.100.7"
+
+	config := p.WireGuardConfigFor(StyleApp)
+	for _, key := range []string{"PostUp", "PostDown", "PreUp", "PreDown"} {
+		if strings.Contains(config, key+" =") {
+			t.Errorf("the app-style config carries %s, which the app will refuse:\n%s", key, config)
+		}
+	}
+
+	// The hooks are gone but the problem is not, so the config has to say
+	// what the person must do instead.
+	if !strings.Contains(config, "EXCLUDE") {
+		t.Errorf("the app-style config does not say to exclude the obfuscator from the tunnel:\n%s", config)
+	}
+
+	// Everything that makes the tunnel work must survive the switch.
+	wgQuick, _, err := ParseWireGuardConfig(p.WireGuardConfigFor(StyleWgQuick))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, _, err := ParseWireGuardConfig(config)
+	if err != nil {
+		t.Fatalf("the app-style config does not parse: %v", err)
+	}
+	if app != wgQuick {
+		t.Errorf("the two styles describe different tunnels:\n app %+v\n wg  %+v", app, wgQuick)
+	}
+}
+
+// TestWgQuickStyleKeepsItsHooks is the other half: dropping them there
+// would reintroduce the routing loop on every desktop.
+func TestWgQuickStyleKeepsItsHooks(t *testing.T) {
+	p := validTLS()
+	p.Transport.EndpointIP = "198.51.100.7"
+
+	if !strings.Contains(p.WireGuardConfigFor(StyleWgQuick), "PostUp = ip route add") {
+		t.Error("the wg-quick config lost the route that keeps the obfuscator out of the tunnel")
+	}
+}

@@ -19,6 +19,7 @@ func main() {
 	configPath := flag.String("config", "obfsclient.yaml", "path to config file")
 	profileArg := flag.String("profile", "", "connection profile: an obfsvpn:// link, or a file holding one")
 	writeWG := flag.String("write-wireguard", "", "write the profile's WireGuard config here before connecting")
+	wgStyle := flag.String("wireguard-style", "wg-quick", `dialect for -write-wireguard: "wg-quick" (desktop) or "app" (the WireGuard phone apps, which reject config hooks)`)
 	flag.Parse()
 
 	var (
@@ -34,7 +35,11 @@ func main() {
 		cfg = configFromProfile(p)
 
 		if *writeWG != "" {
-			if err := writeWireGuardConfig(p, *writeWG); err != nil {
+			style, serr := wireGuardStyle(*wgStyle)
+			if serr != nil {
+				log.Fatalf("obfsclient: %v", serr)
+			}
+			if err := writeWireGuardConfig(p, *writeWG, style); err != nil {
 				log.Fatalf("obfsclient: %v", err)
 			}
 		}

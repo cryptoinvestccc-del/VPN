@@ -6,3 +6,4 @@
 /gencert
 *.pid
 *.profile
+/dist/

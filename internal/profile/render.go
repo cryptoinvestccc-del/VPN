@@ -15,7 +15,37 @@ import (
 // loopback, and that something carries the traffic onward, obfuscated. A
 // config pointing at the server would work and would defeat the purpose,
 // which is why the parser refuses to read one.
-func (p Profile) WireGuardConfig() string {
+// Style selects which of the two incompatible dialects of wg-quick
+// config to write.
+//
+// They differ over the route that keeps the obfuscator's own traffic out
+// of the tunnel. wg-quick takes shell hooks and does it with a host
+// route. The WireGuard mobile apps take no hooks at all — their parser
+// rejects a key it does not know, so a config carrying PostUp fails to
+// import — and solve the same problem by excluding an application from
+// the tunnel instead.
+//
+// One config cannot serve both, and guessing wrong fails in a way that
+// looks like a corrupt file.
+type Style int
+
+const (
+	// StyleWgQuick is for wg-quick on Linux, macOS and BSD: hooks
+	// allowed, and needed.
+	StyleWgQuick Style = iota
+
+	// StyleApp is for the WireGuard Android and iOS apps: no hooks, and
+	// the route exclusion is the user's job through the app's excluded
+	// applications setting.
+	StyleApp
+)
+
+// WireGuardConfig renders in the wg-quick dialect, which is what a
+// desktop expects.
+func (p Profile) WireGuardConfig() string { return p.WireGuardConfigFor(StyleWgQuick) }
+
+// WireGuardConfigFor renders in the dialect a given client understands.
+func (p Profile) WireGuardConfigFor(style Style) string {
 	var b strings.Builder
 
 	b.WriteString("[Interface]\n")
@@ -27,7 +57,11 @@ func (p Profile) WireGuardConfig() string {
 	b.WriteString("\n# Leaves room for the obfuscator's overhead. Raising it does not make\n")
 	b.WriteString("# the tunnel faster; it makes large packets disappear.\n")
 	fmt.Fprintf(&b, "MTU = %d\n", p.WireGuard.MTU)
-	b.WriteString(p.routeExclusion())
+	if style == StyleWgQuick {
+		b.WriteString(p.routeExclusion())
+	} else {
+		b.WriteString(appRouteNote)
+	}
 
 	b.WriteString("\n[Peer]\n")
 	fmt.Fprintf(&b, "PublicKey = %s\n", p.WireGuard.PeerPublicKey)
@@ -92,3 +126,18 @@ func (p Profile) routeExclusion() string {
 	fmt.Fprintf(&b, "PostDown = %s del %s%s || true\n", cmd, p.Transport.EndpointIP, prefix)
 	return b.String()
 }
+
+// appRouteNote stands in for the hooks a mobile app will not accept. The
+// problem the hooks solve does not go away on a phone: without excluding
+// the obfuscator from the tunnel, its traffic is captured by the very
+// tunnel it carries. The app cannot be told this in a config, so the
+// person has to be.
+const appRouteNote = `
+# This config carries no PostUp hooks: the WireGuard apps reject keys they
+# do not recognise, so a config with them fails to import.
+#
+# The problem they solve still applies. In the WireGuard app, open this
+# tunnel's settings and EXCLUDE the application running the obfuscator
+# from the tunnel. Without that its traffic is captured by the tunnel it
+# is carrying, and nothing connects.
+`
