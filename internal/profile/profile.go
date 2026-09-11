@@ -79,6 +79,21 @@ type Transport struct {
 	// Endpoint is the server's public address, host:port.
 	Endpoint string `json:"endpoint"`
 
+	// EndpointIP is the server's address as a literal IP.
+	//
+	// It exists for one purpose: to keep the device's route to the server
+	// outside the tunnel. With AllowedIPs 0.0.0.0/0 the obfuscator's own
+	// connection to the server would otherwise be routed into the tunnel
+	// it is carrying, which is a loop — the tunnel would never come up at
+	// all. WireGuard avoids this for its own socket with a firewall mark;
+	// a separate process needs a host route instead, and a host route
+	// needs an address rather than a name.
+	//
+	// Resolved when the profile is built, because at the moment the route
+	// is added the tunnel is already up and a DNS query would be sent
+	// into it.
+	EndpointIP string `json:"endpoint_ip,omitempty"`
+
 	// LocalAddr is where the obfuscator listens for the WireGuard
 	// interface on this device. It must be a loopback address: it accepts
 	// plaintext WireGuard with nothing in front of it, so binding it to a

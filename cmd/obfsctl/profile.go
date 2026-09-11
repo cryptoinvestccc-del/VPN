@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
 	"strings"
 
@@ -91,6 +93,16 @@ Flags:
 		return fmt.Errorf("%s: %w", *wgPath, err)
 	}
 
+	// Resolved here, on the server, because by the time the route is
+	// added on the client the tunnel is already up and a DNS query would
+	// be sent into it.
+	endpointIP, err := resolveEndpointIP(*endpoint)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "obfsctl: warning: %v\n", err)
+		fmt.Fprint(os.Stderr, "obfsctl: the profile will carry no server IP, and the client's WireGuard\n"+
+			"config will need the route added by hand — see the comment it writes.\n")
+	}
+
 	p := profile.Profile{
 		Version:  profile.Version,
 		Name:     *name,
@@ -98,6 +110,7 @@ Flags:
 		Transport: profile.Transport{
 			Mode:             strings.ToLower(*mode),
 			Endpoint:         *endpoint,
+			EndpointIP:       endpointIP,
 			LocalAddr:        localAddr,
 			PSKBase64:        client.PSKBase64,
 			ServerName:       *sni,
@@ -159,4 +172,31 @@ func splitPositional(args []string) (string, []string) {
 		return args[0], args[1:]
 	}
 	return "", args
+}
+
+// resolveEndpointIP turns the server's address into a literal IP for the
+// host route that keeps the obfuscator's traffic out of the tunnel.
+//
+// A hostname is resolved now rather than on the client, where the lookup
+// would happen with the tunnel already up and would be sent into it.
+// The consequence is worth stating plainly: if the server's address
+// changes, profiles already issued carry a stale route and have to be
+// reissued.
+func resolveEndpointIP(endpoint string) (string, error) {
+	host, _, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("endpoint %q is not host:port, so no server IP could be recorded", endpoint)
+	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		return ip.String(), nil
+	}
+
+	addrs, err := net.LookupHost(host)
+	if err != nil || len(addrs) == 0 {
+		return "", fmt.Errorf("could not resolve %q to an IP address: %v", host, err)
+	}
+	// The first answer is enough: this route only has to reach the server,
+	// and a server behind several addresses needs the operator to decide
+	// which one anyway.
+	return addrs[0], nil
 }

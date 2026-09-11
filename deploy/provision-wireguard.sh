@@ -92,8 +92,51 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
 EOF
 }
 
+# route_exclusion writes the hooks that keep the obfuscator's own
+# connection to the server out of the tunnel.
+#
+# With AllowedIPs 0.0.0.0/0, wg-quick installs a rule sending every
+# unmarked packet into the tunnel. WireGuard's own encrypted packets
+# escape it because WireGuard marks its socket; the obfuscator is a
+# separate process whose socket carries no mark, so its packets to the
+# server would be routed into the tunnel it is itself carrying. The
+# tunnel then never comes up, and the symptom says nothing about the
+# cause.
+#
+# A host route fixes it: the rule that consults the main table suppresses
+# only default routes, so a /32 there is honoured and the packet leaves
+# by the physical interface.
+route_exclusion() {
+	local server_ip="$1"
+	if [[ -z "$server_ip" ]]; then
+		cat <<'EOF'
+
+# WARNING: no server IP was available when this was generated, so the
+# route that keeps the obfuscator's traffic out of the tunnel is missing.
+# Without it the tunnel will not come up. Add it, replacing SERVER_IP:
+#
+#   PostUp = ip route add SERVER_IP via $(ip route show default | awk '{print $3; exit}') || true
+#   PostDown = ip route del SERVER_IP || true
+EOF
+		return
+	fi
+	cat <<EOF
+
+# Keeps the obfuscator's own connection to the server outside the tunnel.
+# Without this the tunnel would carry the traffic that is carrying it.
+PostUp = ip route add ${server_ip}/32 via \$(ip route show default | awk '{print \$3; exit}') || true
+PostDown = ip route del ${server_ip}/32 || true
+EOF
+}
+
 client_wireguard_config() {
-	local client_private="$1" server_public="$2" address="$3"
+	local client_private="$1" server_public="$2" address="$3" server_host="${4:-}"
+	local server_ip=""
+	if [[ -n "$server_host" ]]; then
+		server_ip="$(getent ahostsv4 "$server_host" 2>/dev/null | awk '{print $1; exit}')"
+		[[ -n "$server_ip" ]] || server_ip="$server_host"
+	fi
+
 	cat <<EOF
 [Interface]
 PrivateKey = ${client_private}
@@ -102,6 +145,8 @@ DNS = 1.1.1.1
 
 # Must match the server: the obfuscator adds 42 bytes to every packet.
 MTU = ${WG_MTU}
+
+$(route_exclusion "$server_ip")
 
 [Peer]
 PublicKey = ${server_public}
@@ -219,7 +264,7 @@ EOF
 	cat <<EOF
 
 === ${name}: WireGuard config (save as ${name}-wg.conf) ===
-$(client_wireguard_config "$client_private" "$server_public" "$address")
+$(client_wireguard_config "$client_private" "$server_public" "$address" "$server_host")
 
 === ${name}: obfsclient config (save as ${name}-obfs.yaml) ===
 mode: "tls"

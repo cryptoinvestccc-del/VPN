@@ -233,3 +233,83 @@ func TestRenderAndParseAgree(t *testing.T) {
 		t.Errorf("local address: got %q, want %q", local, p.Transport.LocalAddr)
 	}
 }
+
+// TestFullTunnelConfigExcludesTheServerRoute is the invariant behind the
+// whole arrangement. The obfuscator is a separate process, so its socket
+// carries none of the firewall mark WireGuard uses to keep its own
+// packets out of the tunnel. With AllowedIPs 0.0.0.0/0 and no host route,
+// its connection to the server is routed into the tunnel it is carrying,
+// and the tunnel never comes up.
+//
+// Nothing catches this in a loopback test, which is why it survived every
+// check until somebody asked how to actually use the thing.
+func TestFullTunnelConfigExcludesTheServerRoute(t *testing.T) {
+	p := validTLS()
+	p.Transport.EndpointIP = "198.51.100.7"
+
+	config := p.WireGuardConfig()
+	if !strings.Contains(config, "AllowedIPs = 0.0.0.0/0") {
+		t.Fatal("this test is about full-tunnel configs and the baseline is not one")
+	}
+	if !strings.Contains(config, "PostUp = ip route add 198.51.100.7/32") {
+		t.Errorf("a full-tunnel config carries no host route to the server:\n%s", config)
+	}
+	if !strings.Contains(config, "PostDown = ip route del 198.51.100.7/32") {
+		t.Errorf("the route is added but never removed:\n%s", config)
+	}
+
+	// Still has to parse: the hooks must not break import on the other side.
+	if _, _, err := ParseWireGuardConfig(config); err != nil {
+		t.Errorf("the config with route hooks no longer parses: %v", err)
+	}
+}
+
+func TestIPv6ServerGetsAnIPv6Route(t *testing.T) {
+	p := validTLS()
+	p.Transport.Endpoint = "[2001:db8::1]:443"
+	p.Transport.EndpointIP = "2001:db8::1"
+
+	config := p.WireGuardConfig()
+	if !strings.Contains(config, "ip -6 route add 2001:db8::1/128") {
+		t.Errorf("an IPv6 server did not get an IPv6 host route:\n%s", config)
+	}
+}
+
+// TestMissingServerIPIsLoudInTheConfig: if the address could not be
+// resolved the route cannot be written, and a config that silently omits
+// it produces a tunnel that never comes up for no visible reason.
+func TestMissingServerIPIsLoudInTheConfig(t *testing.T) {
+	p := validTLS()
+	p.Transport.EndpointIP = ""
+
+	config := p.WireGuardConfig()
+	if !strings.Contains(config, "WARNING") || !strings.Contains(config, "will not come up") {
+		t.Errorf("a config without the route says nothing about it:\n%s", config)
+	}
+}
+
+// TestScriptWritesTheRouteExclusion holds the deployment script to the
+// same rule, since it generates client configs without going through the
+// profile package at all.
+func TestScriptWritesTheRouteExclusion(t *testing.T) {
+	script, err := filepath.Abs("../../deploy/provision-wireguard.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(script); err != nil {
+		t.Skipf("deployment script not available: %v", err)
+	}
+
+	out, err := exec.Command("bash", script, "add-client", "route-test", "198.51.100.7", "--dry-run").CombinedOutput()
+	if err != nil {
+		t.Fatalf("the provisioning script failed (%v):\n%s", err, out)
+	}
+
+	config := extractClientConfig(string(out))
+	if config == "" {
+		t.Fatalf("no client config in the script's output:\n%s", out)
+	}
+	if !strings.Contains(config, "ip route add 198.51.100.7/32") {
+		t.Errorf("the script writes a full-tunnel config with no route to the server:\n%s", config)
+	}
+}

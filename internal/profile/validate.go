@@ -51,6 +51,11 @@ func validateTransport(t Transport) error {
 		return fmt.Errorf("profile: local address %s is not on loopback; it accepts plaintext WireGuard "+
 			"with nothing authenticating it, so it must not be reachable from the network", t.LocalAddr)
 	}
+	if t.EndpointIP != "" {
+		if _, err := netip.ParseAddr(t.EndpointIP); err != nil {
+			return fmt.Errorf("profile: endpoint IP %q is not an IP address", t.EndpointIP)
+		}
+	}
 	if _, err := decodeKey32(t.PSKBase64); err != nil {
 		return fmt.Errorf("profile: pre-shared key: %w", err)
 	}

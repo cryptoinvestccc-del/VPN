@@ -492,6 +492,12 @@ pass "a client configured only from a profile carries traffic"
 
 grep -q "MTU = 1376" "$work_dir/carol-out.conf" \
 	|| fail "the written WireGuard config lost its MTU"
+# Without a host route to the server, the obfuscator's own connection is
+# routed into the tunnel it is carrying and nothing comes up at all.
+grep -q "PostUp = ip route add 127.0.0.1/32" "$work_dir/carol-out.conf" \
+	|| fail "the written config has no route keeping the obfuscator out of the tunnel"
+grep -q "PostDown = ip route del 127.0.0.1/32" "$work_dir/carol-out.conf" \
+	|| fail "the route is added but never removed"
 grep -q "Endpoint = 127.0.0.1:$profile_local_port" "$work_dir/carol-out.conf" \
 	|| fail "the written WireGuard config does not point at the local obfuscator"
 pass "the client wrote a WireGuard config pointing at the obfuscator, not the server"
