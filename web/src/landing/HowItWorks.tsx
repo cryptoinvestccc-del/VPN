@@ -1,24 +1,9 @@
 import { PacketFigure } from './PacketFigure'
 
-const layers = [
-  {
-    step: 'Шаг 01',
-    title: 'WireGuard шифрует как обычно',
-    body:
-      'Curve25519, ChaCha20-Poly1305, forward secrecy — всё как в оригинале. Мы ничего не подменяем и не ослабляем: наружу выходит нормальный, полностью зашифрованный WG-пакет.',
-  },
-  {
-    step: 'Шаг 02',
-    title: 'Второй слой прячет форму',
-    body:
-      'Готовый пакет заворачивается ещё раз: nonce + XChaCha20-Poly1305 на PSK, сверху случайный паддинг с учётом MTU. Ни сигнатуры, ни характерного распределения длин не остаётся.',
-  },
-  {
-    step: 'Шаг 03',
-    title: 'Порт ведёт себя как веб-сервер',
-    body:
-      'В режиме TLS соединение идёт настоящим TLS-рукопожатием на 443-й порт. Тот, кто постучится без ключа, получит ответ обычного веб-сервера — а не молчание, по которому VPN и вычисляют.',
-  },
+const steps = [
+  ['WireGuard шифрует как обычно', 'Curve25519 и ChaCha20-Poly1305, ничего не подменяем.'],
+  ['Второй слой прячет форму', 'XChaCha20-Poly1305 на PSK плюс паддинг с учётом MTU.'],
+  ['Порт отвечает как веб-сервер', 'В режиме TLS проба без ключа получает обычный ответ, а не молчание.'],
 ]
 
 export function HowItWorks() {
@@ -28,24 +13,19 @@ export function HowItWorks() {
         <div className="section-head">
           <div className="section-head__text">
             <p className="eyebrow">Как это работает</p>
-            <h2>Три слоя, из которых наружу виден только третий</h2>
-            <p className="lede">
-              DPI ловит VPN не потому, что умеет расшифровать трафик, а потому, что
-              трафик узнаётся по форме: фиксированный первый байт, характерные длины
-              пакетов, ритм обмена. Besy убирает именно форму.
-            </p>
+            <h2>DPI ловит VPN по форме трафика. Besy убирает форму</h2>
           </div>
         </div>
 
-        <div className="layers">
-          {layers.map((l) => (
-            <article className="layer" key={l.step}>
-              <span className="layer__step">{l.step}</span>
-              <h3>{l.title}</h3>
-              <p className="layer__body">{l.body}</p>
-            </article>
+        <ol className="steps">
+          {steps.map(([title, body], i) => (
+            <li className="step" key={title}>
+              <span className="step__num">{String(i + 1).padStart(2, '0')}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </li>
           ))}
-        </div>
+        </ol>
 
         <PacketFigure />
       </div>

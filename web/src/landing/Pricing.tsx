@@ -10,10 +10,7 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
           <div className="section-head__text">
             <p className="eyebrow">Тарифы</p>
             <h2>Платите за узлы, а не за обещания</h2>
-            <p className="lede">
-              Цена — за доступ к сети и поддержку. Код открыт в любом случае: если у вас
-              есть свой VPS, ставьте сами и не платите ничего.
-            </p>
+            <p className="lede">Есть свой VPS — ставьте сами и не платите ничего.</p>
           </div>
         </div>
 
@@ -56,8 +53,7 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
         </div>
 
         <p className="pricing__footnote">
-          Цены демонстрационные — страница пока работает на встроенных данных.
-          Оплата и личный кабинет в этой версии не подключены.
+          Цены демонстрационные: оплата и личный кабинет пока не подключены.
         </p>
       </div>
     </section>

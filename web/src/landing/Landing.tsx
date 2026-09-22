@@ -5,14 +5,10 @@ import type { Location, Plan, Status } from '../lib/types'
 import { Header } from './Header'
 import { Hero } from './Hero'
 import { HowItWorks } from './HowItWorks'
-import { Features } from './Features'
-import { Modes } from './Modes'
+import { Included } from './Included'
 import { Locations } from './Locations'
-import { Platforms } from './Platforms'
 import { Pricing } from './Pricing'
-import { Limits } from './Limits'
-import { Faq } from './Faq'
-import { Closer } from './Closer'
+import { Honest } from './Honest'
 import { Footer } from './Footer'
 
 export function Landing() {
@@ -26,14 +22,10 @@ export function Landing() {
       <main id="main">
         <Hero status={status} />
         <HowItWorks />
-        <Features />
-        <Modes />
+        <Included />
         <Locations locations={locations} sample={status.data.mock} />
-        <Platforms />
         <Pricing plans={plans} />
-        <Limits />
-        <Faq />
-        <Closer />
+        <Honest />
       </main>
       <Footer />
     </>

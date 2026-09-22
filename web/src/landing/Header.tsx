@@ -4,9 +4,7 @@ import { ThemeToggle } from '../components/ThemeToggle'
 
 const links = [
   { href: '#how', label: 'Как это работает' },
-  { href: '#features', label: 'Возможности' },
   { href: '#nodes', label: 'Узлы' },
-  { href: '#platforms', label: 'Платформы' },
   { href: '#pricing', label: 'Тарифы' },
 ]
 
@@ -39,8 +37,8 @@ export function Header() {
 
         <div className="site-header__actions">
           <ThemeToggle className="round-btn" />
-          <a className="btn btn--ghost" href="#docs">
-            Документация
+          <a className="btn btn--ghost" href="#pricing">
+            Тарифы
           </a>
           <a className="btn btn--primary" href="#pricing">
             Подключиться
@@ -72,9 +70,7 @@ export function Header() {
                 {l.label}
               </a>
             ))}
-            <a href="#docs" onClick={() => setOpen(false)}>
-              Документация
-            </a>
+
           </div>
         </div>
       )}

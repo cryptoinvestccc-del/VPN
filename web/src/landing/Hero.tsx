@@ -4,11 +4,7 @@ import { LineChart } from '../components/LineChart'
 import { StatTile } from '../components/StatTile'
 import { group, timeOfDay } from '../lib/format'
 
-const notes = [
-  'Криптография WireGuard не тронута',
-  'Открытый код, ставится на свой сервер',
-  'Агрегированные счётчики вместо логов',
-]
+const notes = ['Криптография WireGuard не тронута', 'Открытый код', 'Без логов']
 
 export function Hero({ status }: { status: Resource<Status> }) {
   const s = status.data
@@ -29,10 +25,8 @@ export function Hero({ status }: { status: Resource<Status> }) {
           <p className="eyebrow">Обфускация WireGuard</p>
           <h1>Трафик, который DPI не за что зацепить</h1>
           <p className="lede hero__lede">
-            Besy VPN оборачивает уже зашифрованные WireGuard-пакеты во второй слой:
-            XChaCha20-Poly1305 поверх PSK, случайный паддинг и мусорные пакеты.
-            Сигнатура, распределение длин и поведение соединения перестают быть
-            похожими на VPN — при этом сам WireGuard остаётся ровно тем, чем был.
+            Второй слой шифрования поверх WireGuard: случайный паддинг и мусорные
+            пакеты убирают сигнатуру и характерные длины. Сам WireGuard не тронут.
           </p>
 
           <div className="hero__actions">
@@ -40,7 +34,7 @@ export function Hero({ status }: { status: Resource<Status> }) {
               Подключиться за 5 минут
             </a>
             <a className="btn btn--ghost btn--lg" href="#how">
-              Как это устроено
+              Как это работает
             </a>
           </div>
 

@@ -112,14 +112,14 @@
 
 .hero {
   padding-top: clamp(24px, 3vw, 40px);
-  padding-bottom: clamp(36px, 4vw, 56px);
+  padding-bottom: clamp(14px, 1.8vw, 26px);
 }
 
 /* The live figures lead the page: someone who already knows what this is
    comes back for the numbers, and making them scroll past the pitch to
    reach them puts the pitch ahead of the reader. */
 .hero__stats {
-  margin-bottom: clamp(32px, 4.5vw, 64px);
+  margin-bottom: clamp(26px, 3.2vw, 44px);
 }
 
 .hero__lede {
@@ -274,116 +274,37 @@
   gap: 12px;
 }
 
-/* How it works ----------------------------------------------------- */
-
-.layers {
-  display: grid;
-  gap: 12px;
-}
-
-.layer {
-  display: grid;
-  gap: 14px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-
-.layer__step {
-  color: var(--ink-muted);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  font-variant-numeric: tabular-nums;
-}
-
-.layer__body {
-  max-width: 46ch;
-  color: var(--ink-secondary);
-  font-size: 0.9375rem;
-}
-
-.layer h3 {
-  margin-top: 4px;
-}
-
-@media (min-width: 860px) {
-  .layers {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+/* On a phone the four tiles stacked one per row filled the whole first
+   screen, so the headline began below the fold. Two columns without the
+   sparklines keep all four numbers visible and still leave room for what
+   the page is actually about. */
+@media (max-width: 560px) {
+  .stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
-}
 
-.packet-figure {
-  margin-top: 16px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
+  .stat-strip .card {
+    padding: 13px;
+  }
 
-.packet-figure figcaption {
-  margin-top: 16px;
-  max-width: 72ch;
-  color: var(--ink-secondary);
-  font-size: 0.875rem;
-}
+  .stat-strip .stat {
+    min-height: 0;
+    gap: 8px;
+  }
 
-/* Features --------------------------------------------------------- */
+  .stat-strip .stat__spark {
+    display: none;
+  }
 
-.features {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
+  .stat-strip .stat__value {
+    font-size: 1.375rem;
+  }
 
-.feature {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-
-.feature__icon {
-  color: var(--ink);
-}
-
-.feature p {
-  color: var(--ink-secondary);
-  font-size: 0.9375rem;
-}
-
-/* Platforms -------------------------------------------------------- */
-
-.platforms {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-}
-
-.platform {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-
-.platform__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.platform p {
-  color: var(--ink-secondary);
-  font-size: 0.875rem;
+  .stat-strip .stat__foot {
+    flex-wrap: wrap;
+    gap: 2px 6px;
+  }
 }
 
 /* Pricing ---------------------------------------------------------- */
@@ -483,119 +404,33 @@
   font-size: 0.8125rem;
 }
 
-/* Honest limits ---------------------------------------------------- */
-
-.limits {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.limit {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface-sunken);
-}
-
-.limit h3 {
-  font-size: 0.9375rem;
-}
-
-.limit p {
-  color: var(--ink-secondary);
-  font-size: 0.875rem;
-}
-
-/* FAQ -------------------------------------------------------------- */
-
-.faq {
-  display: grid;
-  gap: clamp(20px, 3vw, 48px);
-}
-
-@media (min-width: 900px) {
-  .faq {
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-    align-items: start;
-  }
-}
-
-/* Closing CTA ------------------------------------------------------ */
-
-.closer {
-  padding: clamp(36px, 5vw, 64px);
-  border-radius: var(--radius-lg);
-  background: var(--surface-inverse);
-  color: var(--ink-inverse);
-}
-
-.closer h2 {
-  max-width: 18ch;
-}
-
-.closer p {
-  max-width: 54ch;
-  margin-top: 16px;
-  color: var(--ink-inverse-muted);
-}
-
-.closer__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 28px;
-}
-
 /* Footer ----------------------------------------------------------- */
 
 .site-footer {
   border-top: 1px solid var(--line);
-  padding-block: 40px 32px;
+  padding-block: 28px;
 }
 
-.site-footer__grid {
-  display: grid;
-  gap: 28px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-
-.site-footer h4 {
-  margin-bottom: 12px;
-  color: var(--ink-muted);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.site-footer li {
-  margin-bottom: 8px;
-}
-
-.site-footer a {
-  color: var(--ink-secondary);
-  font-size: 0.875rem;
-}
-
-.site-footer a:hover {
-  color: var(--ink);
-}
-
-.site-footer__bottom {
+.site-footer__bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 36px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
+  gap: 12px 24px;
   color: var(--ink-muted);
   font-size: 0.8125rem;
+}
+
+.site-footer__bar span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.site-footer__bar a {
+  color: var(--ink-secondary);
+}
+
+.site-footer__bar a:hover {
+  color: var(--ink);
 }
 
 /* Error / loading states ------------------------------------------- */
@@ -691,4 +526,127 @@
   margin-top: 10px;
   color: var(--ink-secondary);
   font-size: 0.8125rem;
+}
+
+/* How it works ----------------------------------------------------- */
+
+.steps {
+  display: grid;
+  gap: 12px;
+  counter-reset: step;
+}
+
+.step {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.step__num {
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+
+.step h3 {
+  margin: 8px 0 6px;
+}
+
+.step p {
+  color: var(--ink-secondary);
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 860px) {
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.packet-figure {
+  margin: 12px 0 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.packet-figure figcaption {
+  margin-top: 18px;
+  max-width: 72ch;
+  color: var(--ink-secondary);
+  font-size: 0.875rem;
+}
+
+/* Facts ------------------------------------------------------------ */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.fact {
+  padding: 20px;
+  background: var(--surface);
+}
+
+.fact h3 {
+  font-size: 0.9375rem;
+}
+
+.fact p {
+  margin-top: 6px;
+  color: var(--ink-secondary);
+  font-size: 0.875rem;
+}
+
+/* Honest limits ---------------------------------------------------- */
+
+.limits-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.limits-list li {
+  display: grid;
+  gap: 2px 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+
+.limits-list strong {
+  font-weight: 500;
+}
+
+.limits-list span {
+  color: var(--ink-secondary);
+}
+
+@media (min-width: 720px) {
+  .limits-list li {
+    grid-template-columns: 250px minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
+
+/* Platform line ---------------------------------------------------- */
+
+.platforms-line {
+  margin-top: 14px;
+  color: var(--ink-secondary);
+  font-size: 0.8125rem;
+}
+
+.platforms-line span {
+  color: var(--ink-muted);
 }

@@ -106,12 +106,15 @@ svg {
   padding-inline: var(--gutter);
 }
 
+/* A lean page earns its whitespace by having less to separate: these are
+   a step tighter than the original marketing rhythm, which left ~200px
+   of nothing between two-line sections. */
 .section {
-  padding-block: clamp(56px, 7vw, 104px);
+  padding-block: clamp(38px, 4.2vw, 68px);
 }
 
 .section--tight {
-  padding-block: clamp(40px, 5vw, 72px);
+  padding-block: clamp(26px, 3vw, 44px);
 }
 
 .eyebrow {
@@ -136,7 +139,7 @@ svg {
   gap: 20px 40px;
   align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: clamp(28px, 3.5vw, 48px);
+  margin-bottom: clamp(18px, 2.4vw, 30px);
 }
 
 .section-head__text {

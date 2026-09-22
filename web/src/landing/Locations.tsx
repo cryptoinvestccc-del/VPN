@@ -28,7 +28,7 @@ export function Locations({ locations, sample }: Props) {
         <div className="section-head">
           <div className="section-head__text">
             <p className="eyebrow">Узлы</p>
-            <h2>Куда можно подключиться</h2>
+            <h2>Куда подключаться</h2>
           </div>
           <span className={`badge ${sample ? 'badge--muted' : ''}`}>
             {sample ? 'демонстрационный список' : 'данные с сервера'}
@@ -73,6 +73,10 @@ export function Locations({ locations, sample }: Props) {
             </tbody>
           </table>
         </div>
+        <p className="platforms-line">
+          Клиенты: Linux, Android через Termux, Docker, свой сервер.
+          <span> iOS и десктопных приложений под Windows и macOS нет.</span>
+        </p>
       </div>
     </section>
   )
