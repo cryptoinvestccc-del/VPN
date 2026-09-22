@@ -1,6 +1,9 @@
 package webui
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,9 +15,122 @@ import (
 
 func testAssets() fstest.MapFS {
 	return fstest.MapFS{
-		"index.html":              {Data: []byte("<!doctype html><title>Besy</title>")},
-		"assets/index-abc123.js":  {Data: []byte("console.log(1)")},
-		"assets/index-abc123.css": {Data: []byte("body{}")},
+		"index.html":                {Data: []byte("<!doctype html><title>Besy</title>")},
+		"assets/index-abc123.js":    {Data: []byte("console.log(1)")},
+		"assets/index-abc123.js.gz": {Data: gzipped("console.log(1)")},
+		"assets/index-abc123.css":   {Data: []byte("body{}")},
+		"robots.txt":                {Data: []byte("User-agent: *\nAllow: /\n")},
+	}
+}
+
+func gzipped(body string) []byte {
+	var buf bytes.Buffer
+	w := gzip.NewWriter(&buf)
+	_, _ = w.Write([]byte(body))
+	_ = w.Close()
+	return buf.Bytes()
+}
+
+func serveWith(t *testing.T, path string, header map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	Handler(testAssets()).ServeHTTP(rec, req)
+	return rec
+}
+
+// The built assets are gzipped once at build time. Serving them raw cost
+// every first-time visitor about three times the transfer, which on a
+// phone is most of the wait before anything renders.
+func TestCompressedAssetIsServedWhenAccepted(t *testing.T) {
+	rec := serveWith(t, "/assets/index-abc123.js", map[string]string{"Accept-Encoding": "gzip, deflate, br"})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if enc := rec.Header().Get("Content-Encoding"); enc != "gzip" {
+		t.Errorf("Content-Encoding = %q, want gzip", enc)
+	}
+	// The body is compressed, so the type has to come from the name
+	// underneath it rather than from sniffing gzip's magic bytes.
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/javascript") {
+		t.Errorf("Content-Type = %q, want text/javascript", ct)
+	}
+	if !strings.Contains(rec.Header().Get("Vary"), "Accept-Encoding") {
+		t.Error("no Vary: Accept-Encoding; a shared cache would hand the gzip body to a client that cannot read it")
+	}
+
+	r, err := gzip.NewReader(bytes.NewReader(rec.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("body is not gzip: %v", err)
+	}
+	body, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(body) != "console.log(1)" {
+		t.Errorf("decompressed body = %q", body)
+	}
+}
+
+func TestPlainAssetIsServedWhenCompressionIsNotAccepted(t *testing.T) {
+	for _, accept := range []string{"", "identity", "gzip;q=0"} {
+		rec := serveWith(t, "/assets/index-abc123.js", map[string]string{"Accept-Encoding": accept})
+
+		if enc := rec.Header().Get("Content-Encoding"); enc != "" {
+			t.Errorf("Accept-Encoding %q got Content-Encoding %q, want none", accept, enc)
+		}
+		if body := rec.Body.String(); body != "console.log(1)" {
+			t.Errorf("Accept-Encoding %q got body %q", accept, body)
+		}
+		if !strings.Contains(rec.Header().Get("Vary"), "Accept-Encoding") {
+			t.Errorf("Accept-Encoding %q: response is not marked Vary", accept)
+		}
+	}
+}
+
+// An asset with no .gz beside it still has to be served. The compressed
+// copy is an optimisation, not a requirement of the deploy.
+func TestAssetWithoutACompressedCopyIsStillServed(t *testing.T) {
+	rec := serveWith(t, "/assets/index-abc123.css", map[string]string{"Accept-Encoding": "gzip"})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if enc := rec.Header().Get("Content-Encoding"); enc != "" {
+		t.Errorf("Content-Encoding = %q, want none", enc)
+	}
+	if rec.Body.String() != "body{}" {
+		t.Errorf("body = %q", rec.Body.String())
+	}
+}
+
+// A path that names a file is a request for that file. Answering
+// /robots.txt with the landing page and a 200 told every crawler that a
+// page was a crawl policy.
+func TestMissingFilePathsAreNotAnsweredWithThePage(t *testing.T) {
+	for _, path := range []string{"/sitemap.xml", "/favicon.ico", "/apple-touch-icon.png"} {
+		rec := serve(t, http.MethodGet, path)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s = %d, want 404", path, rec.Code)
+		}
+	}
+
+	// A real file at such a path is served as itself.
+	rec := serve(t, http.MethodGet, "/robots.txt")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "User-agent") {
+		t.Errorf("/robots.txt = %d %q, want the file", rec.Code, rec.Body.String())
+	}
+
+	// Routes have no extension and still reach the page.
+	for _, path := range []string{"/dashboard", "/anything/deep"} {
+		rec := serve(t, http.MethodGet, path)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<!doctype html>") {
+			t.Errorf("%s = %d, want the page: a deep link must survive a reload", path, rec.Code)
+		}
 	}
 }
 

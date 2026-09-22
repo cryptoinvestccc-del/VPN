@@ -110,6 +110,17 @@ jobs:
           # /dashboard is the second page; the SPA fallback has to serve
           # it rather than 404, or a bookmarked deep link breaks.
           curl -fsS http://127.0.0.1:8099/dashboard | grep -q '<div id="root">'
+          # A path that names a file is a request for that file: robots.txt
+          # exists and is served as itself, and a file that does not exist
+          # is a 404 rather than the page with a 200.
+          curl -fsS http://127.0.0.1:8099/robots.txt | grep -q 'User-agent'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/sitemap.xml)" = 404
+          # The assets are gzipped at build time. A build that stopped
+          # writing the .gz files would triple the transfer silently.
+          asset="$(curl -fsS http://127.0.0.1:8099/ | grep -o '/assets/[^"]*\.js' | head -1)"
+          curl -fsS -H 'Accept-Encoding: gzip' -D headers.txt -o /dev/null "http://127.0.0.1:8099$asset"
+          grep -qi '^content-encoding: gzip' headers.txt
+          grep -qi '^vary: .*accept-encoding' headers.txt
 
   fuzz:
     runs-on: ubuntu-latest

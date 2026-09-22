@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+  <!--
+    The same mark the page carries: the payload inside a second envelope.
+    It follows the browser's theme, because a tab strip is dark about
+    half the time and a fixed black glyph disappears into it.
+  -->
+  <style>
+    :root { color-scheme: light dark }
+    .mark { fill: #141310; stroke: #141310 }
+    @media (prefers-color-scheme: dark) {
+      .mark { fill: #e6e8ee; stroke: #e6e8ee }
+    }
+  </style>
+  <rect class="mark" x="1" y="1" width="18" height="18" rx="5" fill="none" stroke-width="1.6"/>
+  <rect class="mark" x="6.5" y="6.5" width="7" height="7" rx="2" stroke="none"/>
+</svg>

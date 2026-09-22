@@ -1,0 +1,5 @@
+# The whole site is one public page and one public dashboard, both of
+# which serve aggregates and nothing per-client. There is nothing here to
+# keep out of an index.
+User-agent: *
+Allow: /

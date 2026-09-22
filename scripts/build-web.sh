@@ -22,6 +22,22 @@ if [[ ! -d node_modules ]]; then
 fi
 npm run build
 
+# Precompress what compresses. These files are built once and never
+# change, so paying gzip -9 here costs nothing per request and saves
+# every first-time visitor about two thirds of the transfer. The server
+# picks the .gz up on its own when the client accepts it; when it is
+# missing it just serves the original.
+#
+# -n keeps the source name and timestamp out of the archive, so two
+# builds of the same assets produce byte-identical files.
+find "$repo_dir/web/dist" -type f \
+	\( -name '*.js' -o -name '*.css' -o -name '*.html' -o -name '*.svg' \
+	   -o -name '*.json' -o -name '*.map' -o -name '*.txt' \) \
+	-size +1k -print0 |
+	while IFS= read -r -d '' file; do
+		gzip -9 -n -k -f "$file"
+	done
+
 # A stale asset from an earlier build would be embedded and served
 # forever, so the target is replaced rather than merged into.
 rm -rf "$repo_dir/internal/webui/dist"
