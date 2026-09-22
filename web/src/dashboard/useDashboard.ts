@@ -3,17 +3,20 @@ import type { DashboardData } from './types'
 
 export type DashboardState = {
   data: DashboardData | null
-  /**
-   * The window `data` was requested for, which is not always the window
-   * the server answered with: an unknown one falls back to the default.
-   * A caller that wants to correct itself has to compare the two, and
-   * comparing against the window currently selected would instead
-   * compare against a request still in flight.
-   */
-  requested: string | null
   loading: boolean
   error: string | null
   lastUpdated: Date | null
+}
+
+// settled names the request whose outcome the state below already
+// reflects. Loading is then that name not matching the request the
+// component wants, which is a thing to derive rather than a second
+// piece of state an effect has to remember to set.
+type Settled = {
+  data: DashboardData | null
+  error: string | null
+  lastUpdated: Date | null
+  request: string | null
 }
 
 /**
@@ -26,16 +29,16 @@ export type DashboardState = {
  * bar, because stale-and-labelled beats blank.
  */
 export function useDashboard(rangeID: string, refreshSeconds: number): DashboardState & { refresh: () => void } {
-  const [state, setState] = useState<DashboardState>({
+  const [settled, setSettled] = useState<Settled>({
     data: null,
-    requested: null,
-    loading: true,
     error: null,
     lastUpdated: null,
+    request: null,
   })
   const [tick, setTick] = useState(0)
   const inFlight = useRef<AbortController | null>(null)
 
+  const request = `${rangeID}#${tick}`
   const refresh = useCallback(() => setTick((t) => t + 1), [])
 
   useEffect(() => {
@@ -44,8 +47,6 @@ export function useDashboard(rangeID: string, refreshSeconds: number): Dashboard
     const controller = new AbortController()
     inFlight.current = controller
     const timer = setTimeout(() => controller.abort(), 10_000)
-
-    setState((prev) => ({ ...prev, loading: true }))
 
     fetch(`/api/v1/dashboard?range=${encodeURIComponent(rangeID)}`, {
       signal: controller.signal,
@@ -57,7 +58,7 @@ export function useDashboard(rangeID: string, refreshSeconds: number): Dashboard
       })
       .then((data) => {
         if (unmounted) return
-        setState({ data, requested: rangeID, loading: false, error: null, lastUpdated: new Date() })
+        setSettled({ data, error: null, lastUpdated: new Date(), request })
       })
       .catch((err: unknown) => {
         if (unmounted) return
@@ -67,7 +68,7 @@ export function useDashboard(rangeID: string, refreshSeconds: number): Dashboard
             : err instanceof Error
               ? err.message
               : 'нет связи с API'
-        setState((prev) => ({ ...prev, loading: false, error: reason }))
+        setSettled((prev) => ({ ...prev, error: reason, request }))
       })
       .finally(() => clearTimeout(timer))
 
@@ -76,7 +77,7 @@ export function useDashboard(rangeID: string, refreshSeconds: number): Dashboard
       clearTimeout(timer)
       controller.abort()
     }
-  }, [rangeID, tick])
+  }, [rangeID, tick, request])
 
   useEffect(() => {
     if (refreshSeconds <= 0) return
@@ -84,5 +85,11 @@ export function useDashboard(rangeID: string, refreshSeconds: number): Dashboard
     return () => clearInterval(id)
   }, [refreshSeconds, refresh])
 
-  return { ...state, refresh }
+  return {
+    data: settled.data,
+    error: settled.error,
+    lastUpdated: settled.lastUpdated,
+    loading: settled.request !== request,
+    refresh,
+  }
 }

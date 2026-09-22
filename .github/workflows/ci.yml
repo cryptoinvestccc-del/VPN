@@ -80,6 +80,14 @@ jobs:
         run: npm ci
         working-directory: web
 
+      # Type-aware rules, so this catches the class tsc cannot see: a
+      # promise nobody awaits, a value that quietly became any, an
+      # effect whose dependency list has gone stale behind a panel that
+      # still looks live.
+      - name: Lint
+        run: npm run lint
+        working-directory: web
+
       - name: Typecheck
         run: npm run typecheck
         working-directory: web

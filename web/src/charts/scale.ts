@@ -49,11 +49,20 @@ export function roundTo(v: number, digits: number): number {
 
 /** Turns a series list into the cumulative bands a stacked area needs. */
 export function stack(series: number[][]): number[][] {
-  const running = new Array(series[0]?.length ?? 0).fill(0)
+  // Typed explicitly, and sized by the longest series rather than the
+  // first. new Array(n).fill(0) is any[], so every total read back out
+  // of it left the type system behind — and with it went the case where
+  // a later series is longer than the first: those points indexed past
+  // the running totals and added to undefined, turning the rest of the
+  // band into NaN, which draws as nothing at all.
+  const width = series.reduce((w, points) => Math.max(w, points.length), 0)
+  const running: number[] = new Array<number>(width).fill(0)
+
   return series.map((points) =>
     points.map((v, i) => {
-      running[i] += v
-      return running[i]
+      const total = (running[i] ?? 0) + v
+      running[i] = total
+      return total
     }),
   )
 }

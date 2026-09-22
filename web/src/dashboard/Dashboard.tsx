@@ -18,27 +18,21 @@ export function Dashboard() {
   // last looked at.
   const [rangeID, setRangeID] = useState(() => queryParam('range') ?? readString(RANGE_KEY, '6h'))
   const [refreshSeconds, setRefreshSeconds] = useState(() => readNumber(REFRESH_KEY, 30))
-  const { data, requested, loading, error, lastUpdated, refresh } = useDashboard(rangeID, refreshSeconds)
+  const { data, loading, error, lastUpdated, refresh } = useDashboard(rangeID, refreshSeconds)
+
+  // rangeID is what was asked for; data.range.id is what the server
+  // used, and an unknown window falls back to the default rather than
+  // failing. The address bar, the remembered choice and the tick in the
+  // picker all follow the second one, so a mistyped ?range=zzz corrects
+  // itself instead of leaving the URL claiming one window while the
+  // panels show another.
+  const shownRange = data?.range.id ?? rangeID
 
   useEffect(() => {
-    write(RANGE_KEY, rangeID)
-    setQueryParam('range', rangeID)
-  }, [rangeID])
+    write(RANGE_KEY, shownRange)
+    setQueryParam('range', shownRange)
+  }, [shownRange])
 
-  // The server answers an unknown window with the default rather than an
-  // error, and says in the response which one it used. Reading that back
-  // is what keeps a mistyped ?range= from leaving the address bar and the
-  // picker claiming one thing while the panels show another.
-  //
-  // The comparison is against the window this response was *asked* for,
-  // not against the one currently selected: while a new request is in
-  // flight those differ, and correcting on that difference would undo
-  // the reader's own choice a moment after they made it.
-  const asked = requested
-  const served = data?.range.id
-  useEffect(() => {
-    if (asked && served && served !== asked) setRangeID(served)
-  }, [asked, served])
   useEffect(() => {
     write(REFRESH_KEY, String(refreshSeconds))
   }, [refreshSeconds])
@@ -67,7 +61,7 @@ export function Dashboard() {
     <div className="dash">
       <TopBar
         data={data}
-        rangeID={rangeID}
+        rangeID={shownRange}
         onRange={setRangeID}
         refreshSeconds={refreshSeconds}
         onRefreshSeconds={setRefreshSeconds}

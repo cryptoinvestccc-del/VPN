@@ -124,8 +124,8 @@ export function LineChart({ points, unit, title, height = 190 }: Props) {
             {active && hover !== null && geom.coords[hover] && (
               <g>
                 <line
-                  x1={geom.coords[hover]!.x}
-                  x2={geom.coords[hover]!.x}
+                  x1={geom.coords[hover].x}
+                  x2={geom.coords[hover].x}
                   y1={PAD.top}
                   y2={PAD.top + geom.plotH}
                   stroke="var(--line-strong)"
@@ -133,8 +133,8 @@ export function LineChart({ points, unit, title, height = 190 }: Props) {
                   shapeRendering="crispEdges"
                 />
                 <circle
-                  cx={geom.coords[hover]!.x}
-                  cy={geom.coords[hover]!.y}
+                  cx={geom.coords[hover].x}
+                  cy={geom.coords[hover].y}
                   r={4}
                   fill="var(--chart-ink)"
                   stroke="var(--surface)"
@@ -182,8 +182,8 @@ export function LineChart({ points, unit, title, height = 190 }: Props) {
           <div
             className="tooltip"
             style={{
-              left: `${geom.coords[hover]!.x}px`,
-              top: `${geom.coords[hover]!.y - 10}px`,
+              left: `${geom.coords[hover].x}px`,
+              top: `${geom.coords[hover].y - 10}px`,
             }}
           >
             <div className="tooltip__label">{timeOfDay(active.t)}</div>
