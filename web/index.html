@@ -14,7 +14,31 @@
       for a VPN that calls out to a font CDN hands every visitor's IP to
       that CDN, which is the opposite of what the product is for.
     -->
-    <link rel="icon" href="data:," />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!--
+      What a messenger shows when someone pastes the link. Without these
+      a share in Telegram or WhatsApp unfurls as a bare URL, which is a
+      strange thing for a page that lives on being passed around.
+
+      og:url and og:image are deliberately absent: both have to be
+      absolute, and this build does not know the domain it will be served
+      from. Add them, pointing at a 1200×630 image, once it does.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Besy VPN" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:title" content="Besy VPN — обфускация WireGuard против DPI" />
+    <meta
+      property="og:description"
+      content="Второй слой шифрования поверх WireGuard со случайным паддингом: DPI не опознаёт трафик ни по сигнатуре, ни по длинам, ни по поведению."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Besy VPN — обфускация WireGuard против DPI" />
+    <meta
+      name="twitter:description"
+      content="Второй слой шифрования поверх WireGuard со случайным паддингом: DPI не опознаёт трафик ни по сигнатуре, ни по длинам, ни по поведению."
+    />
   </head>
   <body>
     <div id="root"></div>

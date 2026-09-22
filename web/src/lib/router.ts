@@ -45,3 +45,24 @@ export function linkHandler(to: string) {
     navigate(to)
   }
 }
+
+/**
+ * Writes a query parameter without adding a history entry.
+ *
+ * The window a dashboard is showing is part of what the page *is*, so it
+ * belongs in the address bar: a reload keeps it, and a link to "the last
+ * 24 hours" is a link someone can send. replaceState rather than
+ * pushState, because a back button that walks through every window the
+ * reader tried is not what back is for.
+ */
+export function setQueryParam(key: string, value: string) {
+  const url = new URL(window.location.href)
+  if (url.searchParams.get(key) === value) return
+  url.searchParams.set(key, value)
+  window.history.replaceState(window.history.state, '', url.toString())
+}
+
+/** Reads a query parameter, or null when it is absent. */
+export function queryParam(key: string): string | null {
+  return new URLSearchParams(window.location.search).get(key)
+}

@@ -3,6 +3,14 @@ import type { DashboardData } from './types'
 
 export type DashboardState = {
   data: DashboardData | null
+  /**
+   * The window `data` was requested for, which is not always the window
+   * the server answered with: an unknown one falls back to the default.
+   * A caller that wants to correct itself has to compare the two, and
+   * comparing against the window currently selected would instead
+   * compare against a request still in flight.
+   */
+  requested: string | null
   loading: boolean
   error: string | null
   lastUpdated: Date | null
@@ -20,6 +28,7 @@ export type DashboardState = {
 export function useDashboard(rangeID: string, refreshSeconds: number): DashboardState & { refresh: () => void } {
   const [state, setState] = useState<DashboardState>({
     data: null,
+    requested: null,
     loading: true,
     error: null,
     lastUpdated: null,
@@ -48,7 +57,7 @@ export function useDashboard(rangeID: string, refreshSeconds: number): Dashboard
       })
       .then((data) => {
         if (unmounted) return
-        setState({ data, loading: false, error: null, lastUpdated: new Date() })
+        setState({ data, requested: rangeID, loading: false, error: null, lastUpdated: new Date() })
       })
       .catch((err: unknown) => {
         if (unmounted) return
