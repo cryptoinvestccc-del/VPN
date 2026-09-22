@@ -1,7 +1,9 @@
 package webapi
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -53,6 +55,7 @@ func (SampleSource) Dashboard(rangeID string, now time.Time) Dashboard {
 }
 
 func sampleStats(r TimeRange) []Stat {
+	online, total := fleetStatus()
 	sessions := fleetSum(r, "sessions", 120, 460)
 	throughput := fleetSum(r, "throughput", 60, 240)
 	failures := seriesFor("auth-failures", r, 0, 900, burst)
@@ -62,7 +65,7 @@ func sampleStats(r TimeRange) []Stat {
 			ID: "sessions", Title: "Активные сессии", Unit: "", Decimals: 0,
 			Value: last(sessions), Sparkline: sessions,
 			Delta: deltaPct(sessions), GoodWhenUp: true,
-			Note: "Сумма по шести узлам",
+			Note: "Сумма по работающим узлам",
 		},
 		{
 			ID: "throughput", Title: "Трафик через туннель", Unit: "Мбит/с", Decimals: 0,
@@ -78,11 +81,11 @@ func sampleStats(r TimeRange) []Stat {
 			Note:       "Сканеры и пробы DPI на публичном порту",
 		},
 		{
-			ID: "nodes", Title: "Узлы онлайн", Unit: "из 6", Decimals: 0,
-			Value: 5, Sparkline: seriesFor("nodes-online", r, 4.6, 6, wave),
+			ID: "nodes", Title: "Узлы онлайн", Unit: fmt.Sprintf("из %d", total), Decimals: 0,
+			Value: float64(online), Sparkline: seriesFor("nodes-online", r, float64(online)-0.4, float64(total), wave),
 			GoodWhenUp: true,
-			Thresholds: []Threshold{{From: 0, Level: "crit"}, {From: 4, Level: "warn"}, {From: 6, Level: "ok"}},
-			Note:       "sin-1 на обслуживании",
+			Thresholds: []Threshold{{From: 0, Level: "crit"}, {From: float64(total) - 2, Level: "warn"}, {From: float64(total), Level: "ok"}},
+			Note:       maintenanceNote(),
 		},
 	}
 }
@@ -251,6 +254,62 @@ func fleetSum(r TimeRange, metric string, lo, hi float64) []float64 {
 	return total
 }
 
+// fleetStatus counts the fleet the way both pages have to report it: a
+// node under maintenance carries no traffic and is not online, and every
+// other node is. Both pages read this rather than a literal, because a
+// literal is what let the landing page claim twelve nodes over a list of
+// six.
+func fleetStatus() (online, total int) {
+	for _, n := range nodes {
+		if n.status != "maintenance" {
+			online++
+		}
+	}
+	return online, len(nodes)
+}
+
+// maintenanceNote names the nodes that are down, so the caption under the
+// count cannot outlive the node it names.
+func maintenanceNote() string {
+	var down []string
+	for _, n := range nodes {
+		if n.status == "maintenance" {
+			down = append(down, n.id)
+		}
+	}
+	switch len(down) {
+	case 0:
+		return "Все узлы в строю"
+	case 1:
+		return down[0] + " на обслуживании"
+	default:
+		return strings.Join(down, ", ") + " на обслуживании"
+	}
+}
+
+// windowLabel describes a window the way a caption under a chart reads,
+// rather than the way a picker entry does.
+func windowLabel(r TimeRange) string {
+	return strings.ToLower(r.Label)
+}
+
+// stamp puts a fleet series back on the clock. The generator works in
+// bucket indices; the landing page's chart wants timestamps, and the last
+// value belongs to the window's end by construction.
+func stamp(r TimeRange, values []float64) []Point {
+	to, err := time.Parse(time.RFC3339, r.To)
+	if err != nil || r.StepSeconds <= 0 {
+		return nil
+	}
+	step := time.Duration(r.StepSeconds) * time.Second
+	out := make([]Point, 0, len(values))
+	for i, v := range values {
+		at := to.Add(-time.Duration(len(values)-1-i) * step)
+		out = append(out, Point{T: at.UTC().Format(time.RFC3339), V: v})
+	}
+	return out
+}
+
 func shifted(points []float64, by float64) []float64 {
 	out := make([]float64, len(points))
 	for i, v := range points {
@@ -286,6 +345,56 @@ func deltaPct(points []float64) *float64 {
 	}
 	d := round2((last(points) - prev) / prev * 100)
 	return &d
+}
+
+// deltaSpan describes the period deltaPct actually compares over, in
+// words. The two have to be derived from the same place: a tile that
+// reports a 36-minute change and captions it "за сутки" is a lie told in
+// small type, which is the kind this page can least afford.
+func deltaSpan(points []float64, r TimeRange) string {
+	if len(points) < 10 || r.StepSeconds <= 0 {
+		return ""
+	}
+	back := time.Duration(len(points)/10) * time.Duration(r.StepSeconds) * time.Second
+	return "за " + ruDuration(back)
+}
+
+// ruDuration renders a span in the largest unit that keeps it a whole
+// number, with the ending Russian requires for that number.
+func ruDuration(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		return ruPlural(int(d/(24*time.Hour)), "день", "дня", "дней")
+	case d >= time.Hour:
+		return ruPlural(int(d/time.Hour), "час", "часа", "часов")
+	default:
+		return ruPlural(int(d/time.Minute), "минуту", "минуты", "минут")
+	}
+}
+
+func ruPlural(n int, one, few, many string) string {
+	form := many
+	switch {
+	case n%10 == 1 && n%100 != 11:
+		form = one
+	case n%10 >= 2 && n%10 <= 4 && (n%100 < 10 || n%100 >= 20):
+		form = few
+	}
+	return fmt.Sprintf("%d %s", n, form)
+}
+
+// monthly is a window of daily points, for the one figure on the page
+// that is a monthly statistic rather than a reading off the fleet.
+func monthly(r TimeRange) TimeRange {
+	const days = 30
+	return TimeRange{
+		ID:          "30d",
+		Label:       "Последние 30 дней",
+		From:        r.From,
+		To:          r.To,
+		StepSeconds: int((24 * time.Hour).Seconds()),
+		Points:      days,
+	}
 }
 
 func clampRange(v, lo, hi float64) float64 {

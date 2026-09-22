@@ -2,7 +2,6 @@ package webapi
 
 import (
 	"math"
-	"math/rand"
 	"time"
 )
 
@@ -24,65 +23,83 @@ type Source interface {
 // advance with the clock.
 type SampleSource struct{}
 
-const sampleSeed = 20240917
-
+// Status is built from the same fleet the dashboard draws, over the
+// dashboard's default window, rather than from a second set of
+// hand-written numbers.
+//
+// It used to be its own set, and the two drifted apart exactly as you
+// would expect: the page said eleven of twelve nodes were online while
+// the node list under it named six cities and the dashboard said five of
+// six, and the headline throughput disagreed with the tile beside it.
+// A visitor who clicked through from the page to the dashboard was
+// looking at a different service. One generator cannot do that.
 func (SampleSource) Status(now time.Time) Status {
-	points := sampleThroughput(now, 48, 5*time.Minute)
-	latest := points[len(points)-1].V
+	r := resolveRange(DefaultRange, now)
+
+	sessions := fleetSum(r, "sessions", 120, 460)
+	throughput := fleetSum(r, "throughput", 60, 240)
+	probes := seriesFor("landing-probes", r, 18000, 39000, wave)
+
+	// Availability is a monthly statistic, so it gets a month of daily
+	// points rather than a reading off the six-hour window beside it.
+	month := monthly(r)
+	uptime := seriesFor("landing-uptime", month, 99.86, 99.99, wave)
+
+	online, total := fleetStatus()
 
 	return Status{
 		GeneratedAt:    now.UTC().Format(time.RFC3339),
 		Mock:           true,
-		SessionsActive: 1284,
-		ThroughputMbps: latest,
-		NodesOnline:    11,
-		NodesTotal:     12,
+		SessionsActive: int(math.Round(last(sessions))),
+		ThroughputMbps: last(throughput),
+		NodesOnline:    online,
+		NodesTotal:     total,
 		Throughput: PointSeries{
 			Unit:   "Мбит/с",
-			Window: "последние 4 часа",
-			Points: points,
+			Window: windowLabel(r),
+			Points: stamp(r, throughput),
 		},
 		Tiles: []Tile{
 			{
 				ID:          "sessions",
 				Label:       "Активные сессии",
-				Value:       1284,
-				Delta:       pct(8.4),
-				DeltaWindow: "за сутки",
+				Value:       last(sessions),
+				Delta:       deltaPct(sessions),
+				DeltaWindow: deltaSpan(sessions, r),
 				GoodWhenUp:  true,
-				Series:      []float64{980, 1010, 995, 1074, 1120, 1088, 1160, 1205, 1190, 1240, 1262, 1284},
-				Note:        "Сумма по всем узлам",
+				Series:      tail(sessions, 12),
+				Note:        "Сумма по работающим узлам",
 			},
 			{
 				ID:          "throughput",
 				Label:       "Трафик через туннель",
-				Value:       742,
+				Value:       last(throughput),
 				Unit:        "Мбит/с",
-				Delta:       pct(3.1),
-				DeltaWindow: "за час",
+				Delta:       deltaPct(throughput),
+				DeltaWindow: deltaSpan(throughput, r),
 				GoodWhenUp:  true,
-				Series:      []float64{612, 648, 690, 665, 704, 688, 712, 735, 720, 758, 731, 742},
+				Series:      tail(throughput, 12),
 				Note:        "Агрегат, без разбивки по клиентам",
 			},
 			{
 				ID:          "probes",
 				Label:       "Отклонённые пробы",
-				Value:       26400,
-				Delta:       pct(-12.6),
-				DeltaWindow: "за сутки",
+				Value:       math.Round(last(probes)),
+				Delta:       deltaPct(probes),
+				DeltaWindow: deltaSpan(probes, r),
 				GoodWhenUp:  false,
-				Series:      []float64{34200, 33100, 32400, 31800, 30900, 30100, 29600, 28800, 28200, 27500, 26900, 26400},
+				Series:      tail(probes, 12),
 				Note:        "Сканеры и активный DPI-пробинг",
 			},
 			{
 				ID:          "uptime",
 				Label:       "Доступность узлов",
-				Value:       99.94,
+				Value:       last(uptime),
 				Unit:        "%",
-				Delta:       pct(0.02),
-				DeltaWindow: "за 30 дней",
+				Delta:       deltaPct(uptime),
+				DeltaWindow: deltaSpan(uptime, month),
 				GoodWhenUp:  true,
-				Series:      []float64{99.9, 99.88, 99.93, 99.95, 99.91, 99.96, 99.94, 99.92, 99.95, 99.97, 99.93, 99.94},
+				Series:      tail(uptime, 12),
 				Note:        "По данным внешнего мониторинга",
 			},
 		},
@@ -135,25 +152,3 @@ func (SampleSource) Plans() []Plan {
 		},
 	}
 }
-
-// sampleThroughput draws a slow swell with a little noise on top. A flat
-// line reads as a placeholder, and pure noise reads as a fault; traffic
-// through a real tunnel looks like neither.
-func sampleThroughput(now time.Time, count int, step time.Duration) []Point {
-	rng := rand.New(rand.NewSource(sampleSeed))
-	points := make([]Point, 0, count)
-	level := 610.0
-
-	for i := count - 1; i >= 0; i-- {
-		swell := math.Sin(float64(count-i)/7) * 120
-		level += (rng.Float64() - 0.48) * 70
-		level = math.Min(980, math.Max(380, level))
-		points = append(points, Point{
-			T: now.Add(-time.Duration(i) * step).UTC().Format(time.RFC3339),
-			V: math.Round(level + swell),
-		})
-	}
-	return points
-}
-
-func pct(v float64) *float64 { return &v }

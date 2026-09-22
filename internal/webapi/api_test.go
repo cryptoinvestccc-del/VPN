@@ -2,6 +2,7 @@ package webapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -200,6 +201,150 @@ func TestTileDeltasCarryTheirDirection(t *testing.T) {
 	for _, tile := range got.Tiles {
 		if tile.ID == "probes" && tile.GoodWhenUp {
 			t.Error("rejected probes are marked good_when_up; a rise in scanning is not good news")
+		}
+	}
+}
+
+// The landing page and the dashboard describe one network. They used to
+// carry two hand-written sets of figures, and the page ended up claiming
+// eleven of twelve nodes over a list of six cities while the dashboard
+// said five of six. Both now read the same fleet, and this is what keeps
+// them doing so.
+func TestLandingAndDashboardDescribeOneNetwork(t *testing.T) {
+	var status Status
+	if err := json.Unmarshal(get(t, "/api/v1/status").Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	var dash Dashboard
+	if err := json.Unmarshal(get(t, "/api/v1/dashboard").Body.Bytes(), &dash); err != nil {
+		t.Fatalf("decode dashboard: %v", err)
+	}
+	var locations []Location
+	if err := json.Unmarshal(get(t, "/api/v1/locations").Body.Bytes(), &locations); err != nil {
+		t.Fatalf("decode locations: %v", err)
+	}
+
+	if status.NodesTotal != len(locations) {
+		t.Errorf("status says %d nodes, the location list names %d",
+			status.NodesTotal, len(locations))
+	}
+
+	stats := map[string]Stat{}
+	for _, s := range dash.Stats {
+		stats[s.ID] = s
+	}
+
+	if want := fmt.Sprintf("из %d", status.NodesTotal); stats["nodes"].Unit != want {
+		t.Errorf("dashboard node count reads %q, status says %q", stats["nodes"].Unit, want)
+	}
+	if got := int(stats["nodes"].Value); got != status.NodesOnline {
+		t.Errorf("dashboard says %d nodes online, status says %d", got, status.NodesOnline)
+	}
+	if got := int(stats["sessions"].Value); got != status.SessionsActive {
+		t.Errorf("dashboard says %d sessions, status says %d", got, status.SessionsActive)
+	}
+	if got := stats["throughput"].Value; got != status.ThroughputMbps {
+		t.Errorf("dashboard says %v Mbit/s, status says %v", got, status.ThroughputMbps)
+	}
+
+	// The headline figure is the last point of the chart under it, not a
+	// number of its own beside it.
+	if last := status.Throughput.Points[len(status.Throughput.Points)-1]; last.V != status.ThroughputMbps {
+		t.Errorf("headline throughput %v does not match the chart's last point %v",
+			status.ThroughputMbps, last.V)
+	}
+	for _, tile := range status.Tiles {
+		if tile.ID == "throughput" && tile.Value != status.ThroughputMbps {
+			t.Errorf("throughput tile reads %v beside a headline of %v", tile.Value, status.ThroughputMbps)
+		}
+		if tile.ID == "sessions" && int(tile.Value) != status.SessionsActive {
+			t.Errorf("sessions tile reads %v beside a headline of %d", tile.Value, status.SessionsActive)
+		}
+	}
+}
+
+// A node under maintenance is not online, and the caption under the count
+// names it. Both are read off the fleet, so neither can outlive it.
+func TestNodeCountFollowsTheFleet(t *testing.T) {
+	online, total := fleetStatus()
+	if total != len(nodes) {
+		t.Errorf("total = %d, want %d", total, len(nodes))
+	}
+
+	down := 0
+	for _, n := range nodes {
+		if n.status == "maintenance" {
+			down++
+		}
+	}
+	if online != total-down {
+		t.Errorf("online = %d, want %d (%d under maintenance)", online, total-down, down)
+	}
+
+	note := maintenanceNote()
+	for _, n := range nodes {
+		if n.status == "maintenance" && !strings.Contains(note, n.id) {
+			t.Errorf("caption %q does not name %s, which is under maintenance", note, n.id)
+		}
+	}
+}
+
+// A delta's caption names the period it was measured over. These used to
+// be written by hand — "за сутки" over a series that spanned six hours —
+// and a percentage attached to the wrong period is not a smaller mistake
+// than a wrong percentage.
+func TestDeltaCaptionsNameThePeriodMeasured(t *testing.T) {
+	var got Status
+	if err := json.Unmarshal(get(t, "/api/v1/status").Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	windows := map[string]string{}
+	for _, tile := range got.Tiles {
+		if tile.Delta == nil {
+			continue
+		}
+		if tile.DeltaWindow == "" {
+			t.Errorf("tile %q reports a delta with no period", tile.ID)
+		}
+		windows[tile.ID] = tile.DeltaWindow
+	}
+
+	// The three fleet tiles read the same window, so they must caption it
+	// the same way.
+	if windows["sessions"] != windows["throughput"] || windows["throughput"] != windows["probes"] {
+		t.Errorf("fleet tiles disagree about their period: %v", windows)
+	}
+
+	// Availability is a monthly figure and is measured over days, not
+	// over the six hours the fleet tiles cover.
+	if !strings.Contains(windows["uptime"], "дн") {
+		t.Errorf("uptime delta is captioned %q; a monthly figure is not compared over minutes", windows["uptime"])
+	}
+	if windows["uptime"] == windows["sessions"] {
+		t.Errorf("uptime and the fleet tiles claim the same period %q", windows["uptime"])
+	}
+}
+
+// The endings Russian needs, which a Sprintf with a fixed word gets
+// wrong for most numbers.
+func TestDurationsReadAsRussian(t *testing.T) {
+	for _, c := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{36 * time.Minute, "36 минут"},
+		{21 * time.Minute, "21 минуту"},
+		{22 * time.Minute, "22 минуты"},
+		{11 * time.Minute, "11 минут"},
+		{2 * time.Hour, "2 часа"},
+		{5 * time.Hour, "5 часов"},
+		{24 * time.Hour, "1 день"},
+		{3 * 24 * time.Hour, "3 дня"},
+		{14 * 24 * time.Hour, "14 дней"},
+	} {
+		if got := ruDuration(c.d); got != c.want {
+			t.Errorf("ruDuration(%v) = %q, want %q", c.d, got, c.want)
 		}
 	}
 }
