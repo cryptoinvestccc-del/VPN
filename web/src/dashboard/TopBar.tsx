@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DashboardData } from './types'
-import type { Theme } from '../lib/theme'
 import { Logo } from '../components/Logo'
+import { ThemeToggle } from '../components/ThemeToggle'
 import { linkHandler } from '../lib/router'
 
 type Props = {
@@ -12,8 +12,6 @@ type Props = {
   onRefreshSeconds: (seconds: number) => void
   onRefreshNow: () => void
   loading: boolean
-  theme: Theme
-  onTheme: (theme: Theme) => void
   lastUpdated: Date | null
 }
 
@@ -33,8 +31,6 @@ export function TopBar({
   onRefreshSeconds,
   onRefreshNow,
   loading,
-  theme,
-  onTheme,
   lastUpdated,
 }: Props) {
   return (
@@ -75,14 +71,7 @@ export function TopBar({
           }
         />
 
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-        >
-          {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-        </button>
+        <ThemeToggle />
       </div>
 
       <div className="topbar__row topbar__row--vars">
@@ -219,29 +208,5 @@ const RefreshIcon = ({ spinning }: { spinning?: boolean }) => (
       strokeLinecap="round"
     />
     <path d="M13.4 2.2v3h-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
-const SunIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r="3.1" fill="none" stroke="currentColor" strokeWidth="1.3" />
-    <path
-      d="M8 1v1.8M8 13.2V15M1 8h1.8M13.2 8H15M3 3l1.3 1.3M11.7 11.7 13 13M13 3l-1.3 1.3M4.3 11.7 3 13"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-    />
-  </svg>
-)
-
-const MoonIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-    <path
-      d="M13.5 10.2A5.8 5.8 0 0 1 5.8 2.5a5.8 5.8 0 1 0 7.7 7.7Z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinejoin="round"
-    />
   </svg>
 )

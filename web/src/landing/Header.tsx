@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Logo } from '../components/Logo'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 const links = [
   { href: '#how', label: 'Как это работает' },
@@ -37,6 +38,7 @@ export function Header() {
         </nav>
 
         <div className="site-header__actions">
+          <ThemeToggle className="round-btn" />
           <a className="btn btn--ghost" href="#docs">
             Документация
           </a>

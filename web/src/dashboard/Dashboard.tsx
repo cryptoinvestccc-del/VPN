@@ -7,7 +7,6 @@ import { Gauge } from '../charts/Gauge'
 import { BarGauge } from '../charts/BarGauge'
 import { StatBlock } from '../charts/StatBlock'
 import { NodeTable } from '../charts/NodeTable'
-import { useTheme } from '../lib/theme'
 import { linkHandler } from '../lib/router'
 
 const RANGE_KEY = 'besy.range'
@@ -16,7 +15,6 @@ const REFRESH_KEY = 'besy.refresh'
 export function Dashboard() {
   const [rangeID, setRangeID] = useState(() => readString(RANGE_KEY, '6h'))
   const [refreshSeconds, setRefreshSeconds] = useState(() => readNumber(REFRESH_KEY, 30))
-  const [theme, setTheme] = useTheme()
   const { data, loading, error, lastUpdated, refresh } = useDashboard(rangeID, refreshSeconds)
 
   useEffect(() => {
@@ -56,8 +54,6 @@ export function Dashboard() {
         onRefreshSeconds={setRefreshSeconds}
         onRefreshNow={refresh}
         loading={loading}
-        theme={theme}
-        onTheme={setTheme}
         lastUpdated={lastUpdated}
       />
 

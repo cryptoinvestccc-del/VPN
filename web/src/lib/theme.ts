@@ -8,9 +8,14 @@ const KEY = 'besy.theme'
  * Theme, with the system preference as the default.
  *
  * The default lives in CSS (a prefers-color-scheme media query), not
- * here, so the first paint is already the right theme. This hook only
- * handles the explicit override, which is why it starts as null rather
- * than guessing: null means "whatever the system says".
+ * here, so the first paint is already the right theme — there is no
+ * inline script deciding it, and therefore no flash of the wrong one.
+ * This hook only records an explicit override, which is why it starts as
+ * null rather than guessing: null means "whatever the system says".
+ *
+ * Both pages share the stored choice, and a system change still moves an
+ * unset theme, so someone who never touches the switch keeps following
+ * their OS.
  */
 export function useTheme(): [Theme, (next: Theme) => void] {
   const [override, setOverride] = useState<Theme | null>(() => read())
