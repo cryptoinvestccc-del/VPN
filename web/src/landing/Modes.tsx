@@ -41,7 +41,7 @@ export function Modes() {
           </div>
         </div>
 
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Сравнение режимов UDP и TLS">
           <table className="data">
             <caption className="visually-hidden">Сравнение режимов UDP и TLS</caption>
             <thead>

@@ -27,7 +27,7 @@ export function Hero({ status }: { status: Resource<Status> }) {
       <div className="shell hero__grid">
         <div className="hero__copy">
           <p className="eyebrow">Обфускация WireGuard</p>
-          <h1>Трафик, который DPI не за что зацепить</h1>
+          <h1>Трафик, который DPI не за что зацепить</h1>
           <p className="lede hero__lede">
             Besy VPN оборачивает уже зашифрованные WireGuard-пакеты во второй слой:
             XChaCha20-Poly1305 поверх PSK, случайный паддинг и мусорные пакеты.

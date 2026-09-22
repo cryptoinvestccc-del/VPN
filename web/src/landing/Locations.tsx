@@ -35,7 +35,7 @@ export function Locations({ locations, sample }: Props) {
           </span>
         </div>
 
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Список узлов сети">
           <table className="data">
             <caption className="visually-hidden">Список узлов сети с задержкой и загрузкой</caption>
             <thead>

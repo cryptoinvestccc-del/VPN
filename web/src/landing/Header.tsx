@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Logo } from '../components/Logo'
 import { ThemeToggle } from '../components/ThemeToggle'
 
@@ -13,6 +13,8 @@ const links = [
 export function Header() {
   const [stuck, setStuck] = useState(false)
   const [open, setOpen] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     const onScroll = () => setStuck(window.scrollY > 8)
@@ -21,8 +23,30 @@ export function Header() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  // An open panel has to close the two ways every open panel closes, or
+  // it is a trap: Escape, and a click on anything behind it. The
+  // dashboard's dropdown has done this from the start; this one had
+  // neither, so on a phone the only way out was the toggle itself.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      toggleRef.current?.focus()
+    }
+    const onDocClick = (e: MouseEvent) => {
+      if (!headerRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDocClick)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDocClick)
+    }
+  }, [open])
+
   return (
-    <header className="site-header" data-stuck={stuck}>
+    <header className="site-header" data-stuck={stuck} ref={headerRef}>
       <div className="shell site-header__bar">
         <a className="brand" href="#top" aria-label="Besy VPN, на главную">
           <Logo />
@@ -47,6 +71,7 @@ export function Header() {
           </a>
           <button
             type="button"
+            ref={toggleRef}
             className="nav-toggle"
             aria-expanded={open}
             aria-controls="nav-panel"

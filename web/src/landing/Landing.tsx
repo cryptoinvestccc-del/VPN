@@ -23,7 +23,7 @@ export function Landing() {
   return (
     <>
       <Header />
-      <main id="main">
+      <main id="main" tabIndex={-1}>
         <Hero status={status} />
         <HowItWorks />
         <Features />

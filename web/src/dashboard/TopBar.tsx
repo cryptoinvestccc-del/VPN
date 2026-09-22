@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { DashboardData } from './types'
 import { Logo } from '../components/Logo'
 import { ThemeToggle } from '../components/ThemeToggle'
@@ -51,6 +51,7 @@ export function TopBar({
         <div className="topbar__spacer" />
 
         <Dropdown
+          name="Период"
           label={data.range.label}
           icon={<ClockIcon />}
           value={rangeID}
@@ -59,6 +60,7 @@ export function TopBar({
         />
 
         <Dropdown
+          name="Интервал обновления"
           label={refreshOptions.find((o) => o.seconds === refreshSeconds)?.label ?? 'выкл'}
           icon={<RefreshIcon spinning={loading} />}
           value={String(refreshSeconds)}
@@ -101,6 +103,8 @@ function Variable({ label, value }: { label: string; value: string }) {
 }
 
 type DropdownProps = {
+  /** The accessible name of the control, e.g. "Период". */
+  name: string
   label: string
   icon?: React.ReactNode
   value: string
@@ -109,9 +113,29 @@ type DropdownProps = {
   before?: React.ReactNode
 }
 
-function Dropdown({ label, icon, value, options, onChange, before }: DropdownProps) {
+/**
+ * A listbox that a keyboard and a screen reader can both drive.
+ *
+ * The markup is what the ARIA listbox pattern requires and nothing else:
+ * the options are direct children of the element carrying
+ * `role="listbox"`. Wrapping each one in an `<li>` looked tidier and
+ * broke the pattern outright — the parent/child relationship the role
+ * depends on ran through an element with a role of its own, so a screen
+ * reader announced a list of seven items and no selectable options at
+ * all.
+ *
+ * Keyboard handling follows the same pattern: arrows move between
+ * options, Home and End jump to the ends, Escape closes and hands focus
+ * back to the button that opened the menu. Without that last part a
+ * keyboard user who dismisses the menu is dropped at the top of the
+ * document.
+ */
+function Dropdown({ name, label, icon, value, options, onChange, before }: DropdownProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const listID = useId()
 
   useEffect(() => {
     if (!open) return
@@ -119,7 +143,10 @@ function Dropdown({ label, icon, value, options, onChange, before }: DropdownPro
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') {
+        setOpen(false)
+        buttonRef.current?.focus()
+      }
     }
     document.addEventListener('mousedown', onDocClick)
     document.addEventListener('keydown', onKey)
@@ -129,39 +156,105 @@ function Dropdown({ label, icon, value, options, onChange, before }: DropdownPro
     }
   }, [open])
 
+  // Opening puts focus on the current choice, so the first arrow key
+  // moves from where the user already is rather than from the top.
+  useEffect(() => {
+    if (!open) return
+    const menu = menuRef.current
+    if (!menu) return
+    const selected = menu.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+    ;(selected ?? menu.querySelector<HTMLButtonElement>('[role="option"]'))?.focus()
+  }, [open])
+
+  const moveFocus = (from: HTMLElement, delta: number | 'first' | 'last') => {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])
+    if (items.length === 0) return
+    const at = items.indexOf(from as HTMLButtonElement)
+    const next =
+      delta === 'first'
+        ? 0
+        : delta === 'last'
+          ? items.length - 1
+          : (at + delta + items.length) % items.length
+    items[next]?.focus()
+  }
+
+  const onMenuKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        moveFocus(target, 1)
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        moveFocus(target, -1)
+        break
+      case 'Home':
+        e.preventDefault()
+        moveFocus(target, 'first')
+        break
+      case 'End':
+        e.preventDefault()
+        moveFocus(target, 'last')
+        break
+      case 'Tab':
+        setOpen(false)
+        break
+    }
+  }
+
+  const onButtonKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      setOpen(true)
+    }
+  }
+
   return (
     <div className="dropdown" ref={ref}>
       {before}
       <button
         type="button"
+        ref={buttonRef}
         className="dropdown__btn"
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-controls={open ? listID : undefined}
+        aria-label={`${name}: ${label}`}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={onButtonKey}
       >
         {icon}
         <span>{label}</span>
         <Caret />
       </button>
       {open && (
-        <ul className="dropdown__menu" role="listbox">
+        <div
+          className="dropdown__menu"
+          id={listID}
+          role="listbox"
+          aria-label={name}
+          ref={menuRef}
+          onKeyDown={onMenuKey}
+        >
           {options.map((o) => (
-            <li key={o.value}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={o.value === value}
-                className={o.value === value ? 'is-selected' : ''}
-                onClick={() => {
-                  onChange(o.value)
-                  setOpen(false)
-                }}
-              >
-                {o.label}
-              </button>
-            </li>
+            <button
+              key={o.value}
+              type="button"
+              role="option"
+              aria-selected={o.value === value}
+              className={o.value === value ? 'is-selected' : ''}
+              onClick={() => {
+                onChange(o.value)
+                setOpen(false)
+                buttonRef.current?.focus()
+              }}
+            >
+              {o.label}
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   )

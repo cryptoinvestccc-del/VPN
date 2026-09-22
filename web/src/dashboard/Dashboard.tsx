@@ -7,19 +7,38 @@ import { Gauge } from '../charts/Gauge'
 import { BarGauge } from '../charts/BarGauge'
 import { StatBlock } from '../charts/StatBlock'
 import { NodeTable } from '../charts/NodeTable'
-import { linkHandler } from '../lib/router'
+import { linkHandler, queryParam, setQueryParam } from '../lib/router'
 
 const RANGE_KEY = 'besy.range'
 const REFRESH_KEY = 'besy.refresh'
 
 export function Dashboard() {
-  const [rangeID, setRangeID] = useState(() => readString(RANGE_KEY, '6h'))
+  // The URL wins over the remembered choice: someone who opened a link
+  // to a particular window asked for that window, whatever this browser
+  // last looked at.
+  const [rangeID, setRangeID] = useState(() => queryParam('range') ?? readString(RANGE_KEY, '6h'))
   const [refreshSeconds, setRefreshSeconds] = useState(() => readNumber(REFRESH_KEY, 30))
-  const { data, loading, error, lastUpdated, refresh } = useDashboard(rangeID, refreshSeconds)
+  const { data, requested, loading, error, lastUpdated, refresh } = useDashboard(rangeID, refreshSeconds)
 
   useEffect(() => {
     write(RANGE_KEY, rangeID)
+    setQueryParam('range', rangeID)
   }, [rangeID])
+
+  // The server answers an unknown window with the default rather than an
+  // error, and says in the response which one it used. Reading that back
+  // is what keeps a mistyped ?range= from leaving the address bar and the
+  // picker claiming one thing while the panels show another.
+  //
+  // The comparison is against the window this response was *asked* for,
+  // not against the one currently selected: while a new request is in
+  // flight those differ, and correcting on that difference would undo
+  // the reader's own choice a moment after they made it.
+  const asked = requested
+  const served = data?.range.id
+  useEffect(() => {
+    if (asked && served && served !== asked) setRangeID(served)
+  }, [asked, served])
   useEffect(() => {
     write(REFRESH_KEY, String(refreshSeconds))
   }, [refreshSeconds])
@@ -57,7 +76,13 @@ export function Dashboard() {
         lastUpdated={lastUpdated}
       />
 
-      <main id="main" className="dash__body">
+      <main id="main" className="dash__body" tabIndex={-1}>
+        {/*
+          The page's name lives in the breadcrumbs, which are navigation
+          rather than a heading. A screen reader user listing the
+          headings on this page used to get panels and no page.
+        */}
+        <h1 className="visually-hidden">Обзор сети Besy VPN</h1>
         {error && (
           <div className="dash__banner">
             Данные не обновились: {error}. На панелях — последний удачный ответ

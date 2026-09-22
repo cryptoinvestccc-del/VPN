@@ -199,7 +199,13 @@ export function LineChart({ points, unit, title, height = 190 }: Props) {
           Значения таблицей
           {lastPoint ? ` — сейчас ${group(lastPoint.v)} ${unit}` : ''}
         </summary>
-        <div className="table-wrap" style={{ marginTop: 10, maxHeight: 220, overflowY: 'auto' }}>
+        <div
+          className="table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label={title}
+          style={{ marginTop: 10, maxHeight: 220, overflowY: 'auto' }}
+        >
           <table className="data">
             <caption className="visually-hidden">{title}</caption>
             <thead>

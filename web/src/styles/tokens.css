@@ -28,7 +28,11 @@
   /* Ink */
   --ink: #141310;
   --ink-secondary: #605c54;
-  --ink-muted: #97928a;
+  /* 4.54:1 on the darkest surface this sits on (#f3f2f0) and better on
+     the other two. The old #97928a read 2.76:1 there — below AA on every
+     surface in the theme, across 52 elements on the product page alone:
+     the eyebrows, every unit beside a figure, every delta caption. */
+  --ink-muted: #716e68;
   --ink-inverse: #f3f2f0;
   --ink-inverse-muted: #8f8b84;
 
@@ -46,6 +50,17 @@
   --level-ok: #3c9e45;
   --level-warn: #b07d12;
   --level-crit: #cc3b33;
+
+  /* The same three states as text.
+     A filled bar or a gauge arc is a graphical object and needs 3:1; the
+     word "онлайн" beside it is text and needs 4.5:1, which the fill
+     colours miss on white (3.40 and 3.63). Two tokens rather than one
+     darker colour everywhere, because darkening the fills would flatten
+     the difference between ok and warn exactly where it has to read at a
+     glance. */
+  --level-ok-ink: #307e37;
+  --level-warn-ink: #91670f;
+  --level-crit-ink: #ca3a32;
 
   /* Series — fixed order, validated for both surfaces */
   --series-1: #3c9e45;
@@ -99,7 +114,9 @@
 
     --ink: #e6e8ee;
     --ink-secondary: #a3a9b5;
-    --ink-muted: #767d8a;
+    /* 4.51:1 on --surface-sunken, 4.80:1 on --surface. The old #767d8a
+       landed at 4.03:1, which looks fine to most eyes and is not. */
+    --ink-muted: #7f8592;
     --ink-inverse: #0f1013;
     --ink-inverse-muted: #4e5563;
 
@@ -114,6 +131,11 @@
     --level-ok: #3c9e45;
     --level-warn: #c08c22;
     --level-crit: #e05548;
+
+    /* On these surfaces the fills clear 4.5:1 as text already. */
+    --level-ok-ink: #3c9e45;
+    --level-warn-ink: #c08c22;
+    --level-crit-ink: #e05548;
 
     --series-1: #3c9e45;
     --series-2: #3789dc;
@@ -139,7 +161,7 @@
 
   --ink: #e6e8ee;
   --ink-secondary: #a3a9b5;
-  --ink-muted: #767d8a;
+  --ink-muted: #7f8592;
   --ink-inverse: #0f1013;
   --ink-inverse-muted: #4e5563;
 
@@ -154,6 +176,10 @@
   --level-ok: #3c9e45;
   --level-warn: #c08c22;
   --level-crit: #e05548;
+
+  --level-ok-ink: #3c9e45;
+  --level-warn-ink: #c08c22;
+  --level-crit-ink: #e05548;
 
   --series-1: #3c9e45;
   --series-2: #3789dc;

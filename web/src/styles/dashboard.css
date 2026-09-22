@@ -636,11 +636,11 @@
 }
 
 .status--online {
-  color: var(--level-ok);
+  color: var(--level-ok-ink);
 }
 
 .status--degraded {
-  color: var(--level-warn);
+  color: var(--level-warn-ink);
 }
 
 .status--maintenance {
