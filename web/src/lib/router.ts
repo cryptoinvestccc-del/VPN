@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Two pages, so two-page routing: the dashboard at / and the product page
- * at /about.
+ * Two pages, so two-page routing: the product page at / and the
+ * operations dashboard at /dashboard.
  *
  * A router library would be a dependency for one branch. The server
  * already serves index.html for unknown paths, so a deep link and a
  * reload both land on the right page.
  */
-export type Route = 'dashboard' | 'about'
+export type Route = 'landing' | 'dashboard'
 
 export function routeOf(pathname: string): Route {
-  return pathname.replace(/\/+$/, '') === '/about' ? 'about' : 'dashboard'
+  return pathname.replace(/\/+$/, '') === '/dashboard' ? 'dashboard' : 'landing'
 }
 
 export function useRoute(): Route {

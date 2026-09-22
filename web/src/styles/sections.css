@@ -111,8 +111,15 @@
 /* Hero ------------------------------------------------------------- */
 
 .hero {
-  padding-top: clamp(48px, 6vw, 92px);
+  padding-top: clamp(24px, 3vw, 40px);
   padding-bottom: clamp(36px, 4vw, 56px);
+}
+
+/* The live figures lead the page: someone who already knows what this is
+   comes back for the numbers, and making them scroll past the pitch to
+   reach them puts the pitch ahead of the reader. */
+.hero__stats {
+  margin-bottom: clamp(32px, 4.5vw, 64px);
 }
 
 .hero__lede {

@@ -133,9 +133,11 @@
   letter-spacing: 0;
 }
 
-/* A percent sign belongs against its number, not spaced off it. */
+/* A percent sign belongs against its number rather than spaced off it —
+   but the value's negative letter-spacing eats most of a small margin,
+   which had the sign touching the last digit. */
 .stat__unit--tight {
-  margin-left: 1px;
+  margin-left: 3px;
 }
 
 .stat__spark {

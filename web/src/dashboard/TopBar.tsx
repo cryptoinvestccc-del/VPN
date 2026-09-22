@@ -40,7 +40,7 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="topbar__row">
-        <a className="topbar__brand" href="/" onClick={linkHandler('/')}>
+        <a className="topbar__brand" href="/" onClick={linkHandler('/')} title="На страницу продукта">
           <Logo size={18} />
           BESY
         </a>

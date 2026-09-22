@@ -113,7 +113,7 @@ export function Dashboard() {
               ? 'Показатели демонстрационные: сервер отдаёт встроенный образец, а не измерения.'
               : 'Агрегаты по сети. Разбивки по клиентам нет — она не собирается.'}
           </span>
-          <a href="/about" onClick={linkHandler('/about')}>
+          <a href="/" onClick={linkHandler('/')}>
             О продукте →
           </a>
         </footer>

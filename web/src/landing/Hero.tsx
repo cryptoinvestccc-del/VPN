@@ -15,6 +15,15 @@ export function Hero({ status }: { status: Resource<Status> }) {
 
   return (
     <section className="section hero" id="top">
+      <div className="shell hero__stats">
+        <p className="eyebrow">Сеть сейчас</p>
+        <div className="stat-strip">
+          {s.tiles.map((tile) => (
+            <StatTile key={tile.id} tile={tile} />
+          ))}
+        </div>
+      </div>
+
       <div className="shell hero__grid">
         <div className="hero__copy">
           <p className="eyebrow">Обфускация WireGuard</p>
@@ -57,14 +66,6 @@ export function Hero({ status }: { status: Resource<Status> }) {
         <Console status={status} />
       </div>
 
-      <div className="shell" style={{ marginTop: 'clamp(28px, 4vw, 52px)' }}>
-        <p className="eyebrow">Сеть сейчас</p>
-        <div className="stat-strip">
-          {s.tiles.map((tile) => (
-            <StatTile key={tile.id} tile={tile} />
-          ))}
-        </div>
-      </div>
     </section>
   )
 }

@@ -4,8 +4,8 @@ import { Landing } from './landing/Landing'
 import { Dashboard } from './dashboard/Dashboard'
 
 const titles = {
+  landing: 'Besy VPN — обфускация WireGuard против DPI',
   dashboard: 'Обзор сети — Besy VPN',
-  about: 'Besy VPN — обфускация WireGuard против DPI',
 } as const
 
 export function App() {
@@ -22,7 +22,7 @@ export function App() {
       <a className="skip-link" href="#main">
         К основному содержанию
       </a>
-      {route === 'about' ? <Landing /> : <Dashboard />}
+      {route === 'dashboard' ? <Dashboard /> : <Landing />}
     </>
   )
 }
