@@ -8,3 +8,8 @@ obfsclient.yaml
 clients.yaml
 server.crt
 server.key
+# The landing page is not part of the VPN image: it is served by obfsweb
+# on a different host entirely, and web/node_modules would dominate the
+# build context for a build that never looks at it.
+web
+internal/webui/dist

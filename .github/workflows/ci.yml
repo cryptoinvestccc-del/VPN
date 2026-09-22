@@ -60,6 +60,53 @@ jobs:
       - name: Container image
         run: docker build -t obfsvpn:ci .
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install
+        run: npm ci
+        working-directory: web
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: web
+
+      - name: Build assets
+        run: npm run build
+        working-directory: web
+
+      # The embedding path has its own build tag, so a plain `go build
+      # ./...` never exercises it. Building it here is what catches an
+      # //go:embed that stopped matching the assets it is meant to carry.
+      - name: Build the binary with the assets embedded
+        run: ./scripts/build-web.sh
+
+      # A server that starts but serves nothing is the failure this
+      # catches: the assets have to be reachable from the binary alone,
+      # in a directory where web/dist does not exist.
+      - name: Serve the embedded site
+        run: |
+          (cd /tmp && "$GITHUB_WORKSPACE/dist/obfsweb" -addr 127.0.0.1:8099 &)
+          for _ in $(seq 20); do
+            curl -fsS http://127.0.0.1:8099/healthz >/dev/null && break
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:8099/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:8099/api/v1/status | grep -q '"mock":true'
+
   fuzz:
     runs-on: ubuntu-latest
     steps:

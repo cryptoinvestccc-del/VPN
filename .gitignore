@@ -7,3 +7,8 @@
 *.pid
 *.profile
 /dist/
+# Built landing-page assets: produced by scripts/build-web.sh, embedded
+# into the binary rather than committed.
+/internal/webui/dist/
+/web/dist/
+/web/node_modules/

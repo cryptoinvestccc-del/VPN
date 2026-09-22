@@ -1,0 +1,122 @@
+/*
+  Design tokens. Every colour in the product is defined here once and
+  redefined once for dark mode; nothing downstream hardcodes a hex.
+
+  The palette is deliberately monochrome: ink on warm paper, hairline
+  rules, and a single positive/negative pair reserved for status. Charts
+  on this page all plot one series, so they need no categorical hues —
+  the ink itself is the series colour, and a second colour would be
+  decoration rather than data.
+*/
+
+:root {
+  /* Surfaces */
+  --paper: #f3f2f0;
+  --surface: #ffffff;
+  --surface-sunken: #faf9f7;
+  --surface-inverse: #141310;
+
+  /* Ink */
+  --ink: #141310;
+  --ink-secondary: #605c54;
+  --ink-muted: #97928a;
+  --ink-inverse: #f3f2f0;
+  --ink-inverse-muted: #8f8b84;
+
+  /* Lines */
+  --line: #e4e1dc;
+  --line-strong: #d1cdc6;
+  --line-inverse: #2c2a25;
+
+  /* Status — reserved, never reused as a series colour */
+  --good: #2e7a4e;
+  --warning: #9a6216;
+  --critical: #a33a2e;
+
+  /* Chart */
+  --chart-ink: #141310;
+  --chart-deemphasis: #c9c5be;
+  --chart-grid: #e8e5e0;
+  --chart-wash: rgba(20, 19, 16, 0.06);
+
+  /* Geometry */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --gutter: 16px;
+  --measure: 1200px;
+
+  /* Type */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --shadow-card: 0 1px 2px rgba(20, 19, 16, 0.04);
+  --shadow-raised: 0 8px 28px rgba(20, 19, 16, 0.1);
+}
+
+/*
+  Dark mode is stepped on its own, not flipped: the paper goes to a warm
+  near-black, the cards sit one step above it so the card edges still
+  read, and the chart ink becomes light enough to clear the dark surface.
+*/
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121110;
+    --surface: #1b1a17;
+    --surface-sunken: #171614;
+    --surface-inverse: #f3f2f0;
+
+    --ink: #f1efec;
+    --ink-secondary: #a8a49c;
+    --ink-muted: #7c7871;
+    --ink-inverse: #141310;
+    --ink-inverse-muted: #56524c;
+
+    --line: #2b2925;
+    --line-strong: #3b3833;
+    --line-inverse: #ddd9d2;
+
+    --good: #5fb684;
+    --warning: #d19a4a;
+    --critical: #d9705f;
+
+    --chart-ink: #f1efec;
+    --chart-deemphasis: #4a4740;
+    --chart-grid: #292722;
+    --chart-wash: rgba(241, 239, 236, 0.08);
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #121110;
+  --surface: #1b1a17;
+  --surface-sunken: #171614;
+  --surface-inverse: #f3f2f0;
+
+  --ink: #f1efec;
+  --ink-secondary: #a8a49c;
+  --ink-muted: #7c7871;
+  --ink-inverse: #141310;
+  --ink-inverse-muted: #56524c;
+
+  --line: #2b2925;
+  --line-strong: #3b3833;
+  --line-inverse: #ddd9d2;
+
+  --good: #5fb684;
+  --warning: #d19a4a;
+  --critical: #d9705f;
+
+  --chart-ink: #f1efec;
+  --chart-deemphasis: #4a4740;
+  --chart-grid: #292722;
+  --chart-wash: rgba(241, 239, 236, 0.08);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.5);
+}

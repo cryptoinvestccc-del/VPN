@@ -1,0 +1,396 @@
+/* Buttons ---------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.006em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease,
+    color 0.16s ease, transform 0.16s ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn--primary:hover {
+  background: var(--ink-secondary);
+}
+
+.btn--ghost {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.btn--ghost:hover {
+  border-color: var(--ink);
+  background: var(--surface);
+}
+
+.btn--quiet {
+  padding-inline: 0;
+  min-height: 0;
+  color: var(--ink-secondary);
+}
+
+.btn--quiet:hover {
+  color: var(--ink);
+}
+
+.btn--lg {
+  min-height: 50px;
+  padding-inline: 26px;
+  font-size: 0.9375rem;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--on-dark.btn--primary {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.btn--on-dark.btn--primary:hover {
+  background: #ffffff;
+}
+
+.btn--on-dark.btn--ghost {
+  border-color: rgba(243, 242, 240, 0.28);
+  color: var(--paper);
+}
+
+.btn--on-dark.btn--ghost:hover {
+  border-color: var(--paper);
+  background: rgba(243, 242, 240, 0.08);
+}
+
+/* Cards ------------------------------------------------------------ */
+
+.card {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.card--flat {
+  box-shadow: none;
+}
+
+.card__label {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* Stat tile -------------------------------------------------------- */
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 118px;
+}
+
+.stat__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stat__value {
+  font-size: clamp(1.5rem, 1.3rem + 0.7vw, 1.875rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.stat__unit {
+  margin-left: 4px;
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* A percent sign belongs against its number, not spaced off it. */
+.stat__unit--tight {
+  margin-left: 1px;
+}
+
+.stat__spark {
+  flex: 0 0 auto;
+  width: 84px;
+}
+
+.stat__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.delta--good {
+  color: var(--good);
+}
+
+.delta--bad {
+  color: var(--critical);
+}
+
+.delta--flat {
+  color: var(--ink-muted);
+}
+
+/* Badges & pills --------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--ink-secondary);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge--good {
+  border-color: color-mix(in srgb, var(--good) 34%, transparent);
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 8%, transparent);
+}
+
+.badge--warning {
+  border-color: color-mix(in srgb, var(--warning) 34%, transparent);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+
+.badge--muted {
+  color: var(--ink-muted);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.dot--pulse {
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Table ------------------------------------------------------------ */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+table.data {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+table.data th,
+table.data td {
+  padding: 13px 18px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+table.data thead th {
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--surface-sunken);
+  white-space: nowrap;
+}
+
+table.data tbody tr:last-child td,
+table.data tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+table.data td.num,
+table.data th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Disclosure (FAQ) ------------------------------------------------- */
+
+.disclosure {
+  border-bottom: 1px solid var(--line);
+}
+
+.disclosure__btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 20px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  cursor: pointer;
+}
+
+.disclosure__sign {
+  flex: 0 0 auto;
+  color: var(--ink-muted);
+  transition: transform 0.2s ease;
+}
+
+.disclosure[data-open="true"] .disclosure__sign {
+  transform: rotate(45deg);
+}
+
+.disclosure__body {
+  max-width: 72ch;
+  padding-bottom: 22px;
+  color: var(--ink-secondary);
+  font-size: 0.9375rem;
+}
+
+/* Chart tooltip ---------------------------------------------------- */
+
+.chart {
+  position: relative;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -100%);
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tooltip__label {
+  color: var(--ink-muted);
+}
+
+.tooltip__value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chart table fallback --------------------------------------------- */
+
+.chart__table {
+  margin-top: 12px;
+}
+
+.chart__table summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.chart__table summary::-webkit-details-marker {
+  display: none;
+}
+
+.chart__table summary::before {
+  content: "▸";
+  font-size: 0.6875rem;
+  transition: transform 0.18s ease;
+}
+
+.chart__table[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.chart__table summary:hover {
+  color: var(--ink);
+}
+
+/* Skip link -------------------------------------------------------- */
+
+.skip-link {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  z-index: 100;
+  transform: translate(-50%, -200%);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.875rem;
+  transition: transform 0.16s ease;
+}
+
+.skip-link:focus-visible {
+  transform: translate(-50%, 0);
+}
