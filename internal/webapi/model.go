@@ -44,8 +44,10 @@ type Tile struct {
 	Note   string    `json:"note"`
 }
 
-// Series is a labelled run of points.
-type Series struct {
+// PointSeries is a labelled run of timestamped points, as the landing
+// page's single chart reads them. The dashboard's Series is a different
+// shape: it carries bare values against a shared time range.
+type PointSeries struct {
 	Unit   string  `json:"unit"`
 	Window string  `json:"window"`
 	Points []Point `json:"points"`
@@ -65,8 +67,8 @@ type Status struct {
 	NodesOnline    int     `json:"nodes_online"`
 	NodesTotal     int     `json:"nodes_total"`
 
-	Tiles      []Tile `json:"tiles"`
-	Throughput Series `json:"throughput"`
+	Tiles      []Tile      `json:"tiles"`
+	Throughput PointSeries `json:"throughput"`
 }
 
 // Location is one node, as a prospective customer sees it. Deliberately

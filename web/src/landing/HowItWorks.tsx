@@ -1,4 +1,4 @@
-import { PacketFigure } from '../components/PacketFigure'
+import { PacketFigure } from './PacketFigure'
 
 const layers = [
   {

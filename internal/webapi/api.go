@@ -29,6 +29,13 @@ func Handler(src Source, now func() time.Time) http.Handler {
 		writeJSON(w, r, http.StatusOK, src.Status(now()))
 	})
 
+	mux.HandleFunc("GET /api/v1/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		// Same reasoning as the status route: a dashboard that shows a
+		// cached window is showing the wrong window.
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, r, http.StatusOK, src.Dashboard(r.URL.Query().Get("range"), now()))
+	})
+
 	mux.HandleFunc("GET /api/v1/locations", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=60")
 		writeJSON(w, r, http.StatusOK, src.Locations())

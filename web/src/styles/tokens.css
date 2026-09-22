@@ -1,12 +1,21 @@
 /*
-  Design tokens. Every colour in the product is defined here once and
-  redefined once for dark mode; nothing downstream hardcodes a hex.
+  Design tokens. Every colour is defined here once per theme; nothing
+  downstream hardcodes a hex.
 
-  The palette is deliberately monochrome: ink on warm paper, hairline
-  rules, and a single positive/negative pair reserved for status. Charts
-  on this page all plot one series, so they need no categorical hues —
-  the ink itself is the series colour, and a second colour would be
-  decoration rather than data.
+  The chrome is monochrome — ink on paper, hairline rules — and colour is
+  reserved for two jobs that need it. Series colours carry identity on a
+  multi-line chart and are assigned in a fixed order, never cycled. Level
+  colours carry severity and are never reused as a series, so a red line
+  always means "bad" and never means "the fourth node".
+
+  The series palette was picked by running the four slots through a
+  colourblind-separation check against both surfaces rather than by eye:
+  green → blue → orange → purple, in that order. Order matters — green
+  next to orange collapses under deuteranopia, and blue between them is
+  what keeps the pair apart. Yellow is deliberately absent: at the
+  lightness a dark surface needs, it lands on top of red for a deutan
+  reader. It stays a level colour, where it is always accompanied by a
+  number and a label rather than standing alone.
 */
 
 :root {
@@ -33,10 +42,22 @@
   --warning: #9a6216;
   --critical: #a33a2e;
 
+  /* Severity levels, used by gauges, bars and thresholds */
+  --level-ok: #3c9e45;
+  --level-warn: #b07d12;
+  --level-crit: #cc3b33;
+
+  /* Series — fixed order, validated for both surfaces */
+  --series-1: #3c9e45;
+  --series-2: #3789dc;
+  --series-3: #be7034;
+  --series-4: #c442d8;
+
   /* Chart */
   --chart-ink: #141310;
   --chart-deemphasis: #c9c5be;
   --chart-grid: #e8e5e0;
+  --chart-axis: #b9b4ac;
   --chart-wash: rgba(20, 19, 16, 0.06);
 
   /* Geometry */
@@ -47,76 +68,104 @@
   --measure: 1200px;
 
   /* Type */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 
   --shadow-card: 0 1px 2px rgba(20, 19, 16, 0.04);
   --shadow-raised: 0 8px 28px rgba(20, 19, 16, 0.1);
 }
 
 /*
-  Dark mode is stepped on its own, not flipped: the paper goes to a warm
-  near-black, the cards sit one step above it so the card edges still
-  read, and the chart ink becomes light enough to clear the dark surface.
+  Dark mode is stepped on its own, not flipped. It is also neutral rather
+  than warm: an operations screen is looked at for hours, and the warm
+  cast that suits a marketing page reads as a colour error next to
+  coloured series lines.
+
+  The values appear twice on purpose. The media query makes the system
+  preference work with no JavaScript and therefore no flash of the wrong
+  theme on load; the attribute selector lets the toggle in the top bar
+  override it. Neither can express the other.
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #121110;
-    --surface: #1b1a17;
-    --surface-sunken: #171614;
-    --surface-inverse: #f3f2f0;
+    --paper: #0f1013;
+    --surface: #16181d;
+    --surface-sunken: #1b1e24;
+    --surface-inverse: #e9ebf0;
 
-    --ink: #f1efec;
-    --ink-secondary: #a8a49c;
-    --ink-muted: #7c7871;
-    --ink-inverse: #141310;
-    --ink-inverse-muted: #56524c;
+    --ink: #e6e8ee;
+    --ink-secondary: #a3a9b5;
+    --ink-muted: #767d8a;
+    --ink-inverse: #0f1013;
+    --ink-inverse-muted: #4e5563;
 
-    --line: #2b2925;
-    --line-strong: #3b3833;
-    --line-inverse: #ddd9d2;
+    --line: #262a31;
+    --line-strong: #343943;
+    --line-inverse: #d4d8e0;
 
     --good: #5fb684;
     --warning: #d19a4a;
     --critical: #d9705f;
 
-    --chart-ink: #f1efec;
-    --chart-deemphasis: #4a4740;
-    --chart-grid: #292722;
-    --chart-wash: rgba(241, 239, 236, 0.08);
+    --level-ok: #3c9e45;
+    --level-warn: #c08c22;
+    --level-crit: #e05548;
 
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.5);
+    --series-1: #3c9e45;
+    --series-2: #3789dc;
+    --series-3: #be7034;
+    --series-4: #c442d8;
+
+    --chart-ink: #e6e8ee;
+    --chart-deemphasis: #3d434d;
+    --chart-grid: #23262c;
+    --chart-axis: #4a505b;
+    --chart-wash: rgba(230, 232, 238, 0.07);
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.55);
   }
 }
 
 :root[data-theme="dark"] {
-  --paper: #121110;
-  --surface: #1b1a17;
-  --surface-sunken: #171614;
-  --surface-inverse: #f3f2f0;
+  --paper: #0f1013;
+  --surface: #16181d;
+  --surface-sunken: #1b1e24;
+  --surface-inverse: #e9ebf0;
 
-  --ink: #f1efec;
-  --ink-secondary: #a8a49c;
-  --ink-muted: #7c7871;
-  --ink-inverse: #141310;
-  --ink-inverse-muted: #56524c;
+  --ink: #e6e8ee;
+  --ink-secondary: #a3a9b5;
+  --ink-muted: #767d8a;
+  --ink-inverse: #0f1013;
+  --ink-inverse-muted: #4e5563;
 
-  --line: #2b2925;
-  --line-strong: #3b3833;
-  --line-inverse: #ddd9d2;
+  --line: #262a31;
+  --line-strong: #343943;
+  --line-inverse: #d4d8e0;
 
   --good: #5fb684;
   --warning: #d19a4a;
   --critical: #d9705f;
 
-  --chart-ink: #f1efec;
-  --chart-deemphasis: #4a4740;
-  --chart-grid: #292722;
-  --chart-wash: rgba(241, 239, 236, 0.08);
+  --level-ok: #3c9e45;
+  --level-warn: #c08c22;
+  --level-crit: #e05548;
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --series-1: #3c9e45;
+  --series-2: #3789dc;
+  --series-3: #be7034;
+  --series-4: #c442d8;
+
+  --chart-ink: #e6e8ee;
+  --chart-deemphasis: #3d434d;
+  --chart-grid: #23262c;
+  --chart-axis: #4a505b;
+  --chart-wash: rgba(230, 232, 238, 0.07);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-raised: 0 8px 28px rgba(0, 0, 0, 0.55);
 }

@@ -51,3 +51,26 @@ export function timeOfDay(iso: string): string {
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
+
+/**
+ * Formats a measured value with decimals chosen by its magnitude.
+ *
+ * A latency of 0,42 ms and a session count of 1 284 are both "the value"
+ * as far as a panel is concerned, and rounding either to the other's
+ * precision destroys it.
+ */
+export function metric(v: number, decimals?: number): string {
+  if (!Number.isFinite(v)) return '—'
+  if (decimals !== undefined) return group(round(v, decimals))
+  const abs = Math.abs(v)
+  if (abs >= 100) return group(Math.round(v))
+  if (abs >= 10) return group(round(v, 1))
+  return group(round(v, 2))
+}
+
+/** Compacts only what needs compacting; see `compact` for the rule. */
+export function metricCompact(v: number, decimals?: number): string {
+  if (!Number.isFinite(v)) return '—'
+  if (Math.abs(v) >= 10_000) return compact(v)
+  return metric(v, decimals)
+}

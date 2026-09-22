@@ -106,6 +106,10 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8099/ | grep -q '<div id="root">'
           curl -fsS http://127.0.0.1:8099/api/v1/status | grep -q '"mock":true'
+          curl -fsS 'http://127.0.0.1:8099/api/v1/dashboard?range=6h' | grep -q '"time_series"'
+          # /about is the product page; the SPA fallback has to serve it
+          # rather than 404, or a bookmarked deep link breaks.
+          curl -fsS http://127.0.0.1:8099/about | grep -q '<div id="root">'
 
   fuzz:
     runs-on: ubuntu-latest

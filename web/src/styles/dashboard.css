@@ -1,0 +1,665 @@
+/*
+  The dashboard shell.
+
+  Dense on purpose: panel padding, gaps and type are all a step smaller
+  than on the product page, because the whole point of this screen is how
+  much of the fleet fits on it at once without scrolling.
+*/
+
+.dash {
+  min-height: 100vh;
+  background: var(--paper);
+}
+
+.dash--empty {
+  display: grid;
+  place-items: center;
+  padding: var(--gutter);
+}
+
+.dash__body {
+  padding: 10px var(--gutter) 28px;
+}
+
+.dash__banner {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--level-warn) 40%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--level-warn) 10%, transparent);
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+
+.dash__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.dash__foot a:hover {
+  color: var(--ink);
+}
+
+/* Top bar ---------------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px var(--gutter);
+}
+
+.topbar__row--vars {
+  padding-top: 0;
+  padding-bottom: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.topbar__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.topbar__crumbs {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+}
+
+.topbar__crumbs strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.topbar__stamp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 720px) {
+  .topbar__crumbs {
+    display: flex;
+  }
+}
+
+.variable {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 0.75rem;
+}
+
+.variable__label {
+  padding: 4px 8px;
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  border-right: 1px solid var(--line);
+}
+
+.variable__value {
+  padding: 4px 9px;
+  color: var(--ink-secondary);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.icon-btn:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.is-spinning {
+  animation: spin 0.9s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Dropdown --------------------------------------------------------- */
+
+.dropdown {
+  position: relative;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.dropdown__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.dropdown__btn:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.dropdown__menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 50;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+}
+
+.dropdown__menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-secondary);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown__menu button:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.dropdown__menu button.is-selected {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface-sunken);
+}
+
+/* Grid and panels -------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.grid__cell {
+  min-width: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px 3px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+
+.panel__actions {
+  margin-left: auto;
+}
+
+.panel__info {
+  position: relative;
+  display: inline-flex;
+  color: var(--ink-muted);
+  cursor: help;
+}
+
+.panel__info:hover,
+.panel__info:focus-visible {
+  color: var(--ink);
+}
+
+.panel__tip {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: -8px;
+  z-index: 30;
+  width: max-content;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+
+.panel__info:hover .panel__tip,
+.panel__info:focus-visible .panel__tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 12px 12px;
+}
+
+.panel--stat {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Stat block ------------------------------------------------------- */
+
+.stat-block {
+  position: relative;
+  min-height: 118px;
+}
+
+/* The sparkline is context behind the number, so it stays out of the
+   text's way: the body reserves its height rather than overlapping it,
+   which is what made the delta unreadable when the curve ran high. */
+.stat-block__spark {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 38px;
+}
+
+.stat-block__body {
+  position: relative;
+  padding: 11px 12px 42px;
+}
+
+.stat-block__title {
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.stat-block__value {
+  margin-top: 4px;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.stat-block__unit {
+  margin-left: 5px;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.stat-block__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.6875rem;
+}
+
+.stat-block__note {
+  color: var(--ink-muted);
+}
+
+/* Gauge ------------------------------------------------------------ */
+
+.gauge {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  padding-top: 4px;
+}
+
+/* Centred on the arc rather than stacked under it: the number is the
+   reading and the arc is the context around it. `top` comes from the
+   arc's own centre, so the two cannot drift apart. */
+.gauge__readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.gauge__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge__unit {
+  margin-left: 2px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.gauge__level {
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+}
+
+/* Bar gauge -------------------------------------------------------- */
+
+.bars {
+  display: grid;
+  gap: 9px;
+  height: 100%;
+  align-content: center;
+  padding-top: 6px;
+}
+
+.bars__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 10px;
+}
+
+.bars__label {
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bars__track {
+  height: 10px;
+  border-radius: 3px;
+  background: var(--chart-grid);
+  overflow: hidden;
+}
+
+.bars__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.35s ease;
+}
+
+.bars__value {
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bars__unit {
+  margin-left: 1px;
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+/* Time series ------------------------------------------------------ */
+
+.ts__plot {
+  position: relative;
+  touch-action: pan-y;
+}
+
+.ts__tooltip {
+  position: absolute;
+  top: 8px;
+  z-index: 20;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.ts__tooltip-time {
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ts__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+}
+
+.ts__tooltip-name {
+  color: var(--ink-secondary);
+}
+
+.ts__tooltip-value {
+  margin-left: auto;
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ts__key {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.ts__legend {
+  margin-top: 6px;
+  max-height: 122px;
+  overflow-y: auto;
+}
+
+.ts__legend table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.6875rem;
+}
+
+.ts__legend th,
+.ts__legend td {
+  padding: 3px 6px;
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.ts__legend thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.ts__legend tbody th {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-secondary);
+}
+
+.ts__legend .num {
+  text-align: right;
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ts__legend tbody tr td:last-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Node table ------------------------------------------------------- */
+
+.node-table {
+  overflow-x: auto;
+}
+
+.node-table table.data {
+  min-width: 860px;
+  font-size: 0.75rem;
+}
+
+.node-table table.data th,
+.node-table table.data td {
+  padding: 7px 10px;
+}
+
+.node-table thead th {
+  background: transparent;
+  font-size: 0.625rem;
+}
+
+.node-table__name {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.node-table tbody th {
+  font-weight: 400;
+}
+
+.node-table__country {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 400;
+}
+
+.cell-bar {
+  display: inline-block;
+  width: 40px;
+  height: 5px;
+  margin-right: 7px;
+  border-radius: 2px;
+  background: var(--chart-grid);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.cell-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.status--online {
+  color: var(--level-ok);
+}
+
+.status--degraded {
+  color: var(--level-warn);
+}
+
+.status--maintenance {
+  color: var(--ink-muted);
+}
+
+/* Narrow screens: the twelve-column grid collapses rather than
+   scrolling sideways — a dashboard you have to pan is not one you can
+   glance at. */
+@media (max-width: 1100px) {
+  .grid > .panel,
+  .grid > .grid__cell {
+    grid-column: span 6 !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .grid > .panel,
+  .grid > .grid__cell {
+    grid-column: span 12 !important;
+  }
+}

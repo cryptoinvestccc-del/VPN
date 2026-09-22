@@ -203,3 +203,180 @@ func TestTileDeltasCarryTheirDirection(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardServesEveryPanel(t *testing.T) {
+	rec := get(t, "/api/v1/dashboard")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var got Dashboard
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Mock {
+		t.Error("mock = false, but these are the built-in sample figures")
+	}
+	if len(got.Stats) == 0 || len(got.Gauges) == 0 || len(got.TimeSeries) == 0 || len(got.Nodes) == 0 {
+		t.Fatalf("empty dashboard: %d stats, %d gauges, %d panels, %d nodes",
+			len(got.Stats), len(got.Gauges), len(got.TimeSeries), len(got.Nodes))
+	}
+
+	for _, panel := range got.TimeSeries {
+		if len(panel.Series) == 0 {
+			t.Errorf("panel %q has no series", panel.ID)
+		}
+		for _, s := range panel.Series {
+			if len(s.Points) != got.Range.Points {
+				t.Errorf("panel %q series %q has %d points, want %d — panels must share one axis",
+					panel.ID, s.Name, len(s.Points), got.Range.Points)
+			}
+		}
+	}
+}
+
+// Four is where a categorical palette stops being reliably
+// distinguishable; a fifth line would have to be a generated hue, and a
+// generated hue is indistinguishable from an existing one under CVD.
+func TestNoPanelExceedsThePaletteLength(t *testing.T) {
+	var got Dashboard
+	if err := json.Unmarshal(get(t, "/api/v1/dashboard").Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	for _, panel := range got.TimeSeries {
+		if len(panel.Series) > len(colors) {
+			t.Errorf("panel %q has %d series for a %d-colour palette", panel.ID, len(panel.Series), len(colors))
+		}
+		seen := map[string]bool{}
+		for _, s := range panel.Series {
+			if seen[s.Color] {
+				t.Errorf("panel %q reuses colour %q; two series would be one line to the reader", panel.ID, s.Color)
+			}
+			seen[s.Color] = true
+		}
+	}
+}
+
+// A dashboard that reshuffles its history on every refresh is unreadable:
+// the operator cannot tell a real change from a redraw. The same wall
+// clock instant must always produce the same window.
+func TestDashboardIsStableAcrossRequests(t *testing.T) {
+	first := get(t, "/api/v1/dashboard?range=6h").Body.String()
+	second := get(t, "/api/v1/dashboard?range=6h").Body.String()
+
+	if first != second {
+		t.Error("two requests for the same instant returned different dashboards")
+	}
+}
+
+// As the window slides forward by one step, the history already on screen
+// has to survive: point i+1 of the old window is point i of the new one.
+func TestHistoryScrollsInsteadOfBeingRedrawn(t *testing.T) {
+	src := SampleSource{}
+	before := src.Dashboard("6h", fixedNow())
+	after := src.Dashboard("6h", fixedNow().Add(time.Duration(before.Range.StepSeconds)*time.Second))
+
+	oldPoints := before.TimeSeries[0].Series[0].Points
+	newPoints := after.TimeSeries[0].Series[0].Points
+
+	if len(oldPoints) != len(newPoints) {
+		t.Fatalf("window changed length: %d then %d", len(oldPoints), len(newPoints))
+	}
+	for i := 1; i < len(oldPoints); i++ {
+		if oldPoints[i] != newPoints[i-1] {
+			t.Fatalf("point %d changed when the window moved: %v then %v at %d",
+				i, oldPoints[i], newPoints[i-1], i-1)
+		}
+	}
+}
+
+func TestEveryRangeInThePickerResolves(t *testing.T) {
+	var got Dashboard
+	if err := json.Unmarshal(get(t, "/api/v1/dashboard").Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.RangeOptions) == 0 {
+		t.Fatal("the picker has no options")
+	}
+
+	for _, opt := range got.RangeOptions {
+		var d Dashboard
+		body := get(t, "/api/v1/dashboard?range="+opt.ID).Body.Bytes()
+		if err := json.Unmarshal(body, &d); err != nil {
+			t.Fatalf("range %s: decode: %v", opt.ID, err)
+		}
+		if d.Range.ID != opt.ID {
+			t.Errorf("asked for range %q, got %q", opt.ID, d.Range.ID)
+		}
+		if d.Range.Points < 10 || d.Range.StepSeconds <= 0 {
+			t.Errorf("range %s resolved to %d points at step %ds", opt.ID, d.Range.Points, d.Range.StepSeconds)
+		}
+	}
+}
+
+// An unrecognised range must not break the page — a bookmarked URL
+// outlives a picker entry. It falls back, and says in the response which
+// window it actually used.
+func TestUnknownRangeFallsBackAndSaysSo(t *testing.T) {
+	rec := get(t, "/api/v1/dashboard?range=нет-такого")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got Dashboard
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Range.ID != DefaultRange {
+		t.Errorf("range = %q, want the default %q", got.Range.ID, DefaultRange)
+	}
+}
+
+func TestGaugesAndBarsStayInsideTheirScale(t *testing.T) {
+	var got Dashboard
+	if err := json.Unmarshal(get(t, "/api/v1/dashboard").Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	for _, g := range got.Gauges {
+		if g.Max <= g.Min {
+			t.Errorf("gauge %q has max %v <= min %v", g.ID, g.Max, g.Min)
+		}
+		if g.Value < g.Min || g.Value > g.Max {
+			t.Errorf("gauge %q reads %v outside [%v, %v]", g.ID, g.Value, g.Min, g.Max)
+		}
+	}
+	for _, row := range got.BarGauge.Rows {
+		if row.Value < got.BarGauge.Min || row.Value > got.BarGauge.Max {
+			t.Errorf("bar %q reads %v outside [%v, %v]",
+				row.Label, row.Value, got.BarGauge.Min, got.BarGauge.Max)
+		}
+	}
+}
+
+// The headline totals skip a drained node, so the table must not show it
+// carrying traffic — two numbers on one screen that contradict each other
+// are worse than either one alone.
+func TestDrainedNodeCarriesNoTraffic(t *testing.T) {
+	var got Dashboard
+	if err := json.Unmarshal(get(t, "/api/v1/dashboard").Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	found := false
+	for _, n := range got.Nodes {
+		if n.Status != "maintenance" {
+			continue
+		}
+		found = true
+		if n.Sessions != 0 || n.Throughput != 0 {
+			t.Errorf("node %q is in maintenance but reports %d sessions and %v Mbit/s",
+				n.ID, n.Sessions, n.Throughput)
+		}
+	}
+	if !found {
+		t.Skip("no node is in maintenance in the sample fleet")
+	}
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Logo } from '../components/Logo'
+import { linkHandler } from '../lib/router'
 
 const links = [
   { href: '#how', label: 'Как это работает' },
@@ -37,8 +38,8 @@ export function Header() {
         </nav>
 
         <div className="site-header__actions">
-          <a className="btn btn--ghost" href="#docs">
-            Документация
+          <a className="btn btn--ghost" href="/" onClick={linkHandler('/')}>
+            Дашборд
           </a>
           <a className="btn btn--primary" href="#pricing">
             Подключиться
@@ -70,8 +71,8 @@ export function Header() {
                 {l.label}
               </a>
             ))}
-            <a href="#docs" onClick={() => setOpen(false)}>
-              Документация
+            <a href="/" onClick={linkHandler('/')}>
+              Дашборд
             </a>
           </div>
         </div>

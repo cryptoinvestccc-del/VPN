@@ -13,6 +13,7 @@ type Source interface {
 	Status(now time.Time) Status
 	Locations() []Location
 	Plans() []Plan
+	Dashboard(rangeID string, now time.Time) Dashboard
 }
 
 // SampleSource serves invented but plausible figures, marked as such.
@@ -36,7 +37,7 @@ func (SampleSource) Status(now time.Time) Status {
 		ThroughputMbps: latest,
 		NodesOnline:    11,
 		NodesTotal:     12,
-		Throughput: Series{
+		Throughput: PointSeries{
 			Unit:   "Мбит/с",
 			Window: "последние 4 часа",
 			Points: points,
