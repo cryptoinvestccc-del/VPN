@@ -1,12 +1,24 @@
+import { usePolling, type Resource } from '../lib/api'
 import { links } from '../lib/links'
+import type { Server } from '../lib/types'
+import { LineChart } from '../components/LineChart'
+import { metric, timeOfDay } from '../lib/format'
 
-const steps = [
-  { title: 'Нажмите тариф в боте', body: 'Месяц, полгода или год — одна кнопка.' },
-  { title: 'Оплатите', body: 'Ссылка на подключение придёт в тот же чат через минуту.' },
-  { title: 'Откройте ссылку в приложении', body: 'Профиль подставится сам, остаётся нажать «Подключиться».' },
-]
+const emptyServer: Server = {
+  generated_at: '',
+  mock: false,
+  reachable: true,
+  clients_online: 0,
+  throughput_mbps: 0,
+  cpu_pct: 0,
+  mem_pct: 0,
+  uptime_s: 0,
+  history: [],
+}
 
 export function Hero() {
+  const server = usePolling<Server>('/api/v1/server', emptyServer, 1000)
+
   return (
     <section className="section hero" id="top">
       <div className="shell hero__grid">
@@ -25,7 +37,7 @@ export function Hero() {
               target="_blank"
               rel="noopener"
             >
-              Подключиться за 100 ₽
+              Оплатить в Telegram
             </a>
             <a
               className="btn btn--ghost btn--lg"
@@ -38,47 +50,105 @@ export function Hero() {
           </div>
         </div>
 
-        <StartCard />
+        <ServerCard server={server} />
       </div>
     </section>
   )
 }
 
+type Badge = { text: string; tone: string; pulse: boolean }
+
 /*
-  The panel beside the headline is the whole purchase, start to finish.
-  It replaced a separate "how it works" section further down: the same
-  three steps were being told three times on one page.
+  The badge says what the numbers are, not merely whether a request
+  worked: a sample served promptly is still a sample, and the one thing
+  this card must never do is call invented figures live.
 */
-function StartCard() {
+function badge(server: Resource<Server>): Badge {
+  const s = server.data
+  if (server.error) return { text: 'нет связи с сайтом', tone: 'badge--warning', pulse: false }
+  if (server.source === 'fallback') return { text: 'подключаемся…', tone: 'badge--muted', pulse: false }
+  if (!s.reachable) return { text: 'сервер не отвечает', tone: 'badge--warning', pulse: false }
+  if (s.mock) return { text: 'демонстрационные данные', tone: 'badge--muted', pulse: false }
+  return { text: 'онлайн', tone: 'badge--good', pulse: true }
+}
+
+function uptime(seconds: number): string {
+  if (seconds <= 0) return '—'
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  if (days > 0) return `${days} дн ${hours} ч`
+  const minutes = Math.floor((seconds % 3600) / 60)
+  return `${hours} ч ${minutes} мин`
+}
+
+function ServerCard({ server }: { server: Resource<Server> }) {
+  const s = server.data
+  const b = badge(server)
+  const live = server.source === 'live' && s.reachable && !server.error
+
+  const kpis = [
+    { label: 'Подключено сейчас', value: live ? metric(s.clients_online, 0) : '—' },
+    { label: 'Скорость', value: live ? `${metric(s.throughput_mbps, 1)} Мбит/с` : '—' },
+    { label: 'Загрузка CPU', value: live ? `${metric(s.cpu_pct, 0)} %` : '—' },
+    { label: 'Без перезагрузки', value: live ? uptime(s.uptime_s) : '—' },
+  ]
+
   return (
     <div className="console">
       <div className="console__bar">
-        <span className="console__title">Подключение за минуту</span>
-        <span className="badge badge--good">
-          <span className="dot" />
-          AmneziaWG
+        <span className="console__title">Сервер сейчас</span>
+        <span className={`badge ${b.tone}`}>
+          <span className={`dot ${b.pulse ? 'dot--pulse' : ''}`} />
+          {b.text}
         </span>
+        {s.generated_at && (
+          <span className="console__chart-meta" style={{ marginLeft: 'auto' }}>
+            {timeOfDay(s.generated_at)}
+          </span>
+        )}
       </div>
 
       <div className="console__body">
-        <ol className="start-steps">
-          {steps.map((s, i) => (
-            <li key={s.title}>
-              <span className="start-steps__num" aria-hidden="true">
-                {i + 1}
-              </span>
-              <span>
-                <strong>{s.title}</strong>
-                <br />
-                {s.body}
-              </span>
-            </li>
+        {/*
+          Deliberately not an aria-live region: four figures that change
+          every second would make a screen reader interrupt the visitor
+          every second. The values are read when the reader reaches them.
+        */}
+        <div className="console__kpis" role="group" aria-label="Состояние сервера">
+          {kpis.map((k) => (
+            <div className="console__kpi" key={k.label}>
+              <div className="console__kpi-label">{k.label}</div>
+              <div className="console__kpi-value">{k.value}</div>
+            </div>
           ))}
-        </ol>
+        </div>
+
+        <div className="console__chart">
+          <div className="console__chart-head">
+            <span className="console__chart-title">Трафик через VPN</span>
+            <span className="console__chart-meta">Мбит/с, последние 2 минуты</span>
+          </div>
+          {live && s.history.length > 1 ? (
+            <LineChart
+              points={s.history}
+              unit="Мбит/с"
+              title="Трафик через VPN, Мбит/с, последние 2 минуты"
+              height={150}
+            />
+          ) : (
+            <div className="console__chart-empty">
+              {server.source === 'fallback' ? 'Загружаем данные…' : 'Нет свежих данных с сервера'}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="console__foot">
-        <span>Остались вопросы — спросите в боте, там отвечает живой человек.</span>
+        <span>
+          {s.mock
+            ? 'Демонстрационные показатели. На рабочем сайте здесь данные сервера.'
+            : `Обновляется каждую секунду. Память: ${live ? metric(s.mem_pct, 0) : '—'} %. Только общие цифры, без данных о пользователях.`}
+        </span>
       </div>
     </div>
   )

@@ -59,3 +59,62 @@ export function useResource<T>(path: string, fallback: T): Resource<T> {
 
   return state
 }
+
+/**
+ * Like `useResource`, but asks again every `intervalMs` for as long as the
+ * page is visible.
+ *
+ * A hidden tab stops polling: a status card nobody is looking at does not
+ * need a request a second, and on a phone that is battery. Requests never
+ * overlap — the next one is scheduled when the previous one settles — so a
+ * slow network degrades to a slower refresh rather than a pile-up.
+ */
+export function usePolling<T>(path: string, fallback: T, intervalMs: number): Resource<T> {
+  const [state, setState] = useState<Resource<T>>({
+    data: fallback,
+    source: 'fallback',
+    error: null,
+  })
+
+  useEffect(() => {
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let controller: AbortController | undefined
+
+    const tick = () => {
+      if (stopped) return
+      if (document.visibilityState === 'hidden') {
+        timer = setTimeout(tick, intervalMs)
+        return
+      }
+      controller = new AbortController()
+      const abortTimer = setTimeout(() => controller?.abort(), Math.max(intervalMs * 3, 3000))
+      fetch(path, { signal: controller.signal, headers: { accept: 'application/json' } })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+          return (await res.json()) as T
+        })
+        .then((data) => {
+          if (!stopped) setState({ data, source: 'live', error: null })
+        })
+        .catch((err: unknown) => {
+          if (stopped) return
+          const reason = err instanceof Error ? err.message : 'нет связи с API'
+          setState((prev) => ({ ...prev, error: reason }))
+        })
+        .finally(() => {
+          clearTimeout(abortTimer)
+          if (!stopped) timer = setTimeout(tick, intervalMs)
+        })
+    }
+
+    tick()
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      controller?.abort()
+    }
+  }, [path, intervalMs])
+
+  return state
+}

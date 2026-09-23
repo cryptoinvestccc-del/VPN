@@ -59,3 +59,18 @@ export type Plan = {
   features: string[]
   cta: string
 }
+
+/** One VPN server, measured once a second by besy-agent. */
+export type Server = {
+  generated_at: string
+  /** True for the built-in sample; the card says so. */
+  mock: boolean
+  /** False when the site could not get a fresh reading from the server. */
+  reachable: boolean
+  clients_online: number
+  throughput_mbps: number
+  cpu_pct: number
+  mem_pct: number
+  uptime_s: number
+  history: Point[]
+}

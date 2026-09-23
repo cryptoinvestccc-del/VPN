@@ -49,6 +49,7 @@ const snapshot = {
   status: read('status.json'),
   locations: read('locations.json'),
   plans: read('plans.json'),
+  server: read('server.json'),
   dashboards,
 }
 const rangeCount = Object.keys(dashboards).length
@@ -114,11 +115,39 @@ const shim = `
     return value
   }
 
+  // The server card polls once a second, and a frozen answer would show
+  // a card that never moves. The snapshot holds two minutes of samples;
+  // each second the preview rotates them by one, so the line scrolls and
+  // the headline follows it. It loops every two minutes, and the badge
+  // still says these are demonstration figures.
+  function liveServer() {
+    var base = snapshot.server
+    var hist = base.history || []
+    var n = hist.length
+    var elapsed = Math.max(0, Math.floor((Date.now() - captured) / 1000))
+    var now = Math.floor(Date.now() / 1000)
+    var out = JSON.parse(JSON.stringify(base))
+    out.history = hist.map(function (_, i) {
+      return {
+        t: new Date((now - (n - 1 - i)) * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        v: hist[(i + elapsed) % n].v,
+      }
+    })
+    if (n) {
+      out.throughput_mbps = out.history[n - 1].v
+      out.cpu_pct = Math.round((6 + out.throughput_mbps / 5) * 10) / 10
+    }
+    out.uptime_s = base.uptime_s + elapsed
+    out.generated_at = new Date(now * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z')
+    return out
+  }
+
   function answer(path) {
     var delta = Date.now() - captured
     if (path.indexOf('/api/v1/status') === 0) return freshen(snapshot.status, delta)
     if (path.indexOf('/api/v1/locations') === 0) return snapshot.locations
     if (path.indexOf('/api/v1/plans') === 0) return snapshot.plans
+    if (path.indexOf('/api/v1/server') === 0) return liveServer()
     if (path.indexOf('/api/v1/dashboard') === 0) {
       var asked = (/[?&]range=([^&]*)/.exec(path) || [])[1]
       var id = asked ? decodeURIComponent(asked) : ''

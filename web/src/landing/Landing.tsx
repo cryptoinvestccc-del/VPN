@@ -7,6 +7,7 @@ import { Hero } from './Hero'
 import { Features } from './Features'
 import { Platforms } from './Platforms'
 import { Pricing } from './Pricing'
+import { Steps } from './Steps'
 import { Limits } from './Limits'
 import { Footer } from './Footer'
 
@@ -26,6 +27,7 @@ export function Landing() {
       <main id="main" tabIndex={-1}>
         <Hero />
         <Pricing plans={plans} />
+        <Steps />
         <Features />
         <Platforms />
         <Limits />

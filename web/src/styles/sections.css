@@ -668,40 +668,28 @@
   font-size: 0.8125rem;
 }
 
-/* Numbered steps inside the hero card ------------------------------- */
+/* Empty chart slot in the server card ------------------------------ */
 
-.start-steps {
+.console__chart-empty {
   display: grid;
-  gap: 16px;
+  place-items: center;
+  height: 150px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+}
+
+/* Purchase steps under the prices ---------------------------------- */
+
+.steps-row {
   margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--ink-secondary);
+}
+
+.steps-row__help {
+  margin-top: 14px;
+  color: var(--ink-muted);
   font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.start-steps li {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-.start-steps strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.start-steps__num {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line-strong);
-  border-radius: 50%;
-  color: var(--ink);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
