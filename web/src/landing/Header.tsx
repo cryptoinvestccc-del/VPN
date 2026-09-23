@@ -4,10 +4,10 @@ import { ThemeToggle } from '../components/ThemeToggle'
 import { links as urls } from '../lib/links'
 
 const links = [
+  { href: '#pricing', label: 'Тарифы' },
   { href: '#how', label: 'Как это работает' },
   { href: '#features', label: 'Что вы получаете' },
   { href: '#platforms', label: 'Устройства' },
-  { href: '#pricing', label: 'Тарифы' },
   { href: '#faq', label: 'Вопросы' },
 ]
 

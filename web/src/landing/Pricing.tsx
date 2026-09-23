@@ -58,14 +58,6 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
           ))}
         </div>
 
-        <p className="pricing__footnote">
-          Друг оплатил подписку по вашей ссылке из бота — вам плюс 14 дней, и так
-          за каждого. Вопросы — прямо в бот, там отвечает живой человек.{' '}
-          <a href={links.max} target="_blank" rel="noopener">
-            Если Telegram неудобен, тот же бот есть в MAX
-          </a>
-          .
-        </p>
       </div>
     </section>
   )

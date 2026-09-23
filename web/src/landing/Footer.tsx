@@ -5,10 +5,10 @@ const columns = [
   {
     title: 'Сервис',
     links: [
+      { label: 'Тарифы', href: '#pricing' },
       { label: 'Как это работает', href: '#how' },
       { label: 'Что вы получаете', href: '#features' },
       { label: 'Устройства', href: '#platforms' },
-      { label: 'Тарифы', href: '#pricing' },
     ],
   },
   {
