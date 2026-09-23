@@ -23,10 +23,10 @@ const platforms: Platform[] = [
   {
     icon: 'shield',
     name: 'iPhone и iPad',
-    state: 'partial',
-    stateLabel: 'нужно другое приложение',
+    state: 'ready',
+    stateLabel: 'приложение DefaultVPN',
     body:
-      'AmneziaVPN убрали из российского App Store, и менять регион ради него не нужно: берите DefaultVPN — это приложение от тех же разработчиков, оно доступно в российском App Store и понимает AmneziaWG.',
+      'На iOS используется DefaultVPN — приложение от разработчиков Amnezia. Есть в российском App Store, понимает AmneziaWG, регион менять не нужно.',
     app: { label: 'DefaultVPN в App Store', href: links.iosDefaultVpn },
   },
   {
