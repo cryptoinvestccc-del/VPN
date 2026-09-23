@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { usePolling, type Resource } from '../lib/api'
 import { links } from '../lib/links'
 import type { Server } from '../lib/types'
@@ -81,10 +82,15 @@ function uptime(seconds: number): string {
   return `${hours} ч ${minutes} мин`
 }
 
+const CHART_SECONDS = 30
+
 function ServerCard({ server }: { server: Resource<Server> }) {
   const s = server.data
   const b = badge(server)
   const live = server.source === 'live' && s.reachable && !server.error
+  // Half a minute, not the full two the server keeps: at one sample a
+  // second the line then slides a visible step each tick.
+  const recent = useMemo(() => s.history.slice(-CHART_SECONDS), [s.history])
 
   const kpis = [
     { label: 'Подключено сейчас', value: live ? metric(s.clients_online, 0) : '—' },
@@ -126,13 +132,13 @@ function ServerCard({ server }: { server: Resource<Server> }) {
         <div className="console__chart">
           <div className="console__chart-head">
             <span className="console__chart-title">Трафик через VPN</span>
-            <span className="console__chart-meta">Мбит/с, последние 2 минуты</span>
+            <span className="console__chart-meta">Мбит/с, последние 30 секунд</span>
           </div>
-          {live && s.history.length > 1 ? (
+          {live && recent.length > 1 ? (
             <LineChart
-              points={s.history}
+              points={recent}
               unit="Мбит/с"
-              title="Трафик через VPN, Мбит/с, последние 2 минуты"
+              title="Трафик через VPN, Мбит/с, последние 30 секунд"
               height={150}
             />
           ) : (
