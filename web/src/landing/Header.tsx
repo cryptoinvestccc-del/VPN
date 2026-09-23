@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Logo } from '../components/Logo'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { links as urls } from '../lib/links'
 
 const links = [
   { href: '#how', label: 'Как это работает' },
-  { href: '#features', label: 'Возможности' },
-  { href: '#nodes', label: 'Узлы' },
-  { href: '#platforms', label: 'Платформы' },
+  { href: '#features', label: 'Что вы получаете' },
+  { href: '#platforms', label: 'Устройства' },
   { href: '#pricing', label: 'Тарифы' },
+  { href: '#faq', label: 'Вопросы' },
 ]
 
 export function Header() {
@@ -63,10 +64,7 @@ export function Header() {
 
         <div className="site-header__actions">
           <ThemeToggle className="round-btn" />
-          <a className="btn btn--ghost" href="#docs">
-            Документация
-          </a>
-          <a className="btn btn--primary" href="#pricing">
+          <a className="btn btn--primary" href={urls.telegram} target="_blank" rel="noopener">
             Подключиться
           </a>
           <button
@@ -97,8 +95,8 @@ export function Header() {
                 {l.label}
               </a>
             ))}
-            <a href="#docs" onClick={() => setOpen(false)}>
-              Документация
+            <a href={urls.telegram} target="_blank" rel="noopener" onClick={() => setOpen(false)}>
+              Подключиться
             </a>
           </div>
         </div>

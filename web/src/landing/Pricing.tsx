@@ -1,6 +1,7 @@
 import type { Resource } from '../lib/api'
 import type { Plan } from '../lib/types'
 import { money } from '../lib/format'
+import { links } from '../lib/links'
 
 export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
   return (
@@ -9,10 +10,10 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
         <div className="section-head">
           <div className="section-head__text">
             <p className="eyebrow">Тарифы</p>
-            <h2>Платите за узлы, а не за обещания</h2>
+            <h2>Чем дольше срок, тем дешевле месяц</h2>
             <p className="lede">
-              Цена — за доступ к сети и поддержку. Код открыт в любом случае: если у вас
-              есть свой VPS, ставьте сами и не платите ничего.
+              Отличается только срок: доступ, скорость и сервер одни и те же на всех
+              тарифах. Оплата — в боте, там же приходит ссылка на подключение.
             </p>
           </div>
         </div>
@@ -46,7 +47,9 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
                   className={`btn btn--block ${
                     plan.featured ? 'btn--primary btn--on-dark' : 'btn--ghost'
                   }`}
-                  href="#docs"
+                  href={links.telegram}
+                  target="_blank"
+                  rel="noopener"
                 >
                   {plan.cta}
                 </a>
@@ -56,8 +59,13 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
         </div>
 
         <p className="pricing__footnote">
-          Цены демонстрационные — страница пока работает на встроенных данных.
-          Оплата и личный кабинет в этой версии не подключены.
+          За каждого друга, который придёт по вашей реферальной ссылке из бота и
+          оплатит подписку, вам добавляется 14 дней. Не подошло — напишите в бот,
+          там отвечает живой человек.{' '}
+          <a href={links.max} target="_blank" rel="noopener">
+            Если Telegram неудобен, тот же бот есть в MAX
+          </a>
+          .
         </p>
       </div>
     </section>

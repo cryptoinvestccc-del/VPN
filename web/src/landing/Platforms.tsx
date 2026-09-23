@@ -1,4 +1,5 @@
 import { Icon, type IconName } from '../components/Icon'
+import { links } from '../lib/links'
 
 type Platform = {
   icon: IconName
@@ -6,40 +7,45 @@ type Platform = {
   state: 'ready' | 'partial'
   stateLabel: string
   body: string
+  app: { label: string; href: string }
 }
 
 const platforms: Platform[] = [
   {
-    icon: 'terminal',
-    name: 'Linux',
-    state: 'ready',
-    stateLabel: 'готово',
-    body:
-      'Профиль одним файлом, туннель поднимается через wg-quick. Systemd-юнит идёт в комплекте: не от root, ProtectSystem=strict, NoNewPrivileges.',
-  },
-  {
     icon: 'globe',
     name: 'Android',
-    state: 'partial',
-    stateLabel: 'через Termux',
-    body:
-      'Клиент работает в Termux, конфиг для приложения WireGuard генерируется отдельно — без хуков, их приложение отвергает. Своего APK пока нет, и мы этого не скрываем.',
-  },
-  {
-    icon: 'box',
-    name: 'Docker',
     state: 'ready',
-    stateLabel: 'готово',
+    stateLabel: 'приложение Amnezia',
     body:
-      'Образ на scratch из статических бинарников, read_only, no-new-privileges, единственная привилегия — NET_BIND_SERVICE для 443-го порта.',
+      'Ставится из Google Play или APK с сайта Amnezia. Ключ из бота открывается прямо в приложении — профиль подставляется сам.',
+    app: { label: 'AmneziaVPN в Google Play', href: links.androidAmnezia },
   },
   {
     icon: 'shield',
-    name: 'Свой сервер',
-    state: 'ready',
-    stateLabel: 'готово',
+    name: 'iPhone и iPad',
+    state: 'partial',
+    stateLabel: 'нужно другое приложение',
     body:
-      'deploy/install.sh поднимает сервер на VPS целиком: отдельный пользователь, конфиг 0640, юнит, проверка конфига до перезапуска.',
+      'AmneziaVPN убрали из российского App Store, и менять регион ради него не нужно: берите DefaultVPN — это приложение от тех же разработчиков, оно доступно в российском App Store и понимает AmneziaWG.',
+    app: { label: 'DefaultVPN в App Store', href: links.iosDefaultVpn },
+  },
+  {
+    icon: 'terminal',
+    name: 'Windows и macOS',
+    state: 'ready',
+    stateLabel: 'приложение Amnezia',
+    body:
+      'Десктопная версия AmneziaVPN скачивается с сайта Amnezia. Тот же ключ из бота, тот же сервер — отдельная подписка не нужна.',
+    app: { label: 'Загрузки Amnezia', href: links.desktopAmnezia },
+  },
+  {
+    icon: 'box',
+    name: 'Linux',
+    state: 'ready',
+    stateLabel: 'приложение Amnezia',
+    body:
+      'Есть сборка AmneziaVPN под Linux. Если привычнее из консоли — AmneziaWG ставится и так, конфиг тот же самый.',
+    app: { label: 'Загрузки Amnezia', href: links.desktopAmnezia },
   },
 ]
 
@@ -49,11 +55,12 @@ export function Platforms() {
       <div className="shell">
         <div className="section-head">
           <div className="section-head__text">
-            <p className="eyebrow">Платформы</p>
-            <h2>Где это уже работает</h2>
+            <p className="eyebrow">Устройства</p>
+            <h2>Где это работает</h2>
             <p className="lede">
-              Список честный: то, чего пока нет, отмечено как «нет», а не как «скоро».
-              iOS и десктопного приложения под Windows и macOS в проекте сейчас нет.
+              Своего приложения у BESY нет и не планируется: подключение идёт через
+              приложение Amnezia. Ссылку на нужную версию бот присылает вместе с
+              ключом.
             </p>
           </div>
         </div>
@@ -71,6 +78,11 @@ export function Platforms() {
               </div>
               <h3>{p.name}</h3>
               <p>{p.body}</p>
+              <p style={{ marginTop: 10 }}>
+                <a href={p.app.href} target="_blank" rel="noopener">
+                  {p.app.label} →
+                </a>
+              </p>
             </article>
           ))}
         </div>

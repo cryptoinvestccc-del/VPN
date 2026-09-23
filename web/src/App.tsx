@@ -4,8 +4,8 @@ import { Landing } from './landing/Landing'
 import { Dashboard } from './dashboard/Dashboard'
 
 const titles = {
-  landing: 'Besy VPN — обфускация WireGuard против DPI',
-  dashboard: 'Обзор сети — Besy VPN',
+  landing: 'BESY VPN — доступ к VPN на AmneziaWG за 100 ₽ в месяц',
+  dashboard: 'Обзор сети — BESY VPN',
 } as const
 
 export function App() {

@@ -692,3 +692,35 @@
   color: var(--ink-secondary);
   font-size: 0.8125rem;
 }
+
+/* "Что входит" list inside the hero access card --------------------- */
+
+.access-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-secondary);
+  font-size: 0.875rem;
+}
+
+.access-list li {
+  position: relative;
+  padding-left: 20px;
+}
+
+/* A check drawn in CSS rather than an inline SVG per row: the list is
+   decorative repetition, and six more <svg> nodes would only add noise
+   to the accessibility tree. */
+.access-list li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.45em;
+  width: 9px;
+  height: 5px;
+  border-left: 1.5px solid var(--good);
+  border-bottom: 1.5px solid var(--good);
+  transform: rotate(-45deg);
+}

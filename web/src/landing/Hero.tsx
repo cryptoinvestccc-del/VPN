@@ -1,46 +1,54 @@
-import type { Status } from '../lib/types'
-import type { Resource } from '../lib/api'
-import { LineChart } from '../components/LineChart'
-import { StatTile } from '../components/StatTile'
-import { group, timeOfDay } from '../lib/format'
+import { links } from '../lib/links'
 
 const notes = [
-  'Криптография WireGuard не тронута',
-  'Открытый код, ставится на свой сервер',
-  'Агрегированные счётчики вместо логов',
+  'Протокол AmneziaWG — снаружи не похоже на VPN',
+  'Ключ приходит в бот сразу после оплаты',
+  'iPhone, Android, Windows, macOS, Linux',
 ]
 
-export function Hero({ status }: { status: Resource<Status> }) {
-  const s = status.data
+const tariffs = [
+  { label: '1 месяц', value: '100 ₽' },
+  { label: '6 месяцев', value: '500 ₽' },
+  { label: '12 месяцев', value: '900 ₽' },
+  { label: 'Друг оплатил', value: '+14 дней' },
+]
 
+const included = [
+  'Доступ к серверу на всё время подписки',
+  'Ссылка на подключение и инструкция по установке',
+  'Помощь с настройкой, если что-то не завелось',
+]
+
+export function Hero() {
   return (
     <section className="section hero" id="top">
-      <div className="shell hero__stats">
-        <p className="eyebrow">Сеть сейчас</p>
-        <div className="stat-strip">
-          {s.tiles.map((tile) => (
-            <StatTile key={tile.id} tile={tile} />
-          ))}
-        </div>
-      </div>
-
       <div className="shell hero__grid">
         <div className="hero__copy">
-          <p className="eyebrow">Обфускация WireGuard</p>
-          <h1>Трафик, который DPI не&nbsp;за&nbsp;что зацепить</h1>
+          <p className="eyebrow">VPN на AmneziaWG</p>
+          <h1>VPN за 100&nbsp;₽ в&nbsp;месяц, без личных кабинетов</h1>
           <p className="lede hero__lede">
-            Besy VPN оборачивает уже зашифрованные WireGuard-пакеты во второй слой:
-            XChaCha20-Poly1305 поверх PSK, случайный паддинг и мусорные пакеты.
-            Сигнатура, распределение длин и поведение соединения перестают быть
-            похожими на VPN — при этом сам WireGuard остаётся ровно тем, чем был.
+            BESY — это сервер Amnezia, поднятый для себя и открытый для других.
+            Никакого сайта с регистрацией и корзиной: тариф выбирается в боте,
+            после оплаты туда же приходит ссылка на подключение. Дальше —
+            приложение Amnezia и одна кнопка.
           </p>
 
           <div className="hero__actions">
-            <a className="btn btn--primary btn--lg" href="#pricing">
-              Подключиться за 5 минут
+            <a
+              className="btn btn--primary btn--lg"
+              href={links.telegram}
+              target="_blank"
+              rel="noopener"
+            >
+              Открыть бота в Telegram
             </a>
-            <a className="btn btn--ghost btn--lg" href="#how">
-              Как это устроено
+            <a
+              className="btn btn--ghost btn--lg"
+              href={links.max}
+              target="_blank"
+              rel="noopener"
+            >
+              То же самое в MAX
             </a>
           </div>
 
@@ -63,77 +71,54 @@ export function Hero({ status }: { status: Resource<Status> }) {
           </ul>
         </div>
 
-        <Console status={status} />
+        <AccessCard />
       </div>
-
     </section>
   )
 }
 
-function badge(status: Resource<Status>): { text: string; tone: string; pulse: boolean } {
-  if (status.error) return { text: 'нет связи с API', tone: 'badge--warning', pulse: false }
-  if (status.data.mock) return { text: 'демонстрационные данные', tone: 'badge--muted', pulse: false }
-  return { text: 'живые данные', tone: 'badge--good', pulse: true }
-}
-
-function Console({ status }: { status: Resource<Status> }) {
-  const s = status.data
-  const kpis = [
-    { label: 'Активные сессии', value: group(s.sessions_active) },
-    { label: 'Трафик', value: `${group(s.throughput_mbps)} Мбит/с` },
-    { label: 'Узлы онлайн', value: `${s.nodes_online} / ${s.nodes_total}` },
-    { label: 'Режим по умолчанию', value: 'TLS :443' },
-  ]
-
+/*
+  What used to sit here was a live-looking network console. There is one
+  server and no telemetry behind this page, so every number in it was
+  invented. The panel now shows the only figures that are actually true
+  and checkable: what the bot charges.
+*/
+function AccessCard() {
   return (
     <div className="console">
       <div className="console__bar">
-        <span className="console__title">Состояние сети</span>
-        {/*
-          The badge reports what the numbers are, not whether the request
-          succeeded. A server that answers promptly with its built-in
-          sample set is still serving a sample, and calling that "живые
-          данные" would be the one lie this page cannot afford.
-        */}
-        <span className={`badge ${badge(status).tone}`}>
-          <span className={`dot ${badge(status).pulse ? 'dot--pulse' : ''}`} />
-          {badge(status).text}
-        </span>
-        <span className="console__chart-meta" style={{ marginLeft: 'auto' }}>
-          {timeOfDay(s.generated_at)}
+        <span className="console__title">Доступ к VPN</span>
+        <span className="badge badge--good">
+          <span className="dot" />
+          AmneziaWG
         </span>
       </div>
 
       <div className="console__body">
         <div className="console__kpis">
-          {kpis.map((k) => (
-            <div className="console__kpi" key={k.label}>
-              <div className="console__kpi-label">{k.label}</div>
-              <div className="console__kpi-value">{k.value}</div>
+          {tariffs.map((t) => (
+            <div className="console__kpi" key={t.label}>
+              <div className="console__kpi-label">{t.label}</div>
+              <div className="console__kpi-value">{t.value}</div>
             </div>
           ))}
         </div>
 
         <div className="console__chart">
           <div className="console__chart-head">
-            <span className="console__chart-title">Трафик через туннель</span>
-            <span className="console__chart-meta">
-              {s.throughput.unit}, {s.throughput.window}
-            </span>
+            <span className="console__chart-title">Что входит</span>
           </div>
-          <LineChart
-            points={s.throughput.points}
-            unit={s.throughput.unit}
-            title={`Трафик через туннель, ${s.throughput.unit}, ${s.throughput.window}`}
-          />
+          <ul className="access-list">
+            {included.map((i) => (
+              <li key={i}>{i}</li>
+            ))}
+          </ul>
         </div>
       </div>
 
       <div className="console__foot">
         <span>
-          {s.mock
-            ? 'Демонстрационные показатели: сервер отдаёт встроенный образец, а не измерения.'
-            : 'Агрегаты по сети. Разбивки по клиентам нет — она не собирается.'}
+          Оплата и выдача ключа — в боте. На сайте ничего вводить не нужно.
         </span>
       </div>
     </div>

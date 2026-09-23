@@ -1,33 +1,39 @@
 import { Logo } from '../components/Logo'
+import { links } from '../lib/links'
 
 const columns = [
   {
-    title: 'Продукт',
+    title: 'Сервис',
     links: [
       { label: 'Как это работает', href: '#how' },
-      { label: 'Возможности', href: '#features' },
-      { label: 'Узлы', href: '#nodes' },
+      { label: 'Что вы получаете', href: '#features' },
+      { label: 'Устройства', href: '#platforms' },
       { label: 'Тарифы', href: '#pricing' },
     ],
   },
   {
-    title: 'Документация',
+    title: 'Подключиться',
     links: [
-      { label: 'Быстрый старт', href: '#docs' },
-      { label: 'Дизайн и модель угроз', href: '#docs' },
-      { label: 'Результаты аудита', href: '#docs' },
-      { label: 'Метрики', href: '#docs' },
+      { label: 'Бот в Telegram', href: links.telegram },
+      { label: 'Бот в MAX', href: links.max },
+      { label: 'Приложение для iPhone', href: links.iosDefaultVpn },
+      { label: 'Приложение для Android', href: links.androidAmnezia },
     ],
   },
   {
     title: 'Честно',
     links: [
-      { label: 'Чего мы не умеем', href: '#faq' },
-      { label: 'Что не проверено', href: '#docs' },
+      { label: 'Что стоит знать до оплаты', href: '#faq' },
       { label: 'Вопросы', href: '#faq' },
+      { label: 'Документация Amnezia', href: links.amneziaDocs },
     ],
   },
 ]
+
+/** Links that leave the site get target/rel; in-page anchors must not. */
+function isExternal(href: string): boolean {
+  return !href.startsWith('#')
+}
 
 export function Footer() {
   return (
@@ -40,8 +46,8 @@ export function Footer() {
               BESY
             </a>
             <p style={{ marginTop: 12, maxWidth: '28ch', color: 'var(--ink-secondary)', fontSize: '0.875rem' }}>
-              Обфускатор WireGuard-трафика. Открытый код, никакой телеметрии на этой
-              странице.
+              Доступ к VPN на AmneziaWG. Оплата и выдача ключа — в боте, в Telegram
+              или в MAX.
             </p>
           </div>
 
@@ -51,7 +57,12 @@ export function Footer() {
               <ul>
                 {col.links.map((l) => (
                   <li key={l.label}>
-                    <a href={l.href}>{l.label}</a>
+                    <a
+                      href={l.href}
+                      {...(isExternal(l.href) ? { target: '_blank', rel: 'noopener' } : {})}
+                    >
+                      {l.label}
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -60,7 +71,7 @@ export function Footer() {
         </div>
 
         <div className="site-footer__bottom">
-          <span>© {new Date().getFullYear()} Besy VPN</span>
+          <span>© {new Date().getFullYear()} BESY VPN</span>
           <span>
             Ни аналитики, ни внешних шрифтов, ни сторонних запросов — страница грузится
             целиком с этого же сервера.

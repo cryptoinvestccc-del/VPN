@@ -41,8 +41,11 @@
   --line-strong: #d1cdc6;
   --line-inverse: #2c2a25;
 
-  /* Status — reserved, never reused as a series colour */
-  --good: #2e7a4e;
+  /* Status — reserved, never reused as a series colour.
+     The green is darker than it looks like it needs to be: this colour is
+     also the text of a --good badge, which sits on a tint of itself, and
+     at 11px that pairing measured 4.49:1 — a hundredth under AA. */
+  --good: #27683f;
   --warning: #9a6216;
   --critical: #a33a2e;
 
