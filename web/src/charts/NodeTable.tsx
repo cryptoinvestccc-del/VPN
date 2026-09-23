@@ -19,8 +19,11 @@ const loadThresholds = [
  * more colours. Nine columns across six nodes is exactly that case.
  */
 export function NodeTable({ rows }: { rows: NodeRow[] }) {
+  // The table scrolls sideways on a narrow screen, so it has to be a
+  // region a keyboard can reach and a screen reader can name — the same
+  // treatment the product page's tables get.
   return (
-    <div className="node-table">
+    <div className="node-table" tabIndex={0} role="region" aria-label="Состояние узлов сети">
       <table className="data">
         <caption className="visually-hidden">Состояние узлов сети</caption>
         <thead>
