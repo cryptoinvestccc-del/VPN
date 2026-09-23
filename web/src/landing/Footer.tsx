@@ -6,7 +6,6 @@ const columns = [
     title: 'Сервис',
     links: [
       { label: 'Тарифы', href: '#pricing' },
-      { label: 'Как это работает', href: '#how' },
       { label: 'Что вы получаете', href: '#features' },
       { label: 'Устройства', href: '#platforms' },
     ],
@@ -23,8 +22,7 @@ const columns = [
   {
     title: 'Честно',
     links: [
-      { label: 'Что стоит знать до оплаты', href: '#faq' },
-      { label: 'Вопросы', href: '#faq' },
+      { label: 'Что стоит знать до оплаты', href: '#limits' },
       { label: 'Документация Amnezia', href: links.amneziaDocs },
     ],
   },

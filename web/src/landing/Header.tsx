@@ -5,10 +5,9 @@ import { links as urls } from '../lib/links'
 
 const links = [
   { href: '#pricing', label: 'Тарифы' },
-  { href: '#how', label: 'Как это работает' },
   { href: '#features', label: 'Что вы получаете' },
   { href: '#platforms', label: 'Устройства' },
-  { href: '#faq', label: 'Вопросы' },
+  { href: '#limits', label: 'До оплаты' },
 ]
 
 export function Header() {

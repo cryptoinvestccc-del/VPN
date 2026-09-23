@@ -4,12 +4,10 @@ import type { Plan } from '../lib/types'
 
 import { Header } from './Header'
 import { Hero } from './Hero'
-import { HowItWorks } from './HowItWorks'
 import { Features } from './Features'
 import { Platforms } from './Platforms'
 import { Pricing } from './Pricing'
 import { Limits } from './Limits'
-import { Faq } from './Faq'
 import { Footer } from './Footer'
 
 /*
@@ -28,11 +26,9 @@ export function Landing() {
       <main id="main" tabIndex={-1}>
         <Hero />
         <Pricing plans={plans} />
-        <HowItWorks />
         <Features />
         <Platforms />
         <Limits />
-        <Faq />
       </main>
       <Footer />
     </>

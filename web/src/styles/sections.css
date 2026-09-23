@@ -139,26 +139,6 @@
   margin-top: 28px;
 }
 
-.hero__notes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 24px;
-  color: var(--ink-muted);
-  font-size: 0.8125rem;
-}
-
-.hero__note {
-  display: inline-flex;
-  align-items: flex-start;
-  gap: 7px;
-}
-
-.hero__note svg {
-  flex: 0 0 auto;
-  margin-top: 5px;
-}
-
 @media (min-width: 980px) {
   .hero__grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
@@ -688,34 +668,40 @@
   font-size: 0.8125rem;
 }
 
-/* "Что входит" list inside the hero access card --------------------- */
+/* Numbered steps inside the hero card ------------------------------- */
 
-.access-list {
+.start-steps {
   display: grid;
-  gap: 8px;
+  gap: 16px;
   margin: 0;
   padding: 0;
   list-style: none;
   color: var(--ink-secondary);
   font-size: 0.875rem;
+  line-height: 1.5;
 }
 
-.access-list li {
-  position: relative;
-  padding-left: 20px;
+.start-steps li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: start;
 }
 
-/* A check drawn in CSS rather than an inline SVG per row: the list is
-   decorative repetition, and six more <svg> nodes would only add noise
-   to the accessibility tree. */
-.access-list li::before {
-  content: '';
-  position: absolute;
-  left: 2px;
-  top: 0.45em;
-  width: 9px;
-  height: 5px;
-  border-left: 1.5px solid var(--good);
-  border-bottom: 1.5px solid var(--good);
-  transform: rotate(-45deg);
+.start-steps strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.start-steps__num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }

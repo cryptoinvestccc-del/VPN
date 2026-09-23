@@ -14,23 +14,18 @@ const limits = [
     body:
       'VPN прячет трафик от провайдера, но не делает вас невидимым. Аккаунты, куки и вход в собственную почту опознают вас независимо от того, через какой сервер вы вышли.',
   },
-  {
-    title: 'На iPhone — приложение DefaultVPN',
-    body:
-      'На iOS подключение идёт через DefaultVPN: оно есть в российском App Store и работает с AmneziaWG. Регион менять не нужно, ссылка приходит вместе с ключом.',
-  },
 ]
 
 export function Limits() {
   return (
-    <section className="section section--tight">
+    <section className="section section--tight" id="limits">
       <div className="shell">
         <div className="section-head">
           <div className="section-head__text">
             <p className="eyebrow">Честно</p>
             <h2>Что стоит знать до оплаты</h2>
             <p className="lede">
-              Четыре вещи без прикрас — чтобы вы узнали их сейчас, а не после
+              Три вещи без прикрас — чтобы вы узнали их сейчас, а не после
               оплаты.
             </p>
           </div>

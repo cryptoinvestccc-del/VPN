@@ -17,7 +17,7 @@ const platforms: Platform[] = [
     state: 'ready',
     stateLabel: 'приложение Amnezia',
     body:
-      'Ставится из Google Play или APK с сайта Amnezia. Ключ из бота открывается прямо в приложении — профиль подставляется сам.',
+      'Ставится из Google Play или APK с сайта Amnezia.',
     app: { label: 'AmneziaVPN в Google Play', href: links.androidAmnezia },
   },
   {
@@ -35,7 +35,7 @@ const platforms: Platform[] = [
     state: 'ready',
     stateLabel: 'приложение Amnezia',
     body:
-      'Десктопная версия AmneziaVPN скачивается с сайта Amnezia. Тот же ключ из бота, тот же сервер — отдельная подписка не нужна.',
+      'Десктопная версия AmneziaVPN скачивается с сайта Amnezia.',
     app: { label: 'Загрузки Amnezia', href: links.desktopAmnezia },
   },
   {
@@ -44,7 +44,7 @@ const platforms: Platform[] = [
     state: 'ready',
     stateLabel: 'приложение Amnezia',
     body:
-      'Есть сборка AmneziaVPN под Linux. Если привычнее из консоли — AmneziaWG ставится и так, конфиг тот же самый.',
+      'Есть сборка AmneziaVPN под Linux. Если привычнее из консоли — подойдёт и чистый AmneziaWG.',
     app: { label: 'Загрузки Amnezia', href: links.desktopAmnezia },
   },
 ]
@@ -58,8 +58,8 @@ export function Platforms() {
             <p className="eyebrow">Устройства</p>
             <h2>Работает на всём, что у вас есть</h2>
             <p className="lede">
-              Телефон, ноутбук, рабочий компьютер. Ссылку на нужное приложение бот
-              присылает вместе с ключом — искать ничего не придётся.
+              Ссылку на нужное приложение бот присылает вместе с ключом — искать
+              ничего не придётся.
             </p>
           </div>
         </div>
