@@ -1,0 +1,25 @@
+[Unit]
+Description=BESY server status agent (reads AmneziaWG load for the website)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# No account of its own on disk; the docker group is what lets it run
+# `docker exec ... awg show all dump`. It reads, and changes nothing.
+DynamicUser=yes
+SupplementaryGroups=docker
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+# BESY_AGENT_TOKEN lives here, readable by root only.
+EnvironmentFile=-/etc/besy-agent.env
+ExecStart=/usr/local/bin/besy-agent -listen ${BESY_AGENT_LISTEN}
+Environment=BESY_AGENT_LISTEN=127.0.0.1:9180
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

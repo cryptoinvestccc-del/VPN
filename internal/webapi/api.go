@@ -36,6 +36,13 @@ func Handler(src Source, now func() time.Time) http.Handler {
 		writeJSON(w, r, http.StatusOK, src.Dashboard(r.URL.Query().Get("range"), now()))
 	})
 
+	mux.HandleFunc("GET /api/v1/server", func(w http.ResponseWriter, r *http.Request) {
+		// Polled once a second by every open page; a cached copy would
+		// freeze the line it draws.
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, r, http.StatusOK, src.Server(now()))
+	})
+
 	mux.HandleFunc("GET /api/v1/locations", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=60")
 		writeJSON(w, r, http.StatusOK, src.Locations())

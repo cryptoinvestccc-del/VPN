@@ -13,6 +13,7 @@ type Source interface {
 	Locations() []Location
 	Plans() []Plan
 	Dashboard(rangeID string, now time.Time) Dashboard
+	Server(now time.Time) Server
 }
 
 // SampleSource serves invented but plausible figures, marked as such.
@@ -105,6 +106,8 @@ func (SampleSource) Status(now time.Time) Status {
 		},
 	}
 }
+
+func (SampleSource) Server(now time.Time) Server { return sampleServer(now) }
 
 func (SampleSource) Locations() []Location {
 	return []Location{

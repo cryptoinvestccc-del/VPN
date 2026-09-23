@@ -30,21 +30,28 @@ import (
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on")
 	static := flag.String("static", "", "directory of built assets; empty uses the embedded build")
+	agent := flag.String("agent", "", "besy-agent snapshot URL, e.g. http://127.0.0.1:9180/v1/snapshot; empty serves sample figures")
+	agentToken := flag.String("agent-token", os.Getenv("BESY_AGENT_TOKEN"), "token besy-agent expects (env BESY_AGENT_TOKEN)")
 	flag.Parse()
 
-	if err := run(*addr, *static); err != nil {
+	var src webapi.Source = webapi.SampleSource{}
+	if *agent != "" {
+		src = &webapi.AgentSource{Source: webapi.SampleSource{}, URL: *agent, Token: *agentToken}
+	}
+
+	if err := run(*addr, *static, src); err != nil {
 		log.Fatalf("obfsweb: %v", err)
 	}
 }
 
-func run(addr, static string) error {
+func run(addr, static string, src webapi.Source) error {
 	assets, err := resolveAssets(static)
 	if err != nil {
 		return err
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/", webapi.Handler(webapi.SampleSource{}, time.Now))
+	mux.Handle("/api/", webapi.Handler(src, time.Now))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok\n"))
 	})
