@@ -3,11 +3,12 @@ import { links } from '../lib/links'
 
 const columns = [
   {
-    title: 'Сервис',
+    title: 'Разделы',
     links: [
       { label: 'Тарифы', href: '#pricing' },
       { label: 'Что вы получаете', href: '#features' },
       { label: 'Устройства', href: '#platforms' },
+      { label: 'Условия', href: '#limits' },
     ],
   },
   {
@@ -22,7 +23,6 @@ const columns = [
   {
     title: 'Полезное',
     links: [
-      { label: 'Условия', href: '#limits' },
       { label: 'Документация Amnezia', href: links.amneziaDocs },
     ],
   },
