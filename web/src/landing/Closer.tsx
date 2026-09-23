@@ -8,11 +8,10 @@ export function Closer() {
           <p className="eyebrow" style={{ color: 'var(--ink-inverse-muted)' }}>
             Начать
           </p>
-          <h2>Сто рублей и пять минут</h2>
+          <h2>Сто рублей — и блокировок нет</h2>
           <p>
-            Выбрать срок, оплатить, открыть пришедшую ссылку в приложении Amnezia.
-            Ни регистрации, ни личного кабинета, ни разговора с поддержкой перед
-            подключением.
+            Нажать тариф, оплатить, открыть пришедшую ссылку. Минута — и интернет
+            снова работает целиком, а не наполовину.
           </p>
           <div className="closer__actions">
             <a
@@ -21,7 +20,7 @@ export function Closer() {
               target="_blank"
               rel="noopener"
             >
-              Открыть бота в Telegram
+              Подключиться за 100 ₽
             </a>
             <a
               className="btn btn--ghost btn--on-dark btn--lg"
@@ -29,7 +28,7 @@ export function Closer() {
               target="_blank"
               rel="noopener"
             >
-              То же самое в MAX
+              Оплатить в MAX
             </a>
           </div>
         </div>

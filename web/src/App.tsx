@@ -4,7 +4,7 @@ import { Landing } from './landing/Landing'
 import { Dashboard } from './dashboard/Dashboard'
 
 const titles = {
-  landing: 'BESY VPN — доступ к VPN на AmneziaWG за 100 ₽ в месяц',
+  landing: 'BESY VPN — интернет без блокировок за 100 ₽ в месяц',
   dashboard: 'Обзор сети — BESY VPN',
 } as const
 

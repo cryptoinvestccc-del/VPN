@@ -46,8 +46,8 @@ export function Footer() {
               BESY
             </a>
             <p style={{ marginTop: 12, maxWidth: '28ch', color: 'var(--ink-secondary)', fontSize: '0.875rem' }}>
-              Доступ к VPN на AmneziaWG. Оплата и выдача ключа — в боте, в Telegram
-              или в MAX.
+              Интернет без блокировок от 75 ₽ в месяц. Протокол AmneziaWG, доступ
+              в боте за минуту.
             </p>
           </div>
 
