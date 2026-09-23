@@ -26,7 +26,7 @@ const platforms: Platform[] = [
     state: 'ready',
     stateLabel: 'приложение DefaultVPN',
     body:
-      'На iOS используется DefaultVPN — приложение от разработчиков Amnezia. Есть в российском App Store, понимает AmneziaWG, регион менять не нужно.',
+      'Приложение DefaultVPN от разработчиков Amnezia. Скачивается из российского App Store, регион менять не нужно.',
     app: { label: 'DefaultVPN в App Store', href: links.iosDefaultVpn },
   },
   {
@@ -44,7 +44,7 @@ const platforms: Platform[] = [
     state: 'ready',
     stateLabel: 'приложение Amnezia',
     body:
-      'Есть сборка AmneziaVPN под Linux. Если привычнее из консоли — подойдёт и чистый AmneziaWG.',
+      'Есть сборка AmneziaVPN под Linux. Можно подключиться и через консольный AmneziaWG.',
     app: { label: 'Загрузки Amnezia', href: links.desktopAmnezia },
   },
 ]
@@ -56,10 +56,9 @@ export function Platforms() {
         <div className="section-head">
           <div className="section-head__text">
             <p className="eyebrow">Устройства</p>
-            <h2>Работает на всём, что у вас есть</h2>
+            <h2>Приложения для всех устройств</h2>
             <p className="lede">
-              Ссылку на нужное приложение бот присылает вместе с ключом — искать
-              ничего не придётся.
+              Ссылку на нужное приложение бот пришлёт вместе с ключом.
             </p>
           </div>
         </div>

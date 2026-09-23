@@ -7,7 +7,7 @@ const links = [
   { href: '#pricing', label: 'Тарифы' },
   { href: '#features', label: 'Что вы получаете' },
   { href: '#platforms', label: 'Устройства' },
-  { href: '#limits', label: 'До оплаты' },
+  { href: '#limits', label: 'Условия' },
 ]
 
 export function Header() {

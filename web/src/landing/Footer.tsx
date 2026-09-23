@@ -20,9 +20,9 @@ const columns = [
     ],
   },
   {
-    title: 'Честно',
+    title: 'Полезное',
     links: [
-      { label: 'Что стоит знать до оплаты', href: '#limits' },
+      { label: 'Условия', href: '#limits' },
       { label: 'Документация Amnezia', href: links.amneziaDocs },
     ],
   },
@@ -71,8 +71,7 @@ export function Footer() {
         <div className="site-footer__bottom">
           <span>© {new Date().getFullYear()} BESY VPN</span>
           <span>
-            Ни аналитики, ни внешних шрифтов, ни сторонних запросов — страница грузится
-            целиком с этого же сервера.
+            Сайт не использует аналитику и сторонние сервисы.
           </span>
         </div>
       </div>

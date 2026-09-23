@@ -688,8 +688,3 @@
   list-style: none;
 }
 
-.steps-row__help {
-  margin-top: 14px;
-  color: var(--ink-muted);
-  font-size: 0.875rem;
-}

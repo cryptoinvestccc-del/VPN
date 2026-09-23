@@ -12,8 +12,7 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
             <p className="eyebrow">Тарифы</p>
             <h2>Год выходит по 75 ₽ в месяц</h2>
             <p className="lede">
-              Доступ на всех тарифах одинаковый — отличается только срок и цена
-              месяца.
+              Доступ на всех тарифах одинаковый, разница только в сроке.
             </p>
           </div>
         </div>
@@ -23,7 +22,7 @@ export function Pricing({ plans }: { plans: Resource<Plan[]> }) {
             <article className={`plan ${plan.featured ? 'plan--featured' : ''}`} key={plan.id}>
               <div className="plan__head">
                 <h3>{plan.name}</h3>
-                {plan.featured && <span className="badge">популярный</span>}
+                {plan.featured && <span className="badge">рекомендуем</span>}
               </div>
 
               <div>
