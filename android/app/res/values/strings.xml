@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">BESY</string>
+  <string name="connect">Включить</string>
+  <string name="disconnect">Выключить</string>
+  <string name="wait">Подождите</string>
+  <string name="idle_title">Не подключено</string>
+  <string name="idle_sub">нажмите, чтобы включить</string>
+  <string name="busy_title">Подключаемся</string>
+  <string name="busy_key">создаём ключ на устройстве</string>
+  <string name="busy_config">получаем конфиг</string>
+  <string name="busy_handshake">рукопожатие</string>
+  <string name="live_title">Подключено</string>
+  <string name="key_local">Ключ хранится только на этом устройстве</string>
+  <string name="settings">Настройки</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">BESY</string>
+  <string name="connect">Connect</string>
+  <string name="disconnect">Disconnect</string>
+  <string name="wait">Please wait</string>
+  <string name="idle_title">Not connected</string>
+  <string name="idle_sub">tap to connect</string>
+  <string name="busy_title">Connecting</string>
+  <string name="busy_key">generating a key on this device</string>
+  <string name="busy_config">fetching the config</string>
+  <string name="busy_handshake">handshake</string>
+  <string name="live_title">Connected</string>
+  <string name="key_local">The key never leaves this device</string>
+  <string name="settings">Settings</string>
+</resources>
