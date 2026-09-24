@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="vpn.besy"
-    android:versionCode="2"
-    android:versionName="0.1.1">
+    android:versionCode="3"
+    android:versionName="0.1.2">
 
   <!-- 26 because nothing here needs more. The earlier floor of 31 was
        set for RenderEffect, and this build does not use it: the frosted

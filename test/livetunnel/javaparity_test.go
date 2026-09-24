@@ -146,7 +146,7 @@ type desktop struct{ classes, json string }
 
 func desktopClasses() (desktop, bool) {
 	d := desktop{
-		classes: "../../android/.build/desktop",
+		classes: "../../android/.build-desktop",
 		json:    "../../android/.toolchain/json.jar",
 	}
 	if _, err := os.Stat(filepath.Join(d.classes, "vpn", "besy", "Uapi.class")); err != nil {

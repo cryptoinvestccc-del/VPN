@@ -12,7 +12,7 @@
 // cryptographic primitive:
 //
 //	awg genkey   print a fresh keypair, one line each
-//	awg run      run the tunnel on the descriptor in WG_TUN_FD
+//	awg run      run the tunnel on the descriptor sent to it
 //
 // The private key exists in this process and in the app's own storage,
 // and nowhere else. It is generated here, on the phone, and the server
@@ -20,20 +20,21 @@
 package main
 
 import (
-	"bufio"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
-	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/amnezia-vpn/amneziawg-go/conn"
 	"github.com/amnezia-vpn/amneziawg-go/device"
 	"github.com/amnezia-vpn/amneziawg-go/tun"
 	"golang.org/x/crypto/curve25519"
+	"golang.org/x/sys/unix"
 )
 
 func main() {
@@ -66,11 +67,12 @@ func usage() {
 	fmt.Fprint(os.Stderr, `awg is the tunnel engine for the BESY app.
 
   awg genkey   print a new private key and its public half
-  awg run      run the tunnel; the interface descriptor comes from
-               WG_TUN_FD and the configuration from standard input
+  awg run      run the tunnel; the interface descriptor and the
+               configuration both arrive over the socket named in
+               WG_TUN_SOCKET
 
 Neither command takes flags. The configuration format is WireGuard's own
-UAPI: one key=value per line, ending with a blank line.
+UAPI: one key=value per line.
 `)
 }
 
@@ -102,37 +104,41 @@ func genkey(w io.Writer) error {
 
 // run brings the tunnel up on a descriptor the app already opened.
 //
-// The descriptor comes from VpnService.establish() on the Java side.
-// Passing it through the environment rather than reopening anything is
-// what makes this work at all: an app cannot create a tun device itself,
-// only receive one from the system.
+// The descriptor comes from VpnService.establish() on the Java side and
+// has to cross a process boundary to get here. It cannot cross it by
+// number: Java's ProcessBuilder closes every descriptor above the
+// standard three in the child, so a number passed through the
+// environment names nothing by the time this process reads it. That is
+// measurable, and it was how this failed on a real phone — the engine
+// asked the kernel about descriptor 30-something and was told, quite
+// correctly, that there was no such thing.
+//
+// So the descriptor is sent rather than named: Android's LocalSocket
+// attaches it to a message as SCM_RIGHTS, the kernel installs a copy in
+// this process, and its number here is whatever the kernel chose. The
+// configuration travels on the same socket, which also keeps the
+// private key out of the filesystem and out of the process table.
 func run() error {
-	fdStr := os.Getenv("WG_TUN_FD")
-	if fdStr == "" {
-		return errors.New("WG_TUN_FD is not set; this command expects the tunnel descriptor from VpnService.establish()")
-	}
-	fd, err := strconv.Atoi(fdStr)
-	if err != nil {
-		return fmt.Errorf("WG_TUN_FD %q is not a descriptor number", fdStr)
+	addr := os.Getenv("WG_TUN_SOCKET")
+	if addr == "" {
+		return errors.New("WG_TUN_SOCKET is not set; this command expects the tunnel descriptor to be sent to it")
 	}
 
-	mtu := 1280
-	if v := os.Getenv("WG_TUN_MTU"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			mtu = n
-		}
-	}
-
-	config, err := readConfig(os.Stdin)
+	fd, config, err := receive(addr)
 	if err != nil {
 		return err
 	}
+	if config == "" {
+		return errors.New("the configuration is empty")
+	}
 
-	// The descriptor is owned by this process from here on; closing the
-	// device closes it.
-	file := os.NewFile(uintptr(fd), "tun")
-	tunDevice, err := tun.CreateTUNFromFile(file, mtu)
+	// Unmonitored on purpose. The other constructor opens a netlink
+	// socket, looks the interface index up and sets the MTU, all of
+	// which need privileges an app does not have. On Android the system
+	// has already done that work in VpnService.Builder.
+	tunDevice, name, err := tun.CreateUnmonitoredTUNFromFD(fd)
 	if err != nil {
+		unix.Close(fd)
 		return fmt.Errorf("taking over the tunnel descriptor: %w", err)
 	}
 
@@ -141,6 +147,7 @@ func run() error {
 		logLevel = device.LogLevelVerbose
 	}
 	logger := device.NewLogger(logLevel, "awg: ")
+	logger.Verbosef("attached to %s", name)
 
 	dev := device.NewDevice(tunDevice, conn.NewStdNetBind(), logger)
 	defer dev.Close()
@@ -167,29 +174,71 @@ func run() error {
 	return nil
 }
 
-// readConfig reads UAPI lines until a blank one.
+// receive collects the tunnel descriptor and the configuration from the
+// socket the app is listening on.
 //
-// Reading from standard input rather than a socket keeps the private key
-// out of the filesystem entirely: it is written to a pipe by the parent
-// and never lands anywhere it could be read later.
-func readConfig(r io.Reader) (string, error) {
-	var out []byte
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 8192), 1<<20)
+// The descriptor rides along with the first bytes of the configuration,
+// because that is how SCM_RIGHTS works: it is attached to a message, not
+// sent on its own. The rest of the configuration follows until the app
+// closes its end.
+func receive(addr string) (int, string, error) {
+	c, err := net.Dial("unix", addr)
+	if err != nil {
+		return -1, "", fmt.Errorf("reaching the app on %s: %w", addr, err)
+	}
+	defer c.Close()
+	uc, ok := c.(*net.UnixConn)
+	if !ok {
+		return -1, "", fmt.Errorf("%s is not a unix socket", addr)
+	}
 
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			break
+	buf := make([]byte, 4096)
+	oob := make([]byte, syscall.CmsgSpace(4))
+	n, oobn, _, _, err := uc.ReadMsgUnix(buf, oob)
+	if err != nil {
+		return -1, "", fmt.Errorf("reading the first message from the app: %w", err)
+	}
+
+	messages, err := syscall.ParseSocketControlMessage(oob[:oobn])
+	if err != nil {
+		return -1, "", fmt.Errorf("reading what the app attached: %w", err)
+	}
+	var fd = -1
+	for _, m := range messages {
+		fds, err := syscall.ParseUnixRights(&m)
+		if err != nil {
+			continue
+		}
+		for i, got := range fds {
+			if i == 0 && fd < 0 {
+				fd = got
+				continue
+			}
+			unix.Close(got) // more than one was sent; keep the first
+		}
+	}
+	if fd < 0 {
+		return -1, "", errors.New("the app sent a configuration but no tunnel descriptor")
+	}
+
+	rest, err := io.ReadAll(uc)
+	if err != nil {
+		unix.Close(fd)
+		return -1, "", fmt.Errorf("reading the configuration: %w", err)
+	}
+	return fd, normalise(string(buf[:n]) + string(rest)), nil
+}
+
+// normalise drops anything after a blank line, so a configuration
+// written with a trailing terminator reads the same as one without.
+func normalise(config string) string {
+	var out []byte
+	for _, line := range strings.Split(config, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
 		out = append(out, line...)
 		out = append(out, '\n')
 	}
-	if err := sc.Err(); err != nil {
-		return "", fmt.Errorf("reading the configuration: %w", err)
-	}
-	if len(out) == 0 {
-		return "", errors.New("the configuration is empty")
-	}
-	return string(out), nil
+	return string(out)
 }

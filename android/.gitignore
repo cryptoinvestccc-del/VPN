@@ -1,5 +1,7 @@
 .toolchain/
 .build/
+.build-desktop/
 .debug.keystore
 *.apk
 *.idsig
+app/jni/

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -96,11 +97,22 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 		uapi = fromApp
 	}
 
-	t.Log("5. handing the descriptor across exec to the ARM engine")
+	t.Log("5. sending the descriptor to the ARM engine, as the app sends it")
+	// Not as a number in the environment. That is what the app tried
+	// first, and on a phone it fails: ProcessBuilder closes every
+	// descriptor above the standard three in the child, so the number
+	// names nothing by the time the engine reads it. This harness used
+	// to pass it as a number too, which is precisely why it did not
+	// catch that — so it now does what the app does.
+	name := fmt.Sprintf("@besy-test-%d-%d", os.Getpid(), time.Now().UnixNano())
+	listener, err := net.Listen("unix", name)
+	if err != nil {
+		t.Fatalf("listening on %s: %v", name, err)
+	}
+	defer listener.Close()
+
 	cmd := exec.Command(qemu, engine, "run")
-	cmd.Env = append(os.Environ(), "WG_TUN_FD=3", "WG_TUN_MTU=1280")
-	cmd.ExtraFiles = []*os.File{tunFile} // becomes descriptor 3
-	cmd.Stdin = strings.NewReader(uapi + "\n")
+	cmd.Env = append(os.Environ(), "WG_TUN_SOCKET="+name)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +125,25 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}()
+
+	accepted, err := listener.Accept()
+	if err != nil {
+		t.Fatalf("the engine never called back: %v", err)
+	}
+	defer accepted.Close()
+	peer, ok := accepted.(*net.UnixConn)
+	if !ok {
+		t.Fatal("not a unix connection")
+	}
+	// The descriptor is attached to the first message, which is also
+	// the configuration — the same single write the app performs.
+	rights := syscall.UnixRights(int(tunFile.Fd()))
+	if _, _, err := peer.WriteMsgUnix([]byte(uapi), rights, nil); err != nil {
+		t.Fatalf("sending the descriptor: %v", err)
+	}
+	if err := peer.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
 
 	lines := make(chan string, 64)
 	go func() {

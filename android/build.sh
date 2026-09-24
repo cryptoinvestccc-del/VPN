@@ -50,6 +50,23 @@ echo "==> package"
 cp "$work/base.apk" "$work/unsigned.apk"
 ( cd "$work" && zip -q unsigned.apk classes.dex )
 
+# The engine is built here rather than kept around as a file, because a
+# checked-in binary goes stale the moment its source changes and says
+# nothing about it. That happened: a fix to the engine was written,
+# committed, packaged and installed, and the APK still carried the
+# build from before it.
+#
+# CGO off, so there is nothing to link against and no NDK to find.
+echo "==> engine"
+for pair in arm64-v8a:arm64: armeabi-v7a:arm:7; do
+	abi="${pair%%:*}"; rest="${pair#*:}"
+	goarch="${rest%%:*}"; goarm="${rest#*:}"
+	mkdir -p "$app/jni/$abi"
+	( cd "$here/awg" && CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" GOARM="$goarm" \
+		go build -trimpath -ldflags='-s -w' -o "$app/jni/$abi/libawg.so" . )
+	echo "    $abi $(stat -c%s "$app/jni/$abi/libawg.so") bytes"
+done
+
 # The tunnel engine travels as lib/<abi>/libawg.so. Android unpacks that
 # directory to somewhere an app may still execute from; the data
 # directory, where an asset would land, has been refused since API 29.

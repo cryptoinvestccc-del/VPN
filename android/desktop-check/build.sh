@@ -8,7 +8,7 @@
 # Maven Central. Nothing else about the class changes.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-out="$here/../.build/desktop"
+out="$here/../.build-desktop"
 jar="$here/../.toolchain/json.jar"
 
 if [[ ! -f "$jar" ]]; then

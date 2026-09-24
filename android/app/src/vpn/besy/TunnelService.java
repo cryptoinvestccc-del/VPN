@@ -5,18 +5,18 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import android.system.ErrnoException;
-import android.system.Os;
-import android.system.OsConstants;
 import android.util.Log;
 
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -153,34 +153,50 @@ public final class TunnelService extends VpnService {
             throw new IOException("the system did not grant a tunnel interface");
         }
 
-        // A descriptor is not inherited across exec unless close-on-exec
-        // is cleared. Without this the engine starts and finds nothing on
-        // the number it was given.
-        try {
-            Os.fcntlInt(tun.getFileDescriptor(), OsConstants.F_SETFD, 0);
-        } catch (ErrnoException e) {
-            throw new IOException("could not hand the interface to the engine", e);
-        }
-
         stage = "движок";
         String config = Uapi.build(keys.privateKey(), issued);
 
-        File binary = Engine.binary(this);
-        ProcessBuilder pb = new ProcessBuilder(binary.getAbsolutePath(), "run");
-        Map<String, String> env = pb.environment();
-        env.put("WG_TUN_FD", Integer.toString(tun.getFd()));
-        env.put("WG_TUN_MTU", Integer.toString(issued.optInt("mtu", 1280)));
-        pb.redirectErrorStream(true);
-
-        engine = pb.start();
-
-        OutputStream stdin = engine.getOutputStream();
+        // The descriptor cannot be handed over as a number. ProcessBuilder
+        // closes every descriptor above the standard three in the child,
+        // so whatever number this one has here names nothing over there —
+        // which is exactly what a phone reported: the engine asked the
+        // kernel about a descriptor it did not have, and was told so.
+        //
+        // A descriptor crosses a process boundary by being sent. Attached
+        // to a message on a local socket, the kernel installs a copy in
+        // the other process and gives it a number of its own choosing.
+        // The configuration travels on the same socket, so the private
+        // key never touches the filesystem and never appears in the
+        // process table either.
+        String socketName = "besy-tun-" + android.os.Process.myPid() + "-" + System.nanoTime();
+        LocalServerSocket listener = new LocalServerSocket(socketName);
         try {
-            stdin.write(config.getBytes(Charset.forName("UTF-8")));
-            stdin.write('\n');   // the blank line that ends the configuration
-            stdin.flush();
+            File binary = Engine.binary(this);
+            ProcessBuilder pb = new ProcessBuilder(binary.getAbsolutePath(), "run");
+            Map<String, String> env = pb.environment();
+            // The leading @ is how the abstract namespace is spelled
+            // outside Android's own API.
+            env.put("WG_TUN_SOCKET", "@" + socketName);
+            pb.redirectErrorStream(true);
+
+            engine = pb.start();
+
+            LocalSocket peer = listener.accept();
+            try {
+                peer.setFileDescriptorsForSend(
+                        new FileDescriptor[] { tun.getFileDescriptor() });
+                OutputStream toEngine = peer.getOutputStream();
+                // The attachment rides with the first write, so the
+                // configuration and the descriptor arrive together.
+                toEngine.write(config.getBytes(Charset.forName("UTF-8")));
+                toEngine.flush();
+                peer.setFileDescriptorsForSend(null);
+                peer.shutdownOutput();
+            } finally {
+                peer.close();
+            }
         } finally {
-            stdin.close();
+            listener.close();
         }
 
         // "ready" is printed once the tunnel is actually carrying
