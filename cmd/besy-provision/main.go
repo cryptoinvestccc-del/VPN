@@ -15,11 +15,18 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/hex"
+	"encoding/pem"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -49,6 +56,8 @@ func main() {
 		burst     = flag.Float64("burst", provision.DefaultIssueBurst, "requests one source may make at once")
 		forwarded = flag.Bool("trust-forwarded-for", false, "honour X-Forwarded-For; only with a proxy in front, never when exposed directly")
 		persist   = flag.Bool("persist", false, "run 'awg-quick save' after each change so credentials survive a restart")
+		certFile  = flag.String("cert", "", "TLS certificate; with -key, serves HTTPS and prints the pin clients must carry")
+		keyFile   = flag.String("key", "", "TLS private key")
 		check     = flag.Bool("check", false, "verify the server is reachable and the configuration is usable, then exit")
 	)
 	flag.Parse()
@@ -59,6 +68,7 @@ func main() {
 		allowed: *allowed, mtu: *mtu, keepalive: *keepalive, maxPeers: *maxPeers,
 		ttl: *ttl, grace: *grace, sweep: *sweep, rate: *rate, burst: *burst,
 		forwarded: *forwarded, persist: *persist, check: *check,
+		certFile: *certFile, keyFile: *keyFile,
 	}); err != nil {
 		log.Fatalf("besy-provision: %v", err)
 	}
@@ -72,6 +82,7 @@ type runOptions struct {
 	ttl, grace, sweep                  time.Duration
 	rate, burst                        float64
 	forwarded, persist, check          bool
+	certFile, keyFile                  string
 }
 
 func run(o runOptions) error {
@@ -188,11 +199,57 @@ func run(o runOptions) error {
 		_ = server.Shutdown(shutdown)
 	}()
 
+	if o.certFile != "" || o.keyFile != "" {
+		if o.certFile == "" || o.keyFile == "" {
+			return errors.New("-cert and -key are given together or not at all")
+		}
+		pin, err := certificatePin(o.certFile)
+		if err != nil {
+			return err
+		}
+		// Printed on every start, because it is what a client checks the
+		// server by, and an operator who cannot find it will be tempted
+		// to turn the checking off.
+		log.Printf("besy-provision: certificate pin (put this in the app): %s", pin)
+
+		server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		if err := server.ListenAndServeTLS(o.certFile, o.keyFile); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		log.Print("besy-provision: shut down")
+		return nil
+	}
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	log.Print("besy-provision: shut down")
 	return nil
+}
+
+// certificatePin is the SHA-256 of the certificate a client must see.
+//
+// This service is reached by an app over the open internet, and it hands
+// out the address and key of the server that carries the traffic. A
+// stranger able to answer in its place could point every new install at
+// a machine of their own — the private key never leaves the phone, so
+// nothing is decrypted, but the tunnel would be built to the wrong end.
+//
+// A certificate authority cannot help here: this server has an address
+// and no name, and no authority issues for a bare IP. The client checks
+// the certificate itself instead, which is what the rest of this project
+// already does.
+func certificatePin(certFile string) (string, error) {
+	raw, err := os.ReadFile(certFile)
+	if err != nil {
+		return "", err
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		return "", fmt.Errorf("%s is not a PEM certificate", certFile)
+	}
+	sum := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func sweepLimiter(ctx context.Context, limiter *provision.Limiter, every time.Duration) {
