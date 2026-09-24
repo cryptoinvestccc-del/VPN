@@ -153,6 +153,12 @@ public final class TunnelService extends VpnService {
             throw new IOException("the system did not grant a tunnel interface");
         }
 
+        // The engine takes a literal address; a name never reaches it.
+        // This is also the last moment the lookup can happen over the
+        // ordinary network in a way that is obvious from the code.
+        stage = "адрес сервера";
+        issued.put("endpoint", Endpoints.resolve(issued.optString("endpoint")));
+
         stage = "движок";
         String config = Uapi.build(keys.privateKey(), issued);
 

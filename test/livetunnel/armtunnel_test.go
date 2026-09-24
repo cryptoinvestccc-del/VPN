@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -60,7 +61,7 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 	ipCmd(t, "route", "add", serverIP+"/32", "dev", iface)
 
 	t.Log("4. building the configuration, as the app builds it")
-	uapi, err := buildUAPI(clientPriv, &issued{
+	reply := &issued{
 		Address:         clientCIDR,
 		DNS:             []string{"1.1.1.1"},
 		MTU:             1280,
@@ -69,23 +70,23 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 		AllowedIPs:      "0.0.0.0/0",
 		Keepalive:       25,
 		Awg:             awgFromShowconf(),
-	})
+	}
+
+	// When the app's own classes can be run here, the whole of its side
+	// is used: the server is named rather than numbered, the app looks
+	// the name up as it would on a phone, and the app builds the text.
+	// The engine refuses a name outright, so this step failing would
+	// stop the tunnel — which is the point of doing it this way.
+	if jvm, ok := desktopClasses(); ok {
+		reply.Endpoint = appResolve(t, jvm, "localhost:51820")
+		t.Logf("   the app resolved localhost:51820 to %s", reply.Endpoint)
+	}
+
+	uapi, err := buildUAPI(clientPriv, reply)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// When the app's own class can be run here, use what it produces
-	// rather than this harness's copy of the same logic, so the text
-	// going into the engine is the app's text and not a stand-in.
-	if fromApp, ok := appUAPI(t, clientPriv, &issued{
-		Address:         clientCIDR,
-		DNS:             []string{"1.1.1.1"},
-		MTU:             1280,
-		ServerPublicKey: serverPub,
-		Endpoint:        "127.0.0.1:51820",
-		AllowedIPs:      "0.0.0.0/0",
-		Keepalive:       25,
-		Awg:             awgFromShowconf(),
-	}); ok {
+	if fromApp, ok := appUAPI(t, clientPriv, reply); ok {
 		t.Log("   using the configuration the app itself built")
 		uapi = fromApp
 	}
@@ -321,4 +322,47 @@ func serverWithPeer(t *testing.T, privateKey, peerPublic, allowed string) (*nets
 		t.Fatalf("bringing the server up: %v", err)
 	}
 	return tnet, dev
+}
+
+// sendTunnel hands the descriptor and the configuration over exactly as
+// the app does: one message, the descriptor attached to it.
+func sendTunnel(t *testing.T, listener net.Listener, tunFile *os.File, uapi string) {
+	t.Helper()
+	accepted, err := listener.Accept()
+	if err != nil {
+		t.Fatalf("the engine never called back: %v", err)
+	}
+	peer, ok := accepted.(*net.UnixConn)
+	if !ok {
+		t.Fatal("not a unix connection")
+	}
+	rights := syscall.UnixRights(int(tunFile.Fd()))
+	if _, _, err := peer.WriteMsgUnix([]byte(uapi), rights, nil); err != nil {
+		t.Fatalf("sending the descriptor: %v", err)
+	}
+	if err := peer.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// readAll collects what a process said, giving up after a while.
+func readAll(r io.Reader, within time.Duration) (string, error) {
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	select {
+	case s := <-done:
+		return s, nil
+	case <-time.After(within):
+		return "", fmt.Errorf("nothing was said within %s", within)
+	}
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }

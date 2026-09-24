@@ -24,7 +24,9 @@ javac -nowarn -d "$out" -cp "$jar:$here/../.toolchain/android.jar" \
 	"$here/stub/vpn/besy/R.java" \
 	"$here/../app/src/vpn/besy/Uapi.java" \
 	"$here/../app/src/vpn/besy/Reply.java" \
+	"$here/../app/src/vpn/besy/Endpoints.java" \
 	"$here/../app/src/vpn/besy/Provisioning.java" \
 	"$here/CrossCheck.java" \
-	"$here/ReplyCheck.java"
+	"$here/ReplyCheck.java" \
+	"$here/EndpointCheck.java"
 echo "    classes in ${out#"$here/../"}"
