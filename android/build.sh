@@ -50,6 +50,16 @@ echo "==> package"
 cp "$work/base.apk" "$work/unsigned.apk"
 ( cd "$work" && zip -q unsigned.apk classes.dex )
 
+# The tunnel engine travels as lib/<abi>/libawg.so. Android unpacks that
+# directory to somewhere an app may still execute from; the data
+# directory, where an asset would land, has been refused since API 29.
+if [[ -d "$app/jni" ]]; then
+	mkdir -p "$work/lib"
+	cp -r "$app/jni/." "$work/lib/"
+	( cd "$work" && zip -qr unsigned.apk lib )
+	echo "    engines: $(cd "$work/lib" && ls | tr '\n' ' ')"
+fi
+
 # A debug key, generated once and kept out of git. A release build signs
 # with a key the operator holds; see README.
 if [[ ! -f "$here/.debug.keystore" ]]; then

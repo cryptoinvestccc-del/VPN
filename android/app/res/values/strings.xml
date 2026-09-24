@@ -13,4 +13,6 @@
   <string name="live_title">Подключено</string>
   <string name="key_local">Ключ хранится только на этом устройстве</string>
   <string name="settings">Настройки</string>
+  <!-- Куда приложение обращается за конфигом. Заменить на свой сервер. -->
+  <string name="provision_endpoint" translatable="false">https://besy.example/v1/issue</string>
 </resources>
