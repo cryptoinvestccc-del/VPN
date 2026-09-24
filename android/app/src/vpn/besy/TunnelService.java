@@ -188,24 +188,50 @@ public final class TunnelService extends VpnService {
         // rather than on a timer.
         BufferedReader out = new BufferedReader(
                 new InputStreamReader(engine.getInputStream(), Charset.forName("UTF-8")));
+
+        // What the engine says is where the reason lives when it refuses
+        // to start, and it was going only to logcat — which needs a
+        // cable and a laptop to read. The last few lines are kept so the
+        // screen can show them instead.
+        java.util.ArrayDeque<String> said = new java.util.ArrayDeque<String>();
+
         String line;
         boolean up = false;
         while ((line = out.readLine()) != null) {
-            if (!up && "ready".equals(line.trim())) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+
+            if (!up && "ready".equals(line)) {
                 up = true;
                 stage = "";
                 lastError = null;
                 state = GlassView.STATE_LIVE;
-            } else {
-                Log.i(TAG, "engine: " + line);
+                continue;
+            }
+
+            Log.i(TAG, "engine: " + line);
+            said.addLast(line);
+            while (said.size() > 3) {
+                said.removeFirst();
             }
         }
 
         // The engine only returns when the tunnel is over. Reaching here
         // without ever seeing "ready" means it refused the configuration
         // and said why on the same stream.
-        if (!up && lastError == null) {
-            lastError = "движок вышел, не подняв туннель";
+        if (!up) {
+            StringBuilder why = new StringBuilder("движок: ");
+            if (said.isEmpty()) {
+                why.append("вышел молча, не подняв туннель");
+            } else {
+                boolean first = true;
+                for (String s : said) {
+                    if (!first) why.append(" · ");
+                    why.append(s);
+                    first = false;
+                }
+            }
+            lastError = why.toString();
         }
         state = GlassView.STATE_OFF;
         stopTunnel();
