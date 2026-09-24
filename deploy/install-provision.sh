@@ -34,6 +34,31 @@ echo "==> checking that Amnezia is reachable"
 	exit 1
 }
 
+echo "==> locating the interface configuration"
+
+# Where an install keeps this differs, and awg-quick only knows one
+# place. Asking the container is one command and saves the next person
+# the round trip this cost: the first guess here was off by the
+# interface's name.
+iface="$("$binary" -check -endpoint "${domain}:51820" 2>&1 | sed -n 's/.*using interface \([^ ]*\).*/\1/p' | head -1)"
+persist_conf=""
+if [[ -n "$iface" ]]; then
+	container="$(docker ps --format '{{.Names}}' | grep -E '^amnezia-awg2?$' | head -1)"
+	if [[ -n "$container" ]]; then
+		persist_conf="$(docker exec "$container" find / -name "${iface}.conf" 2>/dev/null | head -1)"
+	fi
+fi
+
+if [[ -n "$persist_conf" ]]; then
+	echo "  $persist_conf"
+	persist_args="-persist -persist-conf $persist_conf"
+else
+	# Not a reason to stop. Credentials work without it; they are lost
+	# when the server restarts, and that is the operator's call.
+	echo "  not found — credentials will work but will not survive a restart"
+	persist_args="-persist"
+fi
+
 echo "==> service"
 cat > /etc/systemd/system/besy-provision.service <<UNIT
 [Unit]
@@ -53,7 +78,7 @@ ExecStart=$binary \\
     -endpoint ${domain}:51820 \\
     -subnet 10.8.1.0/24 \\
     -trust-forwarded-for \\
-    -persist
+    $persist_args
 Restart=always
 RestartSec=2s
 
