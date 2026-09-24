@@ -59,8 +59,12 @@ final class Uapi {
                 u.verbatim(awg, "h3");
                 u.verbatim(awg, "h4");
             }
+            // I1 to I5 are packet templates, written out byte by byte
+            // and carried as hex: "<b 0xf1a2b3c4>". Reading one as a
+            // number drops it silently, and a server that relies on
+            // them would then never answer.
             for (int i = 1; i <= 5; i++) {
-                u.positive(awg, "i" + i);
+                u.verbatim(awg, "i" + i);
             }
         }
 
