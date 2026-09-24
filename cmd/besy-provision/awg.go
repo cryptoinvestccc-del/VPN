@@ -90,14 +90,48 @@ func (d *awgDevice) ServerPublicKey(ctx context.Context) (string, error) {
 	return provision.ServerPublicKey(out)
 }
 
-// Config reads the interface's configuration file, for the obfuscation
-// parameters clients must match.
+// Config reads the interface's settings, for the obfuscation parameters
+// clients must match.
+//
+// It asks the tool rather than reading a file. Where a particular
+// Amnezia install keeps its configuration is not something this code can
+// know — the first version guessed a path and guessed wrong — but
+// `awg showconf` prints the same settings by name, from whatever the
+// interface is actually running. A path is used only when an operator
+// names one.
 func (d *awgDevice) Config(ctx context.Context, path string) (string, error) {
-	out, err := d.exec(ctx, "cat", path)
+	if path != "" {
+		out, err := d.exec(ctx, "cat", path)
+		if err != nil {
+			return "", err
+		}
+		return string(out), nil
+	}
+
+	out, err := d.exec(ctx, "awg", "showconf", d.iface)
+	if err != nil {
+		return "", fmt.Errorf("%w\n\nThe interface is named by -interface; "+
+			"`docker exec %s awg show interfaces` lists what is running", err, d.container)
+	}
+	return string(out), nil
+}
+
+// InterfaceName reports the interface the server is actually running.
+//
+// Guessing "wg0" is right often enough to be a trap: it works until it
+// meets an install that named it something else, and then fails with a
+// message about a file rather than about a name.
+func (d *awgDevice) InterfaceName(ctx context.Context) (string, error) {
+	out, err := d.exec(ctx, "awg", "show", "all", "dump")
 	if err != nil {
 		return "", err
 	}
-	return string(out), nil
+	line, _, _ := strings.Cut(string(out), "\n")
+	name, _, ok := strings.Cut(line, "\t")
+	if !ok || name == "" {
+		return "", fmt.Errorf("no interface is running in %s", d.container)
+	}
+	return name, nil
 }
 
 // Save asks awg-quick to write the running peer list back to the

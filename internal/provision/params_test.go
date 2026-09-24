@@ -122,3 +122,50 @@ func TestHeaderValuesMustDiffer(t *testing.T) {
 		t.Errorf("the message does not say what is wrong: %v", err)
 	}
 }
+
+// TestParseParamsAcceptsShowconfOutput: `awg showconf` prints the
+// interface's settings with no section header, and the first version of
+// this parser skipped every line before one — producing a profile with
+// no obfuscation parameters at all, which is a tunnel whose handshake is
+// never answered.
+func TestParseParamsAcceptsShowconfOutput(t *testing.T) {
+	showconf := `ListenPort = 51820
+FwMark = off
+PrivateKey = SERVERPRIV=
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 86
+S2 = 574
+H1 = 1020325451
+H2 = 1457919798
+H3 = 1183463497
+H4 = 1783538058
+
+[Peer]
+PublicKey = CLIENT=
+AllowedIPs = 10.8.1.2/32
+`
+	p, err := ParseParams(showconf)
+	if err != nil {
+		t.Fatalf("output with no [Interface] header was refused: %v", err)
+	}
+	if p.Jc != 4 || p.S1 != 86 || p.H1 != 1020325451 {
+		t.Errorf("parameters were not read: %+v", p)
+	}
+}
+
+// TestShowconfPeerSectionIsStillIgnored: the header-less start must not
+// turn into reading everything.
+func TestShowconfPeerSectionIsStillIgnored(t *testing.T) {
+	conf := "Jc = 4\nJmin = 40\nJmax = 70\nS1 = 86\nS2 = 574\n" +
+		"H1 = 1\nH2 = 2\nH3 = 3\nH4 = 4\n\n[Peer]\nJc = 99\n"
+
+	p, err := ParseParams(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Jc != 4 {
+		t.Errorf("Jc = %d; a value from the [Peer] section was used", p.Jc)
+	}
+}

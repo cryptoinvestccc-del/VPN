@@ -59,6 +59,11 @@ func ParseParams(conf string) (Params, error) {
 		found   int
 	)
 
+	// Before any [section] header the keys belong to the interface. That
+	// is how `awg showconf` prints, and treating its first lines as
+	// nothing would silently yield a profile with no obfuscation.
+	section = "interface"
+
 	sc := bufio.NewScanner(strings.NewReader(conf))
 	for line := 1; sc.Scan(); line++ {
 		text := strings.TrimSpace(sc.Text())

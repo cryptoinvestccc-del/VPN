@@ -39,8 +39,8 @@ func main() {
 	var (
 		listen    = flag.String("listen", "127.0.0.1:9181", "address to serve the issuing API on")
 		container = flag.String("container", "", "Amnezia's AmneziaWG container; empty finds amnezia-awg2 or amnezia-awg")
-		iface     = flag.String("interface", "wg0", "AmneziaWG interface name inside the container")
-		confPath  = flag.String("config", "/opt/amnezia/awg/wg0.conf", "the interface's configuration, read for its obfuscation parameters")
+		iface     = flag.String("interface", "", "AmneziaWG interface name; empty asks the server what it is running")
+		confPath  = flag.String("config", "", "read the obfuscation parameters from this file instead of asking awg for them")
 		endpoint  = flag.String("endpoint", "", "the server's public address clients connect to, host:port (required)")
 		subnet    = flag.String("subnet", "10.8.1.0/24", "addresses to hand out; keep it clear of the range Amnezia's own clients use")
 		serverIP  = flag.String("server-address", "", "the server's address inside the tunnel; empty uses the first address of -subnet")
@@ -107,6 +107,15 @@ func run(o runOptions) error {
 	}
 	device := newAWGDevice(container, o.iface, 10*time.Second)
 
+	if o.iface == "" {
+		name, err := device.InterfaceName(ctx)
+		if err != nil {
+			return err
+		}
+		device.iface = name
+		log.Printf("besy-provision: using interface %s", name)
+	}
+
 	serverKey, err := device.ServerPublicKey(ctx)
 	if err != nil {
 		return err
@@ -157,7 +166,7 @@ func run(o runOptions) error {
 
 	if o.check {
 		log.Printf("besy-provision: configuration is usable (container=%s interface=%s peers=%d subnet=%s)",
-			container, o.iface, len(peers), prefix)
+			container, device.iface, len(peers), prefix)
 		return nil
 	}
 
@@ -170,7 +179,7 @@ func run(o runOptions) error {
 			"'awg-quick save' is right for this install.")
 	}
 	log.Printf("besy-provision: serving on %s (container=%s interface=%s peers=%d/%d subnet=%s)",
-		o.listen, container, o.iface, len(peers), o.maxPeers, prefix)
+		o.listen, container, device.iface, len(peers), o.maxPeers, prefix)
 
 	limiter := provision.NewLimiter(o.rate, o.burst)
 	limiter.TrustForwardedFor = o.forwarded

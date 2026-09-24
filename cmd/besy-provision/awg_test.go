@@ -200,3 +200,42 @@ func TestRunRequiresAnEndpoint(t *testing.T) {
 		t.Fatal("an endpoint without a port was accepted")
 	}
 }
+
+// TestConfigAsksTheToolNotTheFilesystem: the first version guessed a
+// path into Amnezia's container and guessed wrong. Where an install
+// keeps its configuration is not knowable from here; what the interface
+// is running is.
+func TestConfigAsksTheToolNotTheFilesystem(t *testing.T) {
+	r := &recordingRunner{out: map[string]string{"showconf": "Jc = 4\n"}}
+	if _, err := testDevice(r).Config(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	want := "docker exec amnezia-awg2 awg showconf wg0"
+	if got := r.last(); got != want {
+		t.Errorf("command:\n got %s\nwant %s", got, want)
+	}
+}
+
+func TestConfigUsesAPathWhenGivenOne(t *testing.T) {
+	r := &recordingRunner{}
+	if _, err := testDevice(r).Config(context.Background(), "/etc/awg/wg0.conf"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.last(), "cat /etc/awg/wg0.conf") {
+		t.Errorf("an explicit path was ignored: %s", r.last())
+	}
+}
+
+// TestInterfaceNameComesFromTheServer: "wg0" is right often enough to be
+// a trap — it works until it meets an install that named it otherwise.
+func TestInterfaceNameComesFromTheServer(t *testing.T) {
+	dump := strings.Join([]string{"awg0", "PRIV=", "PUB=", "51820", "0"}, "\t") + "\n"
+	name, err := testDevice(&recordingRunner{out: map[string]string{"show all dump": dump}}).
+		InterfaceName(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "awg0" {
+		t.Errorf("got %q, want awg0", name)
+	}
+}
