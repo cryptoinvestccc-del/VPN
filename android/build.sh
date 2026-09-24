@@ -29,7 +29,7 @@ aapt2 link \
 	-I "$tools/android.jar" \
 	--manifest "$app/AndroidManifest.xml" \
 	--java "$work/gen" \
-	--min-sdk-version 31 \
+	--min-sdk-version 26 \
 	--target-sdk-version 34 \
 	"$work/res.zip"
 
@@ -71,8 +71,12 @@ fi
 
 echo "==> align and sign"
 zipalign -f 4 "$work/unsigned.apk" "$work/aligned.apk"
+# All three schemes. v1 is not needed above API 24 and costs a little
+# size, but some vendor installers still look for it and refuse what
+# they cannot find, which shows up as "not installed" and no reason.
 apksigner sign \
 	--ks "$here/.debug.keystore" --ks-pass pass:android --key-pass pass:android \
+	--v1-signing-enabled true \
 	--v2-signing-enabled true --v3-signing-enabled true \
 	--out "$out" "$work/aligned.apk"
 
