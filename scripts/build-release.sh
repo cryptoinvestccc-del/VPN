@@ -32,10 +32,14 @@ for target in "${targets[@]}"; do
 	suffix=""
 	[[ "$os" == "windows" ]] && suffix=".exe"
 
-	for cmd in obfsclient obfsctl obfsserver gencert; do
+	for cmd in obfsclient obfsctl obfsserver gencert besy-provision; do
 		# The server and the credential tool are not shipped for
 		# Windows: nothing about the deployment expects it there.
 		if [[ "$os" == "windows" && "$cmd" != "obfsclient" ]]; then
+			continue
+		fi
+		# besy-provision runs next to Amnezia's container, which is Linux.
+		if [[ "$cmd" == "besy-provision" && "$os" != "linux" ]]; then
 			continue
 		fi
 		name="${cmd}-${os}-${arch}${suffix}"

@@ -1,0 +1,124 @@
+package provision
+
+import (
+	"strings"
+	"testing"
+)
+
+const amneziaConf = `[Interface]
+PrivateKey = SERVERPRIV=
+Address = 10.8.0.1/24
+ListenPort = 51820
+
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 86
+S2 = 574
+H1 = 1020325451
+H2 = 1457919798
+H3 = 1183463497
+H4 = 1783538058
+
+[Peer]
+PublicKey = CLIENT=
+AllowedIPs = 10.8.0.2/32
+`
+
+func TestParseParams(t *testing.T) {
+	p, err := ParseParams(amneziaConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if p.Jc != 4 || p.Jmin != 40 || p.Jmax != 70 || p.S1 != 86 || p.S2 != 574 {
+		t.Errorf("junk parameters: %+v", p)
+	}
+	if p.H1 != 1020325451 || p.H4 != 1783538058 {
+		t.Errorf("header parameters: %+v", p)
+	}
+}
+
+// TestParseParamsIgnoresThePeerSection: a server config lists every
+// client after the interface, and nothing there belongs in the numbers
+// handed to a new one.
+func TestParseParamsIgnoresThePeerSection(t *testing.T) {
+	conf := amneziaConf + "\nJc = 99\n" // after [Peer], so not the interface's
+	p, err := ParseParams(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Jc != 4 {
+		t.Errorf("Jc = %d; a value from the [Peer] section was used", p.Jc)
+	}
+}
+
+// TestParseParamsCarriesUnknownParametersThrough: AmneziaWG has added
+// parameters between versions. A server running a newer one than this
+// code knows about must still be able to hand out a working config, so
+// recognised-but-unparsed keys pass through verbatim.
+func TestParseParamsCarriesUnknownParametersThrough(t *testing.T) {
+	conf := strings.Replace(amneziaConf, "H4 = 1783538058",
+		"H4 = 1783538058\nS3 = 12\nS4 = 34\nI1 = <b 0xf1>", 1)
+
+	p, err := ParseParams(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{"s3": "12", "s4": "34", "i1": "<b 0xf1>"} {
+		if p.Extra[key] != want {
+			t.Errorf("%s: got %q, want %q", key, p.Extra[key], want)
+		}
+	}
+}
+
+// TestPlainWireGuardConfigIsRejected: handing an AmneziaWG client a
+// config with no obfuscation parameters produces a handshake the server
+// never answers, and nothing says why. Refusing at the source is the
+// only place this is visible.
+func TestPlainWireGuardConfigIsRejected(t *testing.T) {
+	plain := `[Interface]
+PrivateKey = k
+Address = 10.8.0.1/24
+ListenPort = 51820
+`
+	_, err := ParseParams(plain)
+	if err == nil {
+		t.Fatal("a plain WireGuard config was accepted as AmneziaWG")
+	}
+	if !strings.Contains(err.Error(), "plain WireGuard") {
+		t.Errorf("the message does not name the problem: %v", err)
+	}
+}
+
+func TestParseParamsRejectsFaults(t *testing.T) {
+	cases := map[string]string{
+		"missing H3": strings.Replace(amneziaConf, "H3 = 1183463497", "", 1),
+		"duplicate header values": strings.Replace(amneziaConf,
+			"H2 = 1457919798", "H2 = 1020325451", 1),
+		"Jmin above Jmax":     strings.Replace(amneziaConf, "Jmin = 40", "Jmin = 90", 1),
+		"Jc not a number":     strings.Replace(amneziaConf, "Jc = 4", "Jc = four", 1),
+		"header out of range": strings.Replace(amneziaConf, "H1 = 1020325451", "H1 = 99999999999999", 1),
+	}
+
+	for name, conf := range cases {
+		if _, err := ParseParams(conf); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
+// TestHeaderValuesMustDiffer spells out why: H1..H4 replace WireGuard's
+// four message types, so two the same makes a packet ambiguous to the
+// receiver.
+func TestHeaderValuesMustDiffer(t *testing.T) {
+	conf := strings.Replace(amneziaConf, "H4 = 1783538058", "H4 = 1183463497", 1)
+
+	_, err := ParseParams(conf)
+	if err == nil {
+		t.Fatal("two identical header values were accepted")
+	}
+	if !strings.Contains(err.Error(), "appears twice") {
+		t.Errorf("the message does not say what is wrong: %v", err)
+	}
+}
