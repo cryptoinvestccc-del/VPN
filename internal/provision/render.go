@@ -36,7 +36,7 @@ func (c Config) ClientConfig(privateKey string) string {
 	b.WriteString("\n")
 	p := s.Params
 	fmt.Fprintf(&b, "Jc = %d\nJmin = %d\nJmax = %d\nS1 = %d\nS2 = %d\n", p.Jc, p.Jmin, p.Jmax, p.S1, p.S2)
-	fmt.Fprintf(&b, "H1 = %d\nH2 = %d\nH3 = %d\nH4 = %d\n", p.H1, p.H2, p.H3, p.H4)
+	fmt.Fprintf(&b, "H1 = %s\nH2 = %s\nH3 = %s\nH4 = %s\n", p.H1, p.H2, p.H3, p.H4)
 
 	// Parameters newer than this code understands are passed through in
 	// a stable order, so a server running a newer AmneziaWG still hands

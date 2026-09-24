@@ -45,14 +45,19 @@ final class Uapi {
             u.positive(awg, "s2");
             u.positive(awg, "s3");
             u.positive(awg, "s4");
-            // Headers are required together or not at all: they replace
+            // Headers go through as written. A header is a specification
+            // rather than a number — AmneziaWG takes "N" or the range
+            // "N-M" — so treating it as an integer would carry one form
+            // and drop the other.
+            //
+            // They are required together or not at all: they replace
             // WireGuard's four message types, and a partial set makes a
             // packet the server cannot classify.
             if (hasAll(awg, "h1", "h2", "h3", "h4")) {
-                u.positive(awg, "h1");
-                u.positive(awg, "h2");
-                u.positive(awg, "h3");
-                u.positive(awg, "h4");
+                u.verbatim(awg, "h1");
+                u.verbatim(awg, "h2");
+                u.verbatim(awg, "h3");
+                u.verbatim(awg, "h4");
             }
             for (int i = 1; i <= 5; i++) {
                 u.positive(awg, "i" + i);
@@ -83,6 +88,14 @@ final class Uapi {
             if (o.optString(k, "").length() == 0) return false;
         }
         return true;
+    }
+
+    /** Writes a parameter exactly as the server spelled it. */
+    private void verbatim(JSONObject o, String key) {
+        String raw = o.optString(key, "").trim();
+        if (raw.length() > 0) {
+            line(key, raw);
+        }
     }
 
     /** Writes a parameter only when it carries a usable value. */

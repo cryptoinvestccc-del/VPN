@@ -94,7 +94,7 @@ func testService(t *testing.T, device Device) *Service {
 		AllowedIPs:      "0.0.0.0/0, ::/0",
 		MTU:             1280,
 		Keepalive:       25,
-		Params:          Params{Jc: 4, Jmin: 40, Jmax: 70, S1: 86, S2: 574, H1: 1, H2: 2, H3: 3, H4: 4},
+		Params:          Params{Jc: 4, Jmin: 40, Jmax: 70, S1: 86, S2: 574, H1: "1", H2: "2", H3: "3", H4: "4"},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -34,7 +34,7 @@ func TestParseParams(t *testing.T) {
 	if p.Jc != 4 || p.Jmin != 40 || p.Jmax != 70 || p.S1 != 86 || p.S2 != 574 {
 		t.Errorf("junk parameters: %+v", p)
 	}
-	if p.H1 != 1020325451 || p.H4 != 1783538058 {
+	if p.H1 != "1020325451" || p.H4 != "1783538058" {
 		t.Errorf("header parameters: %+v", p)
 	}
 }
@@ -94,7 +94,7 @@ ListenPort = 51820
 func TestParseParamsRejectsFaults(t *testing.T) {
 	cases := map[string]string{
 		"missing H3": strings.Replace(amneziaConf, "H3 = 1183463497", "", 1),
-		"duplicate header values": strings.Replace(amneziaConf,
+		"identical headers": strings.Replace(amneziaConf,
 			"H2 = 1457919798", "H2 = 1020325451", 1),
 		"Jmin above Jmax":     strings.Replace(amneziaConf, "Jmin = 40", "Jmin = 90", 1),
 		"Jc not a number":     strings.Replace(amneziaConf, "Jc = 4", "Jc = four", 1),
@@ -105,21 +105,6 @@ func TestParseParamsRejectsFaults(t *testing.T) {
 		if _, err := ParseParams(conf); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
-	}
-}
-
-// TestHeaderValuesMustDiffer spells out why: H1..H4 replace WireGuard's
-// four message types, so two the same makes a packet ambiguous to the
-// receiver.
-func TestHeaderValuesMustDiffer(t *testing.T) {
-	conf := strings.Replace(amneziaConf, "H4 = 1783538058", "H4 = 1183463497", 1)
-
-	_, err := ParseParams(conf)
-	if err == nil {
-		t.Fatal("two identical header values were accepted")
-	}
-	if !strings.Contains(err.Error(), "appears twice") {
-		t.Errorf("the message does not say what is wrong: %v", err)
 	}
 }
 
@@ -150,7 +135,7 @@ AllowedIPs = 10.8.1.2/32
 	if err != nil {
 		t.Fatalf("output with no [Interface] header was refused: %v", err)
 	}
-	if p.Jc != 4 || p.S1 != 86 || p.H1 != 1020325451 {
+	if p.Jc != 4 || p.S1 != 86 || p.H1 != "1020325451" {
 		t.Errorf("parameters were not read: %+v", p)
 	}
 }
@@ -170,26 +155,52 @@ func TestShowconfPeerSectionIsStillIgnored(t *testing.T) {
 	}
 }
 
-// TestHeaderValuesMayBeSigned: the header is a 32-bit pattern, and
-// whether a tool prints it as 2730483310 or as -1564484786 is a choice
-// about formatting rather than about the number. Refusing one of them
-// would make this depend on which tool wrote the configuration.
-func TestHeaderValuesMayBeSigned(t *testing.T) {
-	conf := strings.Replace(amneziaConf, "H2 = 1457919798", "H2 = -1564484786", 1)
+// TestHeaderMayBeARange is what the first real server turned out to
+// use. AmneziaWG takes a header as "N" or as "N-M", and the value is a
+// specification rather than a number: parsing it to an integer accepts
+// one form and silently refuses the other, which is how this was first
+// written and why it failed on a live configuration.
+func TestHeaderMayBeARange(t *testing.T) {
+	conf := strings.Replace(amneziaConf, "H1 = 1020325451", "H1 = 654395697-999999999", 1)
 
 	p, err := ParseParams(conf)
 	if err != nil {
-		t.Fatalf("a signed header value was refused: %v", err)
+		t.Fatalf("a header range was refused: %v", err)
 	}
-	if p.H2 != uint32(2730482510) {
-		t.Errorf("H2 = %d (%#x); -1564484786 is the same pattern as 2730482510", p.H2, p.H2)
+	if p.H1 != "654395697-999999999" {
+		t.Errorf("the range was not carried through verbatim: %q", p.H1)
 	}
-	// And the unsigned spelling of the same bits must land identically.
-	same, err := ParseParams(strings.Replace(amneziaConf, "H2 = 1457919798", "H2 = 2730482510", 1))
-	if err != nil {
-		t.Fatal(err)
+}
+
+// TestOverlappingHeadersAreRefused: the four headers are what tell the
+// message types apart. A packet whose header falls where two ranges meet
+// belongs to both at once, and the receiver cannot know which — a fault
+// that shows up as some handshakes working and others not.
+func TestOverlappingHeadersAreRefused(t *testing.T) {
+	conf := strings.Replace(amneziaConf, "H1 = 1020325451", "H1 = 1000000000-1500000000", 1)
+	conf = strings.Replace(conf, "H2 = 1457919798", "H2 = 1400000000-1600000000", 1)
+
+	_, err := ParseParams(conf)
+	if err == nil {
+		t.Fatal("two overlapping header ranges were accepted")
 	}
-	if same.H2 != p.H2 {
-		t.Errorf("the two spellings differ: %d vs %d", same.H2, p.H2)
+	if !strings.Contains(err.Error(), "overlap") {
+		t.Errorf("the message does not name the problem: %v", err)
+	}
+}
+
+func TestHeaderRangeFaults(t *testing.T) {
+	cases := map[string]string{
+		"ends before it begins": "H1 = 900-100",
+		"three parts":           "H1 = 1-2-3",
+		"not a number":          "H1 = abc-200",
+		"above 32 bits":         "H1 = 1-99999999999999",
+		"negative":              "H1 = -1564484786",
+	}
+	for name, line := range cases {
+		conf := strings.Replace(amneziaConf, "H1 = 1020325451", line, 1)
+		if _, err := ParseParams(conf); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
 	}
 }

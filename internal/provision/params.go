@@ -2,6 +2,7 @@ package provision
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,7 +27,12 @@ type Params struct {
 
 	// Header values that replace WireGuard's four message types. These
 	// are what stop a packet from being recognisable by its first byte.
-	H1, H2, H3, H4 uint32
+	// Kept as text because the value is a specification, not a number:
+	// AmneziaWG accepts a single value or a range, "N" or "N-M", and the
+	// server chooses. Parsing to an integer here would have to pick one
+	// and would silently refuse the other, which is what the first
+	// version did.
+	H1, H2, H3, H4 string
 
 	// S3, S4 and I1..I5 exist in newer AmneziaWG versions. They are
 	// carried through verbatim when the server config has them and left
@@ -108,19 +114,18 @@ func ParseParams(conf string) (Params, error) {
 			}
 			found++
 		case "h1", "h2", "h3", "h4":
-			n, err := parseHeader(value)
-			if err != nil {
+			if _, _, err := parseHeader(value); err != nil {
 				return Params{}, fmt.Errorf("line %d: %s = %q: %w", line, key, value, err)
 			}
 			switch key {
 			case "h1":
-				p.H1 = n
+				p.H1 = value
 			case "h2":
-				p.H2 = n
+				p.H2 = value
 			case "h3":
-				p.H3 = n
+				p.H3 = value
 			case "h4":
-				p.H4 = n
+				p.H4 = value
 			}
 			found++
 		default:
@@ -147,37 +152,68 @@ func ParseParams(conf string) (Params, error) {
 	return p, nil
 }
 
-// parseHeader reads one of H1..H4.
+// parseHeader reads one of H1..H4 and returns the range it covers.
 //
-// The value is a 32-bit pattern, and whether a tool prints it signed or
-// unsigned is a choice about formatting rather than about the number:
-// the same bits read as 2730483310 or as -1564484786. Both are accepted
-// and kept as the same pattern, because refusing one of them would make
-// this depend on which tool wrote the configuration.
-func parseHeader(value string) (uint32, error) {
-	value = strings.TrimSpace(value)
+// The value is a specification rather than a number: AmneziaWG takes
+// either a single value or a range, "N" or "N-M", and a server that uses
+// ranges is not unusual — the first one this met did. A single value is
+// the range containing only itself.
+func parseHeader(spec string) (start, end uint64, err error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return 0, 0, errors.New("empty")
+	}
 
-	if n, err := strconv.ParseUint(value, 10, 32); err == nil {
-		return uint32(n), nil
+	lo, hi, isRange := strings.Cut(spec, "-")
+	start, err = strconv.ParseUint(strings.TrimSpace(lo), 10, 32)
+	if err != nil {
+		return 0, 0, fmt.Errorf("%q is not a 32-bit number", lo)
 	}
-	if n, err := strconv.ParseInt(value, 10, 32); err == nil {
-		return uint32(n), nil
+
+	end = start
+	if isRange {
+		end, err = strconv.ParseUint(strings.TrimSpace(hi), 10, 32)
+		if err != nil {
+			return 0, 0, fmt.Errorf("%q is not a 32-bit number", hi)
+		}
 	}
-	return 0, fmt.Errorf("not a 32-bit number; `awg showconf` should print one value per header")
+	if end < start {
+		return 0, 0, fmt.Errorf("the range ends before it begins (%d-%d)", start, end)
+	}
+	return start, end, nil
 }
 
 func (p Params) validate() error {
-	if p.H1 == 0 || p.H2 == 0 || p.H3 == 0 || p.H4 == 0 {
-		return fmt.Errorf("the interface configuration is missing one of H1..H4; all four are required")
-	}
-	// The four header values must differ: they are what tells the four
-	// message types apart, and two the same makes a packet ambiguous.
-	seen := map[uint32]bool{}
-	for _, h := range []uint32{p.H1, p.H2, p.H3, p.H4} {
-		if seen[h] {
-			return fmt.Errorf("H1..H4 must all differ; %d appears twice", h)
+	headers := []struct {
+		name string
+		spec string
+	}{{"H1", p.H1}, {"H2", p.H2}, {"H3", p.H3}, {"H4", p.H4}}
+
+	type span struct{ lo, hi uint64 }
+	spans := make([]span, 0, 4)
+
+	for _, h := range headers {
+		if h.spec == "" {
+			return fmt.Errorf("the interface configuration is missing %s; all four headers are required", h.name)
 		}
-		seen[h] = true
+		lo, hi, err := parseHeader(h.spec)
+		if err != nil {
+			return fmt.Errorf("%s: %w", h.name, err)
+		}
+		spans = append(spans, span{lo, hi})
+	}
+
+	// The four headers are what tell the message types apart, so their
+	// ranges must not meet. A packet whose header falls in an overlap
+	// belongs to two types at once, and the receiver has no way to know
+	// which — a fault that shows up as some handshakes working.
+	for i := 0; i < len(spans); i++ {
+		for j := i + 1; j < len(spans); j++ {
+			if spans[i].lo <= spans[j].hi && spans[j].lo <= spans[i].hi {
+				return fmt.Errorf("%s and %s overlap (%s and %s); each header must cover its own values",
+					headers[i].name, headers[j].name, headers[i].spec, headers[j].spec)
+			}
+		}
 	}
 	if p.Jmin > p.Jmax {
 		return fmt.Errorf("Jmin (%d) is above Jmax (%d)", p.Jmin, p.Jmax)

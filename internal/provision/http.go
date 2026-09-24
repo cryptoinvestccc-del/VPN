@@ -157,10 +157,9 @@ func awgMap(p Params) map[string]string {
 	m := map[string]string{
 		"jc": strconv.Itoa(p.Jc), "jmin": strconv.Itoa(p.Jmin), "jmax": strconv.Itoa(p.Jmax),
 		"s1": strconv.Itoa(p.S1), "s2": strconv.Itoa(p.S2),
-		"h1": strconv.FormatUint(uint64(p.H1), 10),
-		"h2": strconv.FormatUint(uint64(p.H2), 10),
-		"h3": strconv.FormatUint(uint64(p.H3), 10),
-		"h4": strconv.FormatUint(uint64(p.H4), 10),
+		// Passed through as written: a header may be a single value or a
+		// range, and rewriting it as a number would drop the range.
+		"h1": p.H1, "h2": p.H2, "h3": p.H3, "h4": p.H4,
 	}
 	for k, v := range p.Extra {
 		m[k] = v
