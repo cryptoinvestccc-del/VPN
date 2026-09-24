@@ -92,6 +92,7 @@ func testService(t *testing.T, device Device) *Service {
 		Endpoint:        "198.51.100.9:51820",
 		ServerPublicKey: testKey(999),
 		AllowedIPs:      "0.0.0.0/0, ::/0",
+		DNS:             []netip.Addr{netip.MustParseAddr("1.1.1.1")},
 		MTU:             1280,
 		Keepalive:       25,
 		Params:          Params{Jc: 4, Jmin: 40, Jmax: 70, S1: 86, S2: 574, H1: "1", H2: "2", H3: "3", H4: "4"},

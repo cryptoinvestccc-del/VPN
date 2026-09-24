@@ -244,3 +244,71 @@ func TestLimiterForgetsQuietSources(t *testing.T) {
 		t.Errorf("%d sources are still remembered", limiter.Tracked())
 	}
 }
+
+// TestReplyShapeIsPinned writes down the shape of the reply, because the
+// client reading it lives in another language and cannot be checked from
+// here. The two sides were written separately once and drifted: dns is a
+// list, the app read it as a comma-separated string, and the first run
+// on a phone put the literal ["1.1.1.1"] where an address belonged.
+//
+// A field changing type is the kind of break that compiles on both sides
+// and fails on a device, so it is asserted rather than assumed.
+func TestReplyShapeIsPinned(t *testing.T) {
+	h := Handler(testService(t, &fakeDevice{}), NewLimiter(0, 0))
+	rec := post(t, h, `{"public_key":"`+testKey(1)+`"}`, "203.0.113.5:1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+
+	// What each field must be on the wire, named as the app reads it.
+	expect := map[string]string{
+		"address":           "string",
+		"dns":               "list of strings",
+		"mtu":               "number",
+		"server_public_key": "string",
+		"endpoint":          "string",
+		"allowed_ips":       "string",
+		"keepalive":         "number",
+		"awg":               "object of strings",
+	}
+
+	for field, want := range expect {
+		value, present := raw[field]
+		if !present {
+			t.Errorf("%s is missing from the reply", field)
+			continue
+		}
+		if got := shapeOf(value); got != want {
+			t.Errorf("%s is %s, the app expects %s", field, got, want)
+		}
+	}
+}
+
+func shapeOf(v any) string {
+	switch t := v.(type) {
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case []any:
+		for _, e := range t {
+			if _, ok := e.(string); !ok {
+				return "list of something else"
+			}
+		}
+		return "list of strings"
+	case map[string]any:
+		for _, e := range t {
+			if _, ok := e.(string); !ok {
+				return "object of something else"
+			}
+		}
+		return "object of strings"
+	}
+	return "unknown"
+}

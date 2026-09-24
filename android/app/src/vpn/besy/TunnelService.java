@@ -101,10 +101,8 @@ public final class TunnelService extends VpnService {
             builder.addRoute(r[0], r.length > 1 ? Integer.parseInt(r[1]) : 0);
         }
 
-        String dns = issued.optString("dns", "");
-        for (String server : dns.split(",")) {
-            server = server.trim();
-            if (!server.isEmpty()) builder.addDnsServer(server);
+        for (String server : dnsServers(issued)) {
+            builder.addDnsServer(server);
         }
 
         // The engine's own socket must not be sent through the tunnel it
@@ -167,6 +165,35 @@ public final class TunnelService extends VpnService {
         // The engine only returns when the tunnel is over.
         state = GlassView.STATE_OFF;
         stopTunnel();
+    }
+
+    /**
+     * Reads the DNS servers, which arrive as a list.
+     *
+     * <p>They were read as a comma-separated string once, and the first
+     * run on a phone put the literal {@code ["1.1.1.1"]} — brackets,
+     * quotes and all — where an address belonged. The two sides of this
+     * reply were written separately and drifted; a string is accepted
+     * here as well so that a future server spelling it either way still
+     * works.
+     */
+    private static java.util.List<String> dnsServers(JSONObject issued) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+
+        org.json.JSONArray list = issued.optJSONArray("dns");
+        if (list != null) {
+            for (int i = 0; i < list.length(); i++) {
+                String server = list.optString(i, "").trim();
+                if (!server.isEmpty()) out.add(server);
+            }
+            return out;
+        }
+
+        for (String server : issued.optString("dns", "").split(",")) {
+            server = server.trim();
+            if (!server.isEmpty()) out.add(server);
+        }
+        return out;
     }
 
     private synchronized void stopTunnel() {
