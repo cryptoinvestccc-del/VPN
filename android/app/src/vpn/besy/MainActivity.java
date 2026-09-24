@@ -8,7 +8,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.Toast;
 
 /**
  * The whole app, as far as a person sees it: one screen, one button.
@@ -28,11 +27,10 @@ public final class MainActivity extends Activity implements GlassView.OnPowerTap
     private final Runnable poll = new Runnable() {
         @Override public void run() {
             view.setState(TunnelService.state);
-            String error = TunnelService.lastError;
-            if (error != null) {
-                TunnelService.lastError = null;
-                Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
-            }
+            // Kept on the screen rather than flashed past: a failure that
+            // happens while the phone is in a pocket has to still be
+            // there when somebody looks.
+            view.setError(TunnelService.lastError);
             handler.postDelayed(this, POLL_MS);
         }
     };
@@ -83,6 +81,10 @@ public final class MainActivity extends Activity implements GlassView.OnPowerTap
     }
 
     private void send(String action) {
+        if (TunnelService.ACTION_CONNECT.equals(action)) {
+            TunnelService.lastError = null;
+            view.setError(null);
+        }
         Intent i = new Intent(this, TunnelService.class).setAction(action);
         startService(i);
         view.setState(TunnelService.ACTION_CONNECT.equals(action)

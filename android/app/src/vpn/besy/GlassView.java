@@ -38,6 +38,7 @@ final class GlassView extends View {
     private final Path  path   = new Path();
 
     private int state = STATE_OFF;
+    private String error;
     private float spin;          // the waiting ring's angle
     private OnPowerTap listener;
 
@@ -57,6 +58,21 @@ final class GlassView extends View {
     }
 
     int getState() { return state; }
+
+    /**
+     * Shows why the last attempt failed, until the next one.
+     *
+     * <p>It was a toast before, which is the wrong shape for this: the
+     * message appears for a few seconds and is gone, and a failure that
+     * happens while the phone is in somebody's pocket leaves nothing
+     * behind. A screen with one button has room to say what went wrong.
+     */
+    void setError(String message) {
+        if (message == null ? error != null : !message.equals(error)) {
+            error = message;
+            invalidate();
+        }
+    }
 
     private float dp(float v) { return v * getResources().getDisplayMetrics().density; }
 
@@ -189,12 +205,12 @@ final class GlassView extends View {
         final String title, sub;
         switch (state) {
             case STATE_LIVE: title = str(R.string.live_title); sub = ""; break;
-            case STATE_BUSY: title = str(R.string.busy_title); sub = str(R.string.busy_key); break;
+            case STATE_BUSY: title = str(R.string.busy_title); sub = TunnelService.stage; break;
             default:         title = str(R.string.idle_title); sub = str(R.string.idle_sub); break;
         }
 
         final float x = dp(22);
-        float y = h - dp(92);
+        float y = h - (error != null && error.length() > 0 ? dp(118) : dp(92));
 
         text.setColor(Palette.INK);
         text.setTextSize(dp(30));
@@ -207,12 +223,50 @@ final class GlassView extends View {
             canvas.drawText(sub, x, y, text);
         }
 
-        text.setColor(Palette.INK_3);
-        text.setTextSize(dp(11.5f));
-        canvas.drawText(str(R.string.key_local), x, h - dp(24), text);
+        if (error != null && error.length() > 0) {
+            text.setColor(Palette.EMBER);
+            text.setTextSize(dp(12.5f));
+            float ey = h - dp(46);
+            for (String piece : wrap(error, w - dp(44), text)) {
+                canvas.drawText(piece, x, ey, text);
+                ey += dp(16);
+            }
+        } else {
+            text.setColor(Palette.INK_3);
+            text.setTextSize(dp(11.5f));
+            canvas.drawText(str(R.string.key_local), x, h - dp(24), text);
+        }
     }
 
     private String str(int id) { return getContext().getString(id); }
+
+    /**
+     * Breaks a message into lines that fit.
+     *
+     * <p>Clipped text is worse than no text: it stops exactly where the
+     * useful part of an error usually begins.
+     */
+    private static java.util.List<String> wrap(String message, float width, Paint paint) {
+        java.util.List<String> lines = new java.util.ArrayList<String>();
+        StringBuilder line = new StringBuilder();
+
+        for (String word : message.split("\\s+")) {
+            String candidate = line.length() == 0 ? word : line + " " + word;
+            if (paint.measureText(candidate) <= width || line.length() == 0) {
+                line.setLength(0);
+                line.append(candidate);
+            } else {
+                lines.add(line.toString());
+                line.setLength(0);
+                line.append(word);
+            }
+            if (lines.size() >= 3) break;
+        }
+        if (line.length() > 0 && lines.size() < 3) {
+            lines.add(line.toString());
+        }
+        return lines;
+    }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (e.getAction() == MotionEvent.ACTION_UP) {

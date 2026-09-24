@@ -44,6 +44,16 @@ public final class TunnelService extends VpnService {
     static volatile int state = GlassView.STATE_OFF;
     static volatile String lastError;
 
+    /**
+     * How far connecting got.
+     *
+     * <p>A one-button app that fails has nothing else to say for itself,
+     * and "nothing happened" is the least useful thing a screen can
+     * show. Naming the step turns a silent failure into one somebody can
+     * act on without a cable and a laptop.
+     */
+    static volatile String stage = "";
+
     private Thread worker;
     private Process engine;
     private ParcelFileDescriptor tun;
@@ -72,7 +82,10 @@ public final class TunnelService extends VpnService {
                     connect();
                 } catch (Throwable t) {
                     Log.e(TAG, "tunnel failed", t);
-                    lastError = t.getMessage();
+                    // Never depend on getMessage(): plenty of exceptions
+                    // carry none, and the screen then said nothing at
+                    // all — which is how this failure first looked.
+                    lastError = describe(t);
                     state = GlassView.STATE_OFF;
                     stopTunnel();
                 }
@@ -81,10 +94,33 @@ public final class TunnelService extends VpnService {
         worker.start();
     }
 
+    /** A description that is never empty, whatever the exception. */
+    private static String describe(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        if (stage != null && stage.length() > 0) {
+            sb.append(stage).append(": ");
+        }
+        String message = t.getMessage();
+        if (message != null && message.trim().length() > 0) {
+            sb.append(message.trim());
+        } else {
+            sb.append(t.getClass().getSimpleName());
+        }
+        Throwable cause = t.getCause();
+        if (cause != null && cause != t) {
+            String c = cause.getMessage();
+            sb.append(" (").append(c != null && c.length() > 0 ? c : cause.getClass().getSimpleName()).append(")");
+        }
+        return sb.toString();
+    }
+
     private void connect() throws Exception {
+        stage = "ключ";
         Keys keys = Keys.load(this);
+        stage = "конфиг";
         JSONObject issued = Provisioning.issue(Provisioning.endpoint(this), keys.publicKey());
 
+        stage = "интерфейс";
         Builder builder = new Builder();
         builder.setSession("BESY");
         builder.setMtu(issued.optInt("mtu", 1280));
@@ -126,6 +162,7 @@ public final class TunnelService extends VpnService {
             throw new IOException("could not hand the interface to the engine", e);
         }
 
+        stage = "движок";
         String config = Uapi.build(keys.privateKey(), issued);
 
         File binary = Engine.binary(this);
@@ -156,13 +193,20 @@ public final class TunnelService extends VpnService {
         while ((line = out.readLine()) != null) {
             if (!up && "ready".equals(line.trim())) {
                 up = true;
+                stage = "";
+                lastError = null;
                 state = GlassView.STATE_LIVE;
             } else {
                 Log.i(TAG, "engine: " + line);
             }
         }
 
-        // The engine only returns when the tunnel is over.
+        // The engine only returns when the tunnel is over. Reaching here
+        // without ever seeing "ready" means it refused the configuration
+        // and said why on the same stream.
+        if (!up && lastError == null) {
+            lastError = "движок вышел, не подняв туннель";
+        }
         state = GlassView.STATE_OFF;
         stopTunnel();
     }
