@@ -45,6 +45,13 @@ public final class TunnelService extends VpnService {
     static volatile String lastError;
 
     /**
+     * Why the tunnel is being stopped on purpose: null while nobody has
+     * asked, empty when the person tapped the button, a sentence when
+     * something else took it away.
+     */
+    private volatile String stopRequested;
+
+    /**
      * How far connecting got.
      *
      * <p>A one-button app that fails has nothing else to say for itself,
@@ -61,6 +68,7 @@ public final class TunnelService extends VpnService {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         final String action = intent == null ? ACTION_CONNECT : String.valueOf(intent.getAction());
         if (ACTION_DISCONNECT.equals(action)) {
+            stopRequested = "";
             stopTunnel();
             stopSelf();
             return START_NOT_STICKY;
@@ -74,6 +82,7 @@ public final class TunnelService extends VpnService {
 
         state = GlassView.STATE_BUSY;
         lastError = null;
+        stopRequested = null;
         startForeground(NOTIFICATION_ID, notification());
 
         worker = new Thread(new Runnable() {
@@ -81,6 +90,17 @@ public final class TunnelService extends VpnService {
                 try {
                     connect();
                 } catch (Throwable t) {
+                    // Stopping kills the engine, and the thread reading
+                    // it then fails with "read interrupted". That is the
+                    // stop working, not a fault, and it used to be shown
+                    // on screen as one.
+                    String reason = stopRequested;
+                    if (reason != null) {
+                        lastError = reason.isEmpty() ? null : reason;
+                        state = GlassView.STATE_OFF;
+                        stopTunnel();
+                        return;
+                    }
                     Log.e(TAG, "tunnel failed", t);
                     // Never depend on getMessage(): plenty of exceptions
                     // carry none, and the screen then said nothing at
@@ -241,7 +261,7 @@ public final class TunnelService extends VpnService {
         // The engine only returns when the tunnel is over. Reaching here
         // without ever seeing "ready" means it refused the configuration
         // and said why on the same stream.
-        if (!up) {
+        if (!up && stopRequested == null) {
             StringBuilder why = new StringBuilder("движок: ");
             if (said.isEmpty()) {
                 why.append("вышел молча, не подняв туннель");
@@ -316,11 +336,14 @@ public final class TunnelService extends VpnService {
 
     @Override public void onRevoke() {
         // The system, or another VPN app, took the interface away.
+        stopRequested = "туннель отключила система или другое VPN-приложение";
+        lastError = stopRequested;
         stopTunnel();
         stopSelf();
     }
 
     @Override public void onDestroy() {
+        if (stopRequested == null) stopRequested = "";
         stopTunnel();
         super.onDestroy();
     }

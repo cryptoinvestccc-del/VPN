@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,6 +95,55 @@ func (d *awgDevice) ServerPublicKey(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return provision.ServerPublicKey(out)
+}
+
+// ListenPort reads the UDP port the running interface listens on.
+//
+// It comes from the interface's own line in the dump — name, private
+// key, public key, port — rather than from anything an operator typed.
+// The first installer wrote 51820 into every credential because that is
+// WireGuard's customary port; Amnezia chooses its own, and a phone told
+// the wrong one connects, shows a VPN icon, and carries nothing.
+func (d *awgDevice) ListenPort(ctx context.Context) (int, error) {
+	out, err := d.exec(ctx, "awg", "show", "all", "dump")
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Split(strings.TrimSpace(line), "\t")
+		if len(f) < 4 || (d.iface != "" && f[0] != d.iface) {
+			continue
+		}
+		// The interface's own line comes first for each interface.
+		port, err := strconv.Atoi(f[3])
+		if err != nil || port <= 0 || port > 65535 {
+			return 0, fmt.Errorf("the interface reports no usable listen port (%q)", f[3])
+		}
+		return port, nil
+	}
+	return 0, fmt.Errorf("no interface %q is running in %s", d.iface, d.container)
+}
+
+// PublishedPort asks docker which host port carries the container's UDP
+// port. A container on the host's network has no mapping, and then the
+// port the interface listens on is the one the world sees; that is the
+// false case.
+func (d *awgDevice) PublishedPort(ctx context.Context, port int) (int, bool) {
+	out, err := d.runner(ctx, "docker", "port", d.container, fmt.Sprintf("%d/udp", port))
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		i := strings.LastIndex(line, ":")
+		if i < 0 {
+			continue
+		}
+		if p, err := strconv.Atoi(line[i+1:]); err == nil && p > 0 && p <= 65535 {
+			return p, true
+		}
+	}
+	return 0, false
 }
 
 // Config reads the interface's settings, for the obfuscation parameters

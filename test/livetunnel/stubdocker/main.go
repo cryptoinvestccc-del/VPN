@@ -26,6 +26,16 @@ func main() {
 	case args[0] == "ps":
 		fmt.Println(os.Getenv("STUB_CONTAINER"))
 
+	case args[0] == "port":
+		// docker port <container> <port>/udp. Silent and failing when
+		// STUB_PUBLISHED is unset, as docker is for a container on the
+		// host's network.
+		if p := os.Getenv("STUB_PUBLISHED"); p != "" {
+			fmt.Printf("0.0.0.0:%s\n", p)
+			return
+		}
+		os.Exit(1)
+
 	case args[0] == "exec":
 		// docker exec [-i] <container> <command...>
 		rest := args[1:]
@@ -44,8 +54,15 @@ func command(argv []string) {
 	switch {
 	case strings.HasPrefix(joined, "awg show all dump"):
 		// The interface's own line, then whatever peers have been added.
-		fmt.Printf("%s\t%s\t%s\t51820\t0\n",
-			os.Getenv("STUB_IFACE"), "PRIVATE", os.Getenv("STUB_SERVER_PUBLIC"))
+		// The listen port is whatever the test says, because assuming
+		// 51820 here is exactly how the installer's wrong guess went
+		// unnoticed: the stub agreed with it.
+		port := os.Getenv("STUB_LISTEN_PORT")
+		if port == "" {
+			port = "51820"
+		}
+		fmt.Printf("%s\t%s\t%s\t%s\t0\n",
+			os.Getenv("STUB_IFACE"), "PRIVATE", os.Getenv("STUB_SERVER_PUBLIC"), port)
 		if peers, err := os.ReadFile(os.Getenv("STUB_PEERS")); err == nil {
 			os.Stdout.Write(peers)
 		}

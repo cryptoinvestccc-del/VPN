@@ -273,3 +273,83 @@ func TestSaveFailureKeepsThePeer(t *testing.T) {
 		t.Error("the peer was never added")
 	}
 }
+
+// A dump as awg prints it: the interface's own line first, then a peer.
+const dumpOnPort = "awg0\tPRIVATE=\tPUBLIC=\t34567\toff\n" +
+	"awg0\tPEER=\t(none)\t1.2.3.4:5\t10.8.1.2/32\t0\t0\t0\toff\n"
+
+func TestListenPortComesFromTheServer(t *testing.T) {
+	r := &recordingRunner{out: map[string]string{"awg show all dump": dumpOnPort}}
+	d := testDevice(r)
+	d.iface = "awg0"
+	got, err := d.ListenPort(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 34567 {
+		t.Errorf("read port %d, the server listens on 34567", got)
+	}
+}
+
+func TestPublishedPortReadsDockersMapping(t *testing.T) {
+	r := &recordingRunner{out: map[string]string{"port amnezia-awg2 34567/udp": "0.0.0.0:40000\n[::]:40000\n"}}
+	got, ok := testDevice(r).PublishedPort(context.Background(), 34567)
+	if !ok || got != 40000 {
+		t.Errorf("got %d, %v; docker maps 34567/udp to 40000", got, ok)
+	}
+	if want := "docker port amnezia-awg2 34567/udp"; r.last() != want {
+		t.Errorf("ran %q, want %q", r.last(), want)
+	}
+
+	// Host networking: docker has no mapping to report.
+	none := &recordingRunner{err: errors.New("no public port")}
+	if _, ok := testDevice(none).PublishedPort(context.Background(), 34567); ok {
+		t.Error("reported a mapping where docker has none")
+	}
+}
+
+type fakePorts struct {
+	listen    int
+	listenErr error
+	published int
+}
+
+func (f fakePorts) ListenPort(context.Context) (int, error) { return f.listen, f.listenErr }
+func (f fakePorts) PublishedPort(context.Context, int) (int, bool) {
+	return f.published, f.published > 0
+}
+
+// TestClientsAreToldThePortTheServerUses is the failure a phone met: a
+// VPN that came up and carried nothing, because every credential said
+// 51820 and the server was listening somewhere else.
+func TestClientsAreToldThePortTheServerUses(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name  string
+		ports fakePorts
+		flag  string
+		want  string
+	}{
+		{"the installer's guess was wrong", fakePorts{listen: 34567}, "besyvpn.online:51820", "besyvpn.online:34567"},
+		{"docker maps it to another port", fakePorts{listen: 34567, published: 40000}, "besyvpn.online:51820", "besyvpn.online:40000"},
+		{"the guess happened to be right", fakePorts{listen: 51820}, "besyvpn.online:51820", "besyvpn.online:51820"},
+		{"the server cannot say", fakePorts{listenErr: errors.New("no dump")}, "besyvpn.online:51820", "besyvpn.online:51820"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, note, err := resolveEndpoint(ctx, c.ports, c.flag)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Errorf("clients would be told %s, want %s (%s)", got, c.want, note)
+			}
+			if note == "" {
+				t.Error("the decision was not logged")
+			}
+		})
+	}
+	if _, _, err := resolveEndpoint(ctx, fakePorts{listen: 1}, "no-port-here"); err == nil {
+		t.Error("an endpoint without a port was accepted")
+	}
+}

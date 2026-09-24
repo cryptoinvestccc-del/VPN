@@ -53,6 +53,24 @@ H4 = 2132725960-2145482467
 // Everything before those is here, so a broken step is found without
 // anybody installing anything.
 func TestWholePathWithoutAPhone(t *testing.T) {
+	wholePath(t, 51820, "127.0.0.1:51820", "127.0.0.1:51820")
+}
+
+// TestTheCredentialPointsAtTheRealPort is the failure a phone met after
+// everything else worked: the VPN came up and carried nothing. The
+// installer wrote 51820 into -endpoint because that is WireGuard's usual
+// port; Amnezia listens wherever it chose. Here the server listens on
+// 34567 while -endpoint still says 51820, and the tunnel must work
+// anyway, because the service asks the server which port it uses.
+func TestTheCredentialPointsAtTheRealPort(t *testing.T) {
+	wholePath(t, 34567, "127.0.0.1:51820", "127.0.0.1:34567")
+}
+
+// wholePath runs everything the app does, in order: the server listens
+// on serverPort, the service is started with -endpoint flagEndpoint, and
+// the credential handed out must say wantEndpoint.
+func wholePath(t *testing.T, serverPort int, flagEndpoint, wantEndpoint string) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("brings up a tunnel; skipped in short mode")
 	}
@@ -78,9 +96,10 @@ func TestWholePathWithoutAPhone(t *testing.T) {
 	addr := "127.0.0.1:9187"
 	cmd := exec.Command(provision,
 		"-listen", addr,
-		"-endpoint", "127.0.0.1:51820",
+		"-endpoint", flagEndpoint,
 		"-subnet", "10.8.1.0/24")
 	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("STUB_LISTEN_PORT=%d", serverPort),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"STUB_CONTAINER=amnezia-awg2",
 		"STUB_IFACE=awg0",
@@ -121,8 +140,12 @@ func TestWholePathWithoutAPhone(t *testing.T) {
 		}
 	}
 
+	if issuedConfig.Endpoint != wantEndpoint {
+		t.Fatalf("the credential says %s; the server is on %s", issuedConfig.Endpoint, wantEndpoint)
+	}
+
 	t.Log("5. standing up the server the credential points at")
-	serverNet, serverDev := startServer(t, serverPriv, peersFile)
+	serverNet, serverDev := startServerOn(t, serverPriv, peersFile, serverPort)
 	defer serverDev.Close()
 	_ = serverNet
 
@@ -153,7 +176,7 @@ func TestWholePathWithoutAPhone(t *testing.T) {
 
 // startServer runs an AmneziaWG device holding the private key the
 // provisioning service advertised, with the peers it handed out.
-func startServer(t *testing.T, privateKey, peersFile string) (*netstack.Net, *device.Device) {
+func startServerOn(t *testing.T, privateKey, peersFile string, port int) (*netstack.Net, *device.Device) {
 	t.Helper()
 
 	tun, tnet, err := netstack.CreateNetTUN(
@@ -170,7 +193,7 @@ func startServer(t *testing.T, privateKey, peersFile string) (*netstack.Net, *de
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Fprintf(&b, "private_key=%s\nlisten_port=51820\n", key)
+	fmt.Fprintf(&b, "private_key=%s\nlisten_port=%d\n", key, port)
 	// The same obfuscation the stub reports, so the client's copy of it
 	// is what is actually being checked.
 	for _, line := range strings.Split(strings.TrimSpace(realShowconf), "\n") {

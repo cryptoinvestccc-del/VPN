@@ -95,3 +95,70 @@ func appResolve(t *testing.T, jvm desktop, endpoint string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// TestTheEngineSaysWhenNobodyAnswers is the phone's last failure seen
+// from the engine's side: the tunnel came up, Android showed a VPN icon,
+// the app said "connected", and nothing went anywhere, because nothing
+// was listening where the credential pointed.
+//
+// The engine now says ready only after a handshake, and when none comes
+// it says what it saw instead.
+func TestTheEngineSaysWhenNobodyAnswers(t *testing.T) {
+	qemu, engine := shippedEngine(t)
+	if os.Geteuid() != 0 {
+		t.Skip("creating a tun device needs root")
+	}
+
+	name := fmt.Sprintf("@besy-silent-%d-%d", os.Getpid(), time.Now().UnixNano())
+	listener, err := net.Listen("unix", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	tunFile := openTun(t, "besysilent")
+	defer tunFile.Close()
+
+	priv, _ := mustKeypair(t)
+	_, serverPub := mustKeypair(t)
+	uapi, err := buildUAPI(priv, &issued{
+		ServerPublicKey: serverPub,
+		// A port with nobody on it: what every credential said while
+		// the installer's guess of 51820 was in force.
+		Endpoint:   "127.0.0.1:9",
+		AllowedIPs: "0.0.0.0/0",
+		Keepalive:  25,
+		Awg:        awgFromShowconf(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(qemu, engine, "run")
+	cmd.Env = append(os.Environ(), "WG_TUN_SOCKET="+name)
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	}()
+	sendTunnel(t, listener, tunFile, uapi)
+
+	said, err := readAll(out, 60*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(said, "ready") {
+		t.Fatalf("the engine said ready with nobody on the other end:\n%s", said)
+	}
+	if !strings.Contains(said, "did not answer") || !strings.Contains(said, "received 0") {
+		t.Errorf("the engine gave up without saying what it saw:\n%s", said)
+	}
+	t.Logf("   %s", firstLine(strings.TrimSpace(said)))
+}

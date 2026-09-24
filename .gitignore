@@ -7,3 +7,7 @@
 *.pid
 *.profile
 /dist/
+dist/
+/besy-provision
+cmd/besy-provision/besy-provision
+android/awg/awg

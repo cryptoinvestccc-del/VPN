@@ -27,8 +27,10 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/amnezia-vpn/amneziawg-go/device"
 	"github.com/amnezia-vpn/amneziawg-go/tun"
@@ -158,9 +160,14 @@ func run() error {
 		return fmt.Errorf("bringing the tunnel up: %w", err)
 	}
 
-	// Ready is printed once the tunnel is actually carrying traffic, so
-	// the app can stop saying "connecting" on evidence rather than on a
-	// timer.
+	// Ready means the server answered, not that this process started.
+	// It used to be printed straight after Up, and the app then said
+	// "connected" over a tunnel nobody was on the other end of: a phone
+	// showed the VPN icon and carried nothing. Now it waits for a
+	// completed handshake, and says plainly when there is none.
+	if err := awaitHandshake(dev, handshakeWait); err != nil {
+		return err
+	}
 	fmt.Println("ready")
 
 	stop := make(chan os.Signal, 1)
@@ -171,6 +178,68 @@ func run() error {
 	case <-dev.Wait():
 	}
 	return nil
+}
+
+// handshakeWait covers several of the handshake's own retries, which
+// come every five seconds, so a slow first packet on a mobile network is
+// not mistaken for a server that is not there.
+const handshakeWait = 25 * time.Second
+
+// awaitHandshake returns once the server has answered, or explains what
+// was seen if it never did.
+//
+// The explanation is the point. "Sent 1480 bytes, received 0" means the
+// packets left the phone and nothing came back — a wrong port, a server
+// that does not know this key, or obfuscation that does not match —
+// which is a different problem from not being able to send at all.
+func awaitHandshake(dev *device.Device, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for {
+		state, err := dev.IpcGet()
+		if err != nil {
+			return fmt.Errorf("reading the tunnel's state: %w", err)
+		}
+		st := parseState(state)
+		if st.handshake > 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("the server at %s did not answer in %s: sent %d bytes, received %d. "+
+				"Packets are leaving this phone and nothing is coming back — "+
+				"check the server's port, that it knows this key, and that its obfuscation matches",
+				st.endpoint, within, st.tx, st.rx)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+type tunnelState struct {
+	endpoint  string
+	handshake int64
+	tx, rx    int64
+}
+
+// parseState reads the few fields of the UAPI dump this needs.
+func parseState(dump string) tunnelState {
+	var st tunnelState
+	for _, line := range strings.Split(dump, "\n") {
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		n, _ := strconv.ParseInt(v, 10, 64)
+		switch k {
+		case "endpoint":
+			st.endpoint = v
+		case "last_handshake_time_sec":
+			st.handshake = n
+		case "tx_bytes":
+			st.tx += n
+		case "rx_bytes":
+			st.rx += n
+		}
+	}
+	return st
 }
 
 // receive collects the tunnel descriptor and the configuration from the

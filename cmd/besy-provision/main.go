@@ -28,6 +28,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -125,6 +126,14 @@ func run(o runOptions) error {
 	if err != nil {
 		return err
 	}
+	endpoint, note, err := resolveEndpoint(ctx, device, o.endpoint)
+	if err != nil {
+		return err
+	}
+	if note != "" {
+		log.Printf("besy-provision: %s", note)
+	}
+
 	conf, err := device.Config(ctx, o.confPath)
 	if err != nil {
 		return err
@@ -150,7 +159,7 @@ func run(o runOptions) error {
 	}
 
 	settings := provision.Settings{
-		Endpoint:        o.endpoint,
+		Endpoint:        endpoint,
 		ServerPublicKey: serverKey,
 		DNS:             parseDNS(o.dns),
 		AllowedIPs:      o.allowed,
@@ -357,4 +366,43 @@ const errMissingEndpoint = simpleError("-endpoint is required: it is the address
 
 func errBadEndpoint(addr string) error {
 	return simpleError("-endpoint " + addr + " is not host:port")
+}
+
+// resolveEndpoint decides the address clients are told to connect to:
+// the host from -endpoint, and the port the server is actually reachable
+// on.
+//
+// The port used to come from the flag alone, and the installer filled
+// the flag with 51820 on the strength of that being WireGuard's usual
+// port. Amnezia picks its own. Every credential then pointed at a port
+// nothing listened on, and the symptom on a phone was a VPN that came up
+// and carried no traffic at all — the least informative failure there
+// is. So the server is asked, and the flag's port is kept only when the
+// server cannot say.
+func resolveEndpoint(ctx context.Context, d interface {
+	ListenPort(context.Context) (int, error)
+	PublishedPort(context.Context, int) (int, bool)
+}, flagEndpoint string) (string, string, error) {
+	host, flagPort, err := net.SplitHostPort(flagEndpoint)
+	if err != nil {
+		return "", "", errBadEndpoint(flagEndpoint)
+	}
+
+	listen, err := d.ListenPort(ctx)
+	if err != nil {
+		return flagEndpoint, "could not read the listen port (" + err.Error() +
+			"); telling clients " + flagEndpoint + " as given", nil
+	}
+	actual := listen
+	if published, ok := d.PublishedPort(ctx, listen); ok {
+		actual = published
+	}
+
+	port := strconv.Itoa(actual)
+	endpoint := net.JoinHostPort(host, port)
+	if port == flagPort {
+		return endpoint, "clients connect to " + endpoint, nil
+	}
+	return endpoint, "the server listens on port " + port + ", not " + flagPort +
+		" as -endpoint says; telling clients " + endpoint, nil
 }
