@@ -137,7 +137,7 @@ public final class TunnelService extends VpnService {
             builder.addRoute(r[0], r.length > 1 ? Integer.parseInt(r[1]) : 0);
         }
 
-        for (String server : dnsServers(issued)) {
+        for (String server : Reply.dnsServers(issued)) {
             builder.addDnsServer(server);
         }
 
@@ -181,7 +181,7 @@ public final class TunnelService extends VpnService {
 
             engine = pb.start();
 
-            LocalSocket peer = listener.accept();
+            LocalSocket peer = acceptOurOwn(listener);
             try {
                 peer.setFileDescriptorsForSend(
                         new FileDescriptor[] { tun.getFileDescriptor() });
@@ -263,24 +263,36 @@ public final class TunnelService extends VpnService {
      * here as well so that a future server spelling it either way still
      * works.
      */
-    private static java.util.List<String> dnsServers(JSONObject issued) {
-        java.util.List<String> out = new java.util.ArrayList<String>();
-
-        org.json.JSONArray list = issued.optJSONArray("dns");
-        if (list != null) {
-            for (int i = 0; i < list.length(); i++) {
-                String server = list.optString(i, "").trim();
-                if (!server.isEmpty()) out.add(server);
+    /**
+     * Accepts until the caller is this app, closing anyone else.
+     *
+     * <p>A socket in the abstract namespace has no owner and no
+     * permissions: any app on the phone may connect to a name it can
+     * guess. What travels on this one is the tunnel descriptor and the
+     * private key, so the caller is checked before a single byte is
+     * written. The kernel fills the credentials in when the connection
+     * is made and neither side can forge them.
+     */
+    private static LocalSocket acceptOurOwn(LocalServerSocket listener) throws IOException {
+        int mine = android.os.Process.myUid();
+        for (int attempt = 0; attempt < 8; attempt++) {
+            LocalSocket peer = listener.accept();
+            int theirs;
+            try {
+                theirs = peer.getPeerCredentials().getUid();
+            } catch (IOException e) {
+                peer.close();
+                continue;
             }
-            return out;
+            if (theirs == mine) {
+                return peer;
+            }
+            Log.w(TAG, "refused a connection from uid " + theirs);
+            peer.close();
         }
-
-        for (String server : issued.optString("dns", "").split(",")) {
-            server = server.trim();
-            if (!server.isEmpty()) out.add(server);
-        }
-        return out;
+        throw new IOException("something else on this phone kept answering for the engine");
     }
+
 
     private synchronized void stopTunnel() {
         if (engine != null) {

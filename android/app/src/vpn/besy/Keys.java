@@ -48,13 +48,23 @@ final class Keys {
         }
 
         Keys made = generate(context);
-        prefs.edit().putString(PRIVATE, made.privateKey).putString(PUBLIC, made.publicKey).apply();
+        // Written now, not eventually. apply() returns before the file
+        // is on disk, and a process killed in that window comes back
+        // without a key, generates another one, and leaves the old peer
+        // on the server to sit there until it expires. This runs off the
+        // main thread, so waiting for the write costs nothing.
+        if (!prefs.edit()
+                .putString(PRIVATE, made.privateKey)
+                .putString(PUBLIC, made.publicKey)
+                .commit()) {
+            throw new IOException("the key could not be stored");
+        }
         return made;
     }
 
     /** Forgets the key, so the next connection starts as a new device. */
     static void forget(Context context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply();
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit();
     }
 
     private static Keys generate(Context context) throws IOException {

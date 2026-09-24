@@ -33,14 +33,7 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 	if testing.Short() {
 		t.Skip("brings up a tunnel; skipped in short mode")
 	}
-	qemu, err := exec.LookPath("qemu-aarch64-static")
-	if err != nil {
-		t.Skip("no aarch64 emulation on this machine")
-	}
-	engine := abs(t, "../../android/app/jni/arm64-v8a/libawg.so")
-	if _, err := os.Stat(engine); err != nil {
-		t.Skipf("the engine has not been built: %v", err)
-	}
+	qemu, engine := shippedEngine(t)
 	if os.Geteuid() != 0 {
 		t.Skip("creating a tun device needs root")
 	}

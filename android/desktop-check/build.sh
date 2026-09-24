@@ -19,8 +19,12 @@ fi
 
 rm -rf "$out"
 mkdir -p "$out"
-javac -nowarn -d "$out" -cp "$jar" \
+javac -nowarn -d "$out" -cp "$jar:$here/../.toolchain/android.jar" \
 	"$here/android/util/Base64.java" \
+	"$here/stub/vpn/besy/R.java" \
 	"$here/../app/src/vpn/besy/Uapi.java" \
-	"$here/CrossCheck.java"
+	"$here/../app/src/vpn/besy/Reply.java" \
+	"$here/../app/src/vpn/besy/Provisioning.java" \
+	"$here/CrossCheck.java" \
+	"$here/ReplyCheck.java"
 echo "    classes in ${out#"$here/../"}"

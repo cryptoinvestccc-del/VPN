@@ -192,6 +192,15 @@ func receive(addr string) (int, string, error) {
 		return -1, "", fmt.Errorf("%s is not a unix socket", addr)
 	}
 
+	// Whoever is on the other end must be the app itself. A socket in
+	// the abstract namespace has no owner and no permissions: anything
+	// on the phone may listen on a name, and a tunnel descriptor handed
+	// to the wrong listener is somebody else's tunnel. The kernel knows
+	// who it is, so ask.
+	if err := sameUser(uc); err != nil {
+		return -1, "", err
+	}
+
 	buf := make([]byte, 4096)
 	oob := make([]byte, syscall.CmsgSpace(4))
 	n, oobn, _, _, err := uc.ReadMsgUnix(buf, oob)
@@ -227,6 +236,32 @@ func receive(addr string) (int, string, error) {
 		return -1, "", fmt.Errorf("reading the configuration: %w", err)
 	}
 	return fd, normalise(string(buf[:n]) + string(rest)), nil
+}
+
+// sameUser refuses a peer that is not the user this process runs as.
+//
+// SO_PEERCRED is filled in by the kernel when the connection is made and
+// cannot be set by either side, so it says who the peer is rather than
+// who it claims to be.
+func sameUser(c *net.UnixConn) error {
+	raw, err := c.SyscallConn()
+	if err != nil {
+		return fmt.Errorf("inspecting the connection: %w", err)
+	}
+	var cred *unix.Ucred
+	var credErr error
+	if err := raw.Control(func(fd uintptr) {
+		cred, credErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+	}); err != nil {
+		return fmt.Errorf("inspecting the connection: %w", err)
+	}
+	if credErr != nil {
+		return fmt.Errorf("asking who is on the other end: %w", credErr)
+	}
+	if mine := uint32(os.Getuid()); cred.Uid != mine {
+		return fmt.Errorf("the socket belongs to user %d, not to this app (%d); refusing to hand over the tunnel", cred.Uid, mine)
+	}
+	return nil
 }
 
 // normalise drops anything after a blank line, so a configuration

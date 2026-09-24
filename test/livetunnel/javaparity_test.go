@@ -69,7 +69,7 @@ func TestAppAndHarnessAgree(t *testing.T) {
 				t.Fatalf("the harness could not build a configuration: %v", err)
 			}
 
-			cmd := exec.Command("java", "-cp", jvm.classes+":"+jvm.json, "CrossCheck", privateKey, file)
+			cmd := exec.Command("java", "-cp", jvm.cp(), "CrossCheck", privateKey, file)
 			// Stdout only: the JVM prints a line about its own
 			// options to stderr, which is not part of the answer.
 			var stderr strings.Builder
@@ -131,7 +131,7 @@ func appUAPI(t *testing.T, privateKey string, reply *issued) (string, bool) {
 	if err := os.WriteFile(file, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("java", "-cp", jvm.classes+":"+jvm.json, "CrossCheck", privateKey, file)
+	cmd := exec.Command("java", "-cp", jvm.cp(), "CrossCheck", privateKey, file)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -142,18 +142,28 @@ func appUAPI(t *testing.T, privateKey string, reply *issued) (string, bool) {
 }
 
 // desktopClasses locates what android/desktop-check/build.sh produced.
-type desktop struct{ classes, json string }
+type desktop struct{ classes, json, android string }
 
 func desktopClasses() (desktop, bool) {
 	d := desktop{
 		classes: "../../android/.build-desktop",
 		json:    "../../android/.toolchain/json.jar",
+		// Only for class resolution: Provisioning names Context in a
+		// signature. Nothing in these stubs is ever called.
+		android: "../../android/.toolchain/android.jar",
 	}
 	if _, err := os.Stat(filepath.Join(d.classes, "vpn", "besy", "Uapi.class")); err != nil {
 		return desktop{}, false
 	}
-	if _, err := os.Stat(d.json); err != nil {
-		return desktop{}, false
+	for _, jar := range []string{d.json, d.android} {
+		if _, err := os.Stat(jar); err != nil {
+			return desktop{}, false
+		}
 	}
 	return d, true
+}
+
+// cp is the classpath: the app's classes, then the jars they name.
+func (d desktop) cp() string {
+	return strings.Join([]string{d.classes, d.json, d.android}, ":")
 }
