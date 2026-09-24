@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,6 +56,7 @@ func main() {
 		rate      = flag.Float64("rate", provision.DefaultIssueRate, "sustained requests per second from one source address")
 		burst     = flag.Float64("burst", provision.DefaultIssueBurst, "requests one source may make at once")
 		forwarded = flag.Bool("trust-forwarded-for", false, "honour X-Forwarded-For; only with a proxy in front, never when exposed directly")
+		persistTo = flag.String("persist-conf", "", "write the peer list to this path inside the container; empty lets awg-quick choose")
 		persist   = flag.Bool("persist", false, "run 'awg-quick save' after each change so credentials survive a restart")
 		certFile  = flag.String("cert", "", "TLS certificate; with -key, serves HTTPS and prints the pin clients must carry")
 		keyFile   = flag.String("key", "", "TLS private key")
@@ -68,7 +70,8 @@ func main() {
 		allowed: *allowed, mtu: *mtu, keepalive: *keepalive, maxPeers: *maxPeers,
 		ttl: *ttl, grace: *grace, sweep: *sweep, rate: *rate, burst: *burst,
 		forwarded: *forwarded, persist: *persist, check: *check,
-		certFile: *certFile, keyFile: *keyFile,
+		persistTo: *persistTo,
+		certFile:  *certFile, keyFile: *keyFile,
 	}); err != nil {
 		log.Fatalf("besy-provision: %v", err)
 	}
@@ -83,6 +86,7 @@ type runOptions struct {
 	rate, burst                        float64
 	forwarded, persist, check          bool
 	certFile, keyFile                  string
+	persistTo                          string
 }
 
 func run(o runOptions) error {
@@ -106,6 +110,7 @@ func run(o runOptions) error {
 		log.Printf("besy-provision: using container %s", container)
 	}
 	device := newAWGDevice(container, o.iface, 10*time.Second)
+	device.saveConf = o.persistTo
 
 	if o.iface == "" {
 		name, err := device.InterfaceName(ctx)
@@ -303,18 +308,44 @@ func persistAfterWrites(device *awgDevice, on bool) provision.Device {
 
 type saving struct{ *awgDevice }
 
+// AddPeer adds the peer, then tries to make it survive a restart.
+//
+// A failure to save is reported and not returned. The peer is already in
+// the interface by then, so returning an error would tell the client it
+// got nothing while the server keeps a credential nobody can use — an
+// address spent, and a peer left behind on every attempt. The client's
+// tunnel works either way; whether it survives a reboot is the
+// operator's problem, and the log is where an operator looks.
 func (s saving) AddPeer(ctx context.Context, key string, addr netip.Prefix) error {
 	if err := s.awgDevice.AddPeer(ctx, key, addr); err != nil {
 		return err
 	}
-	return s.awgDevice.Save(ctx)
+	s.trySave(ctx, "after adding a peer")
+	return nil
 }
 
 func (s saving) RemovePeer(ctx context.Context, key string) error {
 	if err := s.awgDevice.RemovePeer(ctx, key); err != nil {
 		return err
 	}
-	return s.awgDevice.Save(ctx)
+	s.trySave(ctx, "after withdrawing a peer")
+	return nil
+}
+
+// saveWarning fires once. A line per issued credential would bury the
+// rest of the log, and the second occurrence says nothing the first did
+// not.
+var saveWarning sync.Once
+
+func (s saving) trySave(ctx context.Context, when string) {
+	if err := s.awgDevice.Save(ctx); err != nil {
+		saveWarning.Do(func() {
+			log.Printf("besy-provision: could not save the peer list %s: %v", when, err)
+			log.Print("besy-provision: credentials work now but will be lost when the server restarts. " +
+				"Point -persist-conf at the file this install actually uses, or run without -persist " +
+				"and accept that clients re-provision after a reboot.")
+		})
+	}
 }
 
 type simpleError string

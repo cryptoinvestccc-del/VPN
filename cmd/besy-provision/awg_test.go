@@ -16,12 +16,22 @@ type recordingRunner struct {
 	calls [][]string
 	out   map[string]string
 	err   error
+
+	// failOn makes only the commands containing this fragment fail, so a
+	// test can break one step of a sequence rather than all of them.
+	failOn string
 }
 
 func (r *recordingRunner) run(_ context.Context, name string, args ...string) ([]byte, error) {
 	r.calls = append(r.calls, append([]string{name}, args...))
 	if r.err != nil {
 		return nil, r.err
+	}
+	if r.failOn != "" && strings.Contains(strings.Join(args, " "), r.failOn) {
+		return nil, errors.New("command failed: " + r.failOn)
+	}
+	if r.failOn != "" && strings.Contains(strings.Join(args, " "), r.failOn) {
+		return nil, errors.New("command failed: " + r.failOn)
 	}
 	for fragment, out := range r.out {
 		if strings.Contains(strings.Join(args, " "), fragment) {
@@ -237,5 +247,29 @@ func TestInterfaceNameComesFromTheServer(t *testing.T) {
 	}
 	if name != "awg0" {
 		t.Errorf("got %q, want awg0", name)
+	}
+}
+
+// TestSaveFailureKeepsThePeer is the fix for a fault the first real
+// deployment produced: awg-quick save wanted a config file that install
+// does not have, the error came back from AddPeer, and the client was
+// told it got nothing — while the peer sat in the interface holding an
+// address. Every attempt left another one behind.
+func TestSaveFailureKeepsThePeer(t *testing.T) {
+	r := &recordingRunner{failOn: "awg-quick"}
+	device := persistAfterWrites(testDevice(r), true)
+
+	if err := device.AddPeer(context.Background(), "K=", netip.MustParsePrefix("10.8.1.2/32")); err != nil {
+		t.Fatalf("a failed save lost the peer: %v", err)
+	}
+
+	var added bool
+	for _, call := range r.calls {
+		if strings.Contains(strings.Join(call, " "), "awg set") {
+			added = true
+		}
+	}
+	if !added {
+		t.Error("the peer was never added")
 	}
 }

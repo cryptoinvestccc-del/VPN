@@ -26,6 +26,12 @@ type awgDevice struct {
 	iface     string
 	timeout   time.Duration
 
+	// saveConf is where the peer list is written so it survives a
+	// restart. Empty lets awg-quick choose, which works only when the
+	// install keeps its configuration where awg-quick expects it — the
+	// first one this met did not.
+	saveConf string
+
 	// runner is swapped in tests. In production it is exec.
 	runner func(ctx context.Context, name string, args ...string) ([]byte, error)
 }
@@ -143,8 +149,41 @@ func (d *awgDevice) InterfaceName(ctx context.Context) (string, error) {
 // Amnezia install persists its configuration is not something this code
 // can verify from here; see the warning in main.
 func (d *awgDevice) Save(ctx context.Context) error {
-	_, err := d.exec(ctx, "awg-quick", "save", d.iface)
-	return err
+	if d.saveConf == "" {
+		_, err := d.exec(ctx, "awg-quick", "save", d.iface)
+		return err
+	}
+
+	// Writing the file directly rather than through awg-quick, which
+	// insists the configuration already sit where it expects. What the
+	// interface is running is the thing worth keeping, and showconf
+	// prints exactly that.
+	conf, err := d.exec(ctx, "awg", "showconf", d.iface)
+	if err != nil {
+		return err
+	}
+	if len(conf) == 0 {
+		return fmt.Errorf("showconf returned nothing for %s", d.iface)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, d.timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", d.container,
+		"sh", "-c", "cat > "+shellQuote(d.saveConf))
+	cmd.Stdin = bytes.NewReader(conf)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("writing %s: %w: %s", d.saveConf, err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// shellQuote wraps a path for the one place a shell is unavoidable:
+// redirecting output inside the container.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // findContainer picks Amnezia's AmneziaWG container when the operator
