@@ -30,7 +30,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/amnezia-vpn/amneziawg-go/conn"
 	"github.com/amnezia-vpn/amneziawg-go/device"
 	"github.com/amnezia-vpn/amneziawg-go/tun"
 	"golang.org/x/crypto/curve25519"
@@ -149,7 +148,7 @@ func run() error {
 	logger := device.NewLogger(logLevel, "awg: ")
 	logger.Verbosef("attached to %s", name)
 
-	dev := device.NewDevice(tunDevice, conn.NewStdNetBind(), logger)
+	dev := device.NewDevice(tunDevice, newPhoneBind(), logger)
 	defer dev.Close()
 
 	if err := dev.IpcSet(config); err != nil {

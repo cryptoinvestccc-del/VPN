@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -31,6 +32,31 @@ import (
 // directory. The engine itself, the configuration the app builds, the
 // obfuscation, the handshake and the traffic are all covered here.
 func TestShippedEngineCarriesTraffic(t *testing.T) {
+	shippedTunnel(t, "besyarm")
+}
+
+// TestShippedEngineUnderAndroidRules runs the same tunnel with Android
+// 11's netlink rule in force: bind() on a netlink socket is refused.
+//
+// A desktop kernel allows that bind, which is how an engine that relied
+// on it passed the test above and then stopped on a phone with
+// "Unable to update bind: permission denied".
+func TestShippedEngineUnderAndroidRules(t *testing.T) {
+	dir, err := os.MkdirTemp("", "besy-deny")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	deny := filepath.Join(dir, "denynetlink")
+	build(t, deny, ".", "./denynetlink")
+	shippedTunnel(t, "besydeny", deny)
+}
+
+// shippedTunnel brings a tunnel up through the engine that ships in the
+// APK and sends traffic through it. Anything in prefix runs the engine,
+// so a test can put the phone's restrictions around it.
+func shippedTunnel(t *testing.T, iface string, prefix ...string) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("brings up a tunnel; skipped in short mode")
 	}
@@ -40,7 +66,6 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 	}
 
 	const (
-		iface      = "besyarm"
 		clientCIDR = "10.8.1.77/32"
 		serverIP   = "10.8.1.1"
 	)
@@ -105,7 +130,8 @@ func TestShippedEngineCarriesTraffic(t *testing.T) {
 	}
 	defer listener.Close()
 
-	cmd := exec.Command(qemu, engine, "run")
+	argv := append(append([]string{}, prefix...), qemu, engine, "run")
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = append(os.Environ(), "WG_TUN_SOCKET="+name)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
