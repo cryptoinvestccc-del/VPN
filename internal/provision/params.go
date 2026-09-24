@@ -108,19 +108,19 @@ func ParseParams(conf string) (Params, error) {
 			}
 			found++
 		case "h1", "h2", "h3", "h4":
-			n, err := strconv.ParseUint(value, 10, 32)
+			n, err := parseHeader(value)
 			if err != nil {
-				return Params{}, fmt.Errorf("line %d: %s = %q is not a 32-bit number", line, key, value)
+				return Params{}, fmt.Errorf("line %d: %s = %q: %w", line, key, value, err)
 			}
 			switch key {
 			case "h1":
-				p.H1 = uint32(n)
+				p.H1 = n
 			case "h2":
-				p.H2 = uint32(n)
+				p.H2 = n
 			case "h3":
-				p.H3 = uint32(n)
+				p.H3 = n
 			case "h4":
-				p.H4 = uint32(n)
+				p.H4 = n
 			}
 			found++
 		default:
@@ -145,6 +145,25 @@ func ParseParams(conf string) (Params, error) {
 		return Params{}, err
 	}
 	return p, nil
+}
+
+// parseHeader reads one of H1..H4.
+//
+// The value is a 32-bit pattern, and whether a tool prints it signed or
+// unsigned is a choice about formatting rather than about the number:
+// the same bits read as 2730483310 or as -1564484786. Both are accepted
+// and kept as the same pattern, because refusing one of them would make
+// this depend on which tool wrote the configuration.
+func parseHeader(value string) (uint32, error) {
+	value = strings.TrimSpace(value)
+
+	if n, err := strconv.ParseUint(value, 10, 32); err == nil {
+		return uint32(n), nil
+	}
+	if n, err := strconv.ParseInt(value, 10, 32); err == nil {
+		return uint32(n), nil
+	}
+	return 0, fmt.Errorf("not a 32-bit number; `awg showconf` should print one value per header")
 }
 
 func (p Params) validate() error {

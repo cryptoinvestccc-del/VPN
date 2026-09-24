@@ -169,3 +169,27 @@ func TestShowconfPeerSectionIsStillIgnored(t *testing.T) {
 		t.Errorf("Jc = %d; a value from the [Peer] section was used", p.Jc)
 	}
 }
+
+// TestHeaderValuesMayBeSigned: the header is a 32-bit pattern, and
+// whether a tool prints it as 2730483310 or as -1564484786 is a choice
+// about formatting rather than about the number. Refusing one of them
+// would make this depend on which tool wrote the configuration.
+func TestHeaderValuesMayBeSigned(t *testing.T) {
+	conf := strings.Replace(amneziaConf, "H2 = 1457919798", "H2 = -1564484786", 1)
+
+	p, err := ParseParams(conf)
+	if err != nil {
+		t.Fatalf("a signed header value was refused: %v", err)
+	}
+	if p.H2 != uint32(2730482510) {
+		t.Errorf("H2 = %d (%#x); -1564484786 is the same pattern as 2730482510", p.H2, p.H2)
+	}
+	// And the unsigned spelling of the same bits must land identically.
+	same, err := ParseParams(strings.Replace(amneziaConf, "H2 = 1457919798", "H2 = 2730482510", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same.H2 != p.H2 {
+		t.Errorf("the two spellings differ: %d vs %d", same.H2, p.H2)
+	}
+}
