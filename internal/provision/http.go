@@ -139,10 +139,15 @@ func httpError(w http.ResponseWriter, status int, message string) {
 // different address on every request and walk straight past the limit.
 func clientIP(r *http.Request, trustForwarded bool) string {
 	if trustForwarded {
+		// The last entry, not the first. The proxy in front appends the
+		// address it actually saw to whatever the caller sent, so only
+		// the last one was written by something trusted; the first is
+		// whatever the caller chose. Taking the first let one machine
+		// claim a fresh address per request and walk past the limit.
 		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			first, _, _ := strings.Cut(forwarded, ",")
-			if first = strings.TrimSpace(first); first != "" {
-				return first
+			parts := strings.Split(forwarded, ",")
+			if last := strings.TrimSpace(parts[len(parts)-1]); last != "" {
+				return last
 			}
 		}
 	}

@@ -2,6 +2,7 @@ package provision
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -311,4 +312,35 @@ func shapeOf(v any) string {
 		return "object of strings"
 	}
 	return "unknown"
+}
+
+// TestAForgedForwardedForDoesNotBuyMoreRequests is the production setup:
+// nginx with proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for,
+// which appends the real address to whatever the caller sent. Taking the
+// first entry took the caller's own invention, so one machine could
+// present a new address per request, walk past the limit, and fill every
+// slot on the server with keys it generated for the purpose.
+func TestAForgedForwardedForDoesNotBuyMoreRequests(t *testing.T) {
+	const real = "198.51.100.7"
+	var seen = map[string]bool{}
+	for i := 0; i < 5; i++ {
+		r := httptest.NewRequest(http.MethodPost, "/v1/issue", nil)
+		r.RemoteAddr = "127.0.0.1:40000" // nginx, on the same host
+		forged := fmt.Sprintf("203.0.113.%d", i)
+		// What nginx sends on: the caller's header, then the real peer.
+		r.Header.Set("X-Forwarded-For", forged+", "+real)
+		seen[clientIP(r, true)] = true
+	}
+	if len(seen) != 1 || !seen[real] {
+		t.Errorf("five requests from one machine were counted as %v", seen)
+	}
+}
+
+func TestForwardedForFromAnOverwritingProxy(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "/v1/issue", nil)
+	r.RemoteAddr = "127.0.0.1:40000"
+	r.Header.Set("X-Forwarded-For", "198.51.100.7")
+	if got := clientIP(r, true); got != "198.51.100.7" {
+		t.Errorf("got %s", got)
+	}
 }

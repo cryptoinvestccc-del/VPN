@@ -83,7 +83,16 @@ public final class TunnelService extends VpnService {
         state = GlassView.STATE_BUSY;
         lastError = null;
         stopRequested = null;
-        startForeground(NOTIFICATION_ID, notification());
+        // Below Android 14 as it has always run, and as it runs on the
+        // phone this was tested on. From 14 on, a foreground service must
+        // qualify for its declared type at the moment it starts, and
+        // systemExempted is not something to bet a crash on before the
+        // tunnel even exists. The official WireGuard app never calls
+        // startForeground at all: a VPN service the system has bound is
+        // kept alive by the system. From 14 on this does the same.
+        if (Build.VERSION.SDK_INT < 34) {
+            startForeground(NOTIFICATION_ID, notification());
+        }
 
         worker = new Thread(new Runnable() {
             @Override public void run() {
