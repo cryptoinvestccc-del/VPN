@@ -46,9 +46,15 @@ public final class MainActivity extends Activity
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        getWindow().setFlags(
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+        // Under the status bar, which is made transparent, so the light
+        // reaches the top edge. Not under the navigation bar: that used
+        // FLAG_LAYOUT_NO_LIMITS once, which also made Android report no
+        // bottom inset at all, and on a Galaxy A13 the gesture bar's back
+        // arrow sat across the last line of text. The navigation bar gets
+        // the background's own colour instead.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Palette.VOID_);
 
         builtIn = Prefs.language(this);
         view = new GlassView(this);
