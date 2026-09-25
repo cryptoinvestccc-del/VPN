@@ -38,8 +38,12 @@ type Device interface {
 // that removes peers asks this first.
 type Registry interface {
 	Owns(publicKey string) bool
-	Add(ctx context.Context, publicKey string) error
+	// Add records a peer and the hash of the secret its device holds
+	// for removing it later.
+	Add(ctx context.Context, publicKey, secretHash string) error
 	Remove(ctx context.Context, publicKey string) error
+	// SecretHash is what Add recorded, if anything.
+	SecretHash(publicKey string) (string, bool)
 }
 
 type Settings struct {
@@ -173,14 +177,22 @@ func (s *Service) Issue(ctx context.Context, publicKey string) (Config, error) {
 	// Recorded only here, where this service created the peer — not on
 	// the path above that hands back an existing one. Anyone can present
 	// a public key; knowing one must not make its peer ours to remove.
+	cfg := s.configFor(addr)
 	if s.registry != nil {
-		if err := s.registry.Add(ctx, publicKey); err != nil {
+		token, hash, err := newForgetToken()
+		if err == nil {
+			err = s.registry.Add(ctx, publicKey, hash)
+		}
+		if err != nil {
 			// The client is served either way. Unrecorded, the peer is
-			// never withdrawn automatically, which is the safe side.
+			// never withdrawn automatically and cannot be removed by its
+			// device, which is the safe side of both.
 			log.Printf("provision: could not record an issued credential: %v", err)
+		} else {
+			cfg.ForgetToken = token
 		}
 	}
-	return s.configFor(addr), nil
+	return cfg, nil
 }
 
 func (s *Service) configFor(addr netip.Addr) Config {
@@ -197,6 +209,11 @@ func (s *Service) configFor(addr netip.Addr) Config {
 type Config struct {
 	Address  netip.Prefix
 	Settings Settings
+
+	// ForgetToken lets the device that received this configuration have
+	// it removed later. It is handed out once, when the peer is created,
+	// and the server keeps only its hash.
+	ForgetToken string
 }
 
 // ValidatePublicKey checks that a submitted key is what a WireGuard

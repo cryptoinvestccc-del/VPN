@@ -26,6 +26,7 @@ import android.view.View;
 final class GlassView extends View {
 
     interface OnPowerTap { void onPowerTap(); }
+    interface OnSettingsTap { void onSettingsTap(); }
 
     static final int STATE_OFF  = 0;
     static final int STATE_BUSY = 1;
@@ -41,8 +42,13 @@ final class GlassView extends View {
     private String error;
     private float spin;          // the waiting ring's angle
     private OnPowerTap listener;
+    private OnSettingsTap settingsListener;
 
     private float buttonCx, buttonCy, buttonR;
+    private float gearCx, gearCy;
+
+    // What the rows under the button show. Set from the activity.
+    private String address, handshake, server;
 
     GlassView(Context c) {
         super(c);
@@ -52,6 +58,23 @@ final class GlassView extends View {
     }
 
     void setOnPowerTap(OnPowerTap l) { listener = l; }
+    void setOnSettingsTap(OnSettingsTap l) { settingsListener = l; }
+
+    /** The tunnel's address and how long ago the server last answered. */
+    void setInfo(String address, String handshake) {
+        if (!eq(address, this.address) || !eq(handshake, this.handshake)) {
+            this.address = address;
+            this.handshake = handshake;
+            invalidate();
+        }
+    }
+
+    /** One line about the server, shown while disconnected. */
+    void setServer(String line) {
+        if (!eq(line, server)) { server = line; invalidate(); }
+    }
+
+    private static boolean eq(String a, String b) { return a == null ? b == null : a.equals(b); }
 
     void setState(int s) {
         if (state != s) { state = s; invalidate(); }
@@ -88,6 +111,8 @@ final class GlassView extends View {
         drawCore(canvas, w, h);
         drawDrift(canvas, w, h);
         drawButton(canvas);
+        drawGear(canvas, w);
+        drawRows(canvas, w);
         drawReadout(canvas, w, h);
 
         if (state == STATE_BUSY) {
@@ -238,6 +263,75 @@ final class GlassView extends View {
         }
     }
 
+    /**
+     * Settings, top right, below the status bar.
+     *
+     * <p>Drawn as a lobed wheel with a hole: eight teeth with flat tops.
+     * The first version of the mockup drew rays around a circle and was
+     * read as a sun, so the teeth are wide and short.
+     */
+    private void drawGear(Canvas canvas, float w) {
+        int top = (int) dp(24);
+        android.view.WindowInsets insets = getRootWindowInsets();
+        if (insets != null) top = insets.getSystemWindowInsetTop();
+
+        gearCx = w - dp(34);
+        gearCy = top + dp(30);
+        final float outer = dp(11), inner = dp(8.2f);
+
+        path.reset();
+        for (int i = 0; i < 8; i++) {
+            double a = Math.toRadians(i * 45);
+            double[] offs = { -16, -9, 9, 16 };
+            float[] radii = { inner, outer, outer, inner };
+            for (int k = 0; k < 4; k++) {
+                double t = a + Math.toRadians(offs[k]);
+                float x = gearCx + (float) (radii[k] * Math.cos(t));
+                float y = gearCy + (float) (radii[k] * Math.sin(t));
+                if (i == 0 && k == 0) path.moveTo(x, y); else path.lineTo(x, y);
+            }
+        }
+        path.close();
+
+        stroke.setColor(Palette.INK_2);
+        stroke.setStrokeWidth(dp(1.5f));
+        stroke.setStrokeJoin(Paint.Join.ROUND);
+        canvas.drawPath(path, stroke);
+        canvas.drawCircle(gearCx, gearCy, dp(3.2f), stroke);
+        stroke.setStrokeJoin(Paint.Join.MITER);
+    }
+
+    /**
+     * Under the button: the connection's facts while connected, the
+     * server's state while not.
+     */
+    private void drawRows(Canvas canvas, float w) {
+        float y = buttonCy + buttonR + dp(44);
+        final float labelX = w / 2f - dp(120), valueX = w / 2f - dp(10);
+
+        if (state == STATE_LIVE) {
+            String[][] rows = {
+                    { str(R.string.row_protocol), "AmneziaWG" },
+                    { str(R.string.row_handshake), handshake != null ? handshake : str(R.string.handshake_none) },
+                    { str(R.string.row_address), address != null ? address : "—" },
+            };
+            for (String[] row : rows) {
+                text.setTextSize(dp(13));
+                text.setColor(Palette.INK_3);
+                canvas.drawText(row[0], labelX, y, text);
+                text.setColor(Palette.INK_2);
+                canvas.drawText(row[1], valueX, y, text);
+                y += dp(24);
+            }
+        } else if (state == STATE_OFF && server != null) {
+            text.setTextSize(dp(13));
+            text.setColor(Palette.INK_2);
+            text.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText(server, w / 2f, y, text);
+            text.setTextAlign(Paint.Align.LEFT);
+        }
+    }
+
     private String str(int id) { return getContext().getString(id); }
 
     /**
@@ -270,6 +364,13 @@ final class GlassView extends View {
 
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (e.getAction() == MotionEvent.ACTION_UP) {
+            // The gear's target is 48dp across, well past what is drawn.
+            final float gx = e.getX() - gearCx, gy = e.getY() - gearCy;
+            if (gx * gx + gy * gy <= dp(26) * dp(26)) {
+                performClick();
+                if (settingsListener != null) settingsListener.onSettingsTap();
+                return true;
+            }
             final float dx = e.getX() - buttonCx, dy = e.getY() - buttonCy;
             // The hit area is grown past the drawn circle: 48dp is what a
             // finger needs, whatever the design wants to look like.

@@ -12,7 +12,52 @@
   <string name="busy_handshake">рукопожатие</string>
   <string name="live_title">Подключено</string>
   <string name="key_local">Ключ хранится только на этом устройстве</string>
+  <string name="stage_key">ключ</string>
+  <string name="stage_config">конфиг</string>
+  <string name="stage_interface">интерфейс</string>
+  <string name="stage_server">адрес сервера</string>
+  <string name="stage_engine">движок</string>
+  <string name="engine_silent">вышел молча, не подняв туннель</string>
+  <string name="revoked">туннель отключила система или другое VPN-приложение</string>
+  <string name="row_protocol">Протокол</string>
+  <string name="row_handshake">Рукопожатие</string>
+  <string name="row_address">Адрес</string>
+  <string name="handshake_sec" formatted="true">%d с назад</string>
+  <string name="handshake_min" formatted="true">%d мин назад</string>
+  <string name="handshake_none">ещё не было</string>
+  <string name="server_ok" formatted="true">Сервер работает · подключено: %d</string>
+  <string name="server_unreachable">Сервер сейчас не отвечает</string>
   <string name="settings">Настройки</string>
+  <string name="back">Назад</string>
+  <string name="section_app">Приложение</string>
+  <string name="language">Язык</string>
+  <string name="lang_system">Как в системе</string>
+  <string name="lang_ru">Русский</string>
+  <string name="lang_en">English</string>
+  <string name="autoconnect">Подключаться при запуске</string>
+  <string name="autoconnect_sub">когда вы открываете приложение</string>
+  <string name="always_on">Постоянный VPN</string>
+  <string name="always_on_sub">в настройках Android: включать самому и не пускать трафик мимо VPN</string>
+  <string name="section_legal">Правовое</string>
+  <string name="privacy">Конфиденциальность</string>
+  <string name="terms">Условия использования</string>
+  <string name="licenses">Открытый код и лицензии</string>
+  <string name="section_data">Данные</string>
+  <string name="delete">Удалить ключ и данные</string>
+  <string name="delete_sub">с телефона и с сервера</string>
+  <string name="delete_confirm_title">Удалить ключ?</string>
+  <string name="delete_confirm_body">VPN отключится, ключ будет удалён с телефона и с сервера. При следующем включении приложение создаст новый.</string>
+  <string name="delete_yes">Удалить</string>
+  <string name="cancel">Отмена</string>
+  <string name="ok">Понятно</string>
+  <string name="deleting">Удаляем…</string>
+  <string name="deleted_both">Ключ удалён с телефона и с сервера.</string>
+  <string name="deleted_local">Ключ удалён с телефона. С сервера он удалится сам в течение 30 дней без подключений.</string>
+  <string name="deleted_none">Ключа ещё нет — удалять нечего.</string>
+  <string name="section_about">О приложении</string>
+  <string name="version">Версия</string>
+  <string name="server">Сервер</string>
   <!-- Куда приложение обращается за конфигом. Заменить на свой сервер. -->
   <string name="provision_endpoint" translatable="false">https://besyvpn.online/v1/issue</string>
+  <string name="server_host" translatable="false">besyvpn.online</string>
 </resources>

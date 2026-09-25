@@ -1,6 +1,7 @@
 package provision
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // maxRequestBody bounds what a client may send. A public key request is
@@ -36,6 +39,16 @@ type issueResponse struct {
 	// built against a newer AmneziaWG than this server knows about still
 	// receives everything the server actually uses.
 	Awg map[string]string `json:"awg"`
+
+	// ForgetToken is present only in the reply that created the peer.
+	// The device keeps it to remove its own credential later.
+	ForgetToken string `json:"forget_token,omitempty"`
+}
+
+// forgetRequest is what a device sends to remove its credential.
+type forgetRequest struct {
+	PublicKey   string `json:"public_key"`
+	ForgetToken string `json:"forget_token"`
 }
 
 // Handler serves the issuing API.
@@ -90,6 +103,57 @@ func Handler(svc *Service, limiter *Limiter) http.Handler {
 		writeJSON(w, http.StatusOK, responseFor(cfg))
 	})
 
+	// Under /v1/issue so that the proxy already in front — configured
+	// with a location for /v1/issue, which nginx treats as a prefix —
+	// passes them on without anybody editing its configuration.
+	mux.HandleFunc("/v1/issue/forget", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			httpError(w, http.StatusMethodNotAllowed, "use POST")
+			return
+		}
+		if limiter != nil && !limiter.Allow(clientIP(r, limiter.TrustForwardedFor)) {
+			httpError(w, http.StatusTooManyRequests, "too many requests")
+			return
+		}
+		var req forgetRequest
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			httpError(w, http.StatusBadRequest, "the request body must be {\"public_key\": \"...\", \"forget_token\": \"...\"}")
+			return
+		}
+		err := svc.Forget(r.Context(), req.PublicKey, req.ForgetToken)
+		switch {
+		case err == nil:
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, ErrInvalidKey):
+			httpError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, ErrNotYours):
+			httpError(w, http.StatusForbidden, "this credential cannot be removed with that token")
+		default:
+			log.Printf("provision: forget failed: %v", err)
+			httpError(w, http.StatusInternalServerError, "could not remove the credential")
+		}
+	})
+
+	status := &statusCache{svc: svc}
+	mux.HandleFunc("/v1/issue/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			httpError(w, http.StatusMethodNotAllowed, "use GET")
+			return
+		}
+		st, err := status.get(r.Context())
+		if err != nil {
+			log.Printf("provision: status failed: %v", err)
+			httpError(w, http.StatusServiceUnavailable, "status unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	})
+
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -109,6 +173,7 @@ func responseFor(cfg Config) issueResponse {
 		AllowedIPs:      s.AllowedIPs,
 		Keepalive:       s.Keepalive,
 		Awg:             awgMap(s.Params),
+		ForgetToken:     cfg.ForgetToken,
 	}
 	for _, d := range s.DNS {
 		out.DNS = append(out.DNS, d.String())
@@ -170,4 +235,31 @@ func awgMap(p Params) map[string]string {
 		m[k] = v
 	}
 	return m
+}
+
+// statusCache answers the status route from a count at most ten seconds
+// old. The route is public and each fresh count runs a command inside
+// the container, so without this anyone could keep the server busy
+// running it.
+type statusCache struct {
+	svc  *Service
+	mu   sync.Mutex
+	at   time.Time
+	last Status
+}
+
+const statusTTL = 10 * time.Second
+
+func (c *statusCache) get(ctx context.Context) (Status, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.at.IsZero() && time.Since(c.at) < statusTTL {
+		return c.last, nil
+	}
+	st, err := c.svc.Status(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	c.last, c.at = st, time.Now()
+	return st, nil
 }

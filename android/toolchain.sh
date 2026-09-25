@@ -10,6 +10,10 @@ mkdir -p "$tools"
 # Pinned, because a build that silently changes its compiler is not a
 # reproducible build.
 ANDROID_JAR_URL="https://raw.githubusercontent.com/Sable/android-platforms/master/android-34/android.jar"
+# The oldest Android the app installs on. Compiling against it as well is
+# the check that nothing newer is called: javac against API 34 accepts a
+# call that does not exist on Android 8 and the phone finds out instead.
+ANDROID_MIN_JAR_URL="https://raw.githubusercontent.com/Sable/android-platforms/master/android-26/android.jar"
 DX_VERSION="16.0.1"
 DX_URL="https://repo1.maven.org/maven2/com/jakewharton/android/repackaged/dalvik-dx/${DX_VERSION}/dalvik-dx-${DX_VERSION}.jar"
 
@@ -49,6 +53,9 @@ echo "  aapt2, apksigner, zipalign, javac present"
 
 echo "==> android.jar (API 34)"
 fetch "$ANDROID_JAR_URL" "$tools/android.jar" 20000000
+
+echo "==> android.jar (API 26, for the minimum-version check)"
+fetch "$ANDROID_MIN_JAR_URL" "$tools/android-26.jar" 20000000
 
 echo "==> dexer"
 fetch "$DX_URL" "$tools/dalvik-dx.jar" 500000

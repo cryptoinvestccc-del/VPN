@@ -1,0 +1,30 @@
+BESY Privacy Policy
+Version of 25 September 2026
+
+In short: BESY has no accounts. We do not ask for a name, email or phone number, show no ads, collect no analytics, and do not record which sites you visit.
+
+1. What is created on your phone
+The app creates an encryption key pair. The private key never leaves the phone. Only the public key is sent to the server — it identifies your device, not you.
+
+2. What the server keeps
+• The device's public key and the internal address assigned to it (like 10.8.1.x).
+• The time of the last connection and the amount of data transferred for that key. The VPN protocol itself keeps these in memory; it cannot work without them. They are not written to logs.
+• A technical secret for deleting the key, stored as a hash from which the secret cannot be recovered.
+
+3. Your IP address
+While the VPN is on, the server sees the IP address you connect from — replies could not reach your phone otherwise. BESY does not record it. The web server through which the app obtains its key may record the IP address of that request in its technical log.
+
+4. Traffic and DNS
+BESY does not inspect or store the content of your traffic. Name lookups (DNS) inside the tunnel are answered by Cloudflare's public 1.1.1.1 service under its own policy.
+
+5. How long
+The key is deleted from the server when you tap "Delete key and data", or automatically after 30 days without a connection. A key that was never used is deleted after one day.
+
+6. How to delete your data
+Settings → "Delete key and data". The key is removed from the phone and from the server at once. If the server cannot be reached at that moment, the key is removed from the phone at once and from the server automatically, as described in section 5.
+
+7. Third parties
+We do not sell or share data with third parties, except where the law expressly requires it.
+
+8. Changes
+If this policy changes, the new version will appear in the app.

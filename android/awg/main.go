@@ -169,6 +169,7 @@ func run() error {
 		return err
 	}
 	fmt.Println("ready")
+	go reportState(dev)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -210,6 +211,24 @@ func awaitHandshake(dev *device.Device, within time.Duration) error {
 				st.endpoint, within, st.tx, st.rx)
 		}
 		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// reportState tells the app, every few seconds, when the last handshake
+// was, so the screen can say how fresh the connection is.
+//
+// Written to standard output and read by the app only to be shown;
+// nothing keeps it. A history of when a tunnel was used is a log of who
+// was online when, and this app does not have one.
+func reportState(dev *device.Device) {
+	for {
+		state, err := dev.IpcGet()
+		if err != nil {
+			return
+		}
+		st := parseState(state)
+		fmt.Printf("stat handshake=%d rx=%d tx=%d\n", st.handshake, st.rx, st.tx)
+		time.Sleep(5 * time.Second)
 	}
 }
 

@@ -27,7 +27,9 @@ type containerRegistry struct {
 	mu   sync.Mutex
 	dev  *awgDevice
 	path string
-	keys map[string]bool
+	// keys maps each issued public key to the hash of its forget
+	// token; empty for a key recorded without one.
+	keys map[string]string
 }
 
 var _ provision.Registry = (*containerRegistry)(nil)
@@ -37,13 +39,21 @@ func loadRegistry(ctx context.Context, dev *awgDevice, path string) (*containerR
 	if err != nil {
 		return nil, fmt.Errorf("reading the list of issued credentials at %s: %w", path, err)
 	}
-	r := &containerRegistry{dev: dev, path: path, keys: map[string]bool{}}
+	r := &containerRegistry{dev: dev, path: path, keys: map[string]string{}}
 	for _, line := range strings.Split(text, "\n") {
-		key := strings.TrimSpace(line)
+		// "key hash", or a bare key from before tokens existed.
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		key, hash := fields[0], ""
+		if len(fields) > 1 && isHexHash(fields[1]) {
+			hash = fields[1]
+		}
 		// Anything that is not a key is ignored rather than trusted:
 		// this list decides what may be deleted.
 		if provision.ValidatePublicKey(key) == nil {
-			r.keys[key] = true
+			r.keys[key] = hash
 		}
 	}
 	return r, nil
@@ -52,7 +62,27 @@ func loadRegistry(ctx context.Context, dev *awgDevice, path string) (*containerR
 func (r *containerRegistry) Owns(key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.keys[key]
+	_, ok := r.keys[key]
+	return ok
+}
+
+func (r *containerRegistry) SecretHash(key string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	h, ok := r.keys[key]
+	return h, ok
+}
+
+func isHexHash(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *containerRegistry) Len() int {
@@ -61,18 +91,26 @@ func (r *containerRegistry) Len() int {
 	return len(r.keys)
 }
 
-func (r *containerRegistry) Add(ctx context.Context, key string) error {
+func (r *containerRegistry) Add(ctx context.Context, key, hash string) error {
 	if err := provision.ValidatePublicKey(key); err != nil {
 		return err
 	}
+	if hash != "" && !isHexHash(hash) {
+		return fmt.Errorf("not a token hash")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.keys[key] {
+	old, had := r.keys[key]
+	if had && old == hash {
 		return nil
 	}
-	r.keys[key] = true
+	r.keys[key] = hash
 	if err := r.writeLocked(ctx); err != nil {
-		delete(r.keys, key)
+		if had {
+			r.keys[key] = old
+		} else {
+			delete(r.keys, key)
+		}
 		return err
 	}
 	return nil
@@ -81,24 +119,29 @@ func (r *containerRegistry) Add(ctx context.Context, key string) error {
 func (r *containerRegistry) Remove(ctx context.Context, key string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.keys[key] {
+	old, had := r.keys[key]
+	if !had {
 		return nil
 	}
 	delete(r.keys, key)
 	if err := r.writeLocked(ctx); err != nil {
-		r.keys[key] = true
+		r.keys[key] = old
 		return err
 	}
 	return nil
 }
 
 func (r *containerRegistry) writeLocked(ctx context.Context) error {
-	keys := make([]string, 0, len(r.keys))
-	for k := range r.keys {
-		keys = append(keys, k)
+	lines := make([]string, 0, len(r.keys))
+	for k, h := range r.keys {
+		if h != "" {
+			lines = append(lines, k+" "+h)
+		} else {
+			lines = append(lines, k)
+		}
 	}
-	sort.Strings(keys)
-	body := strings.Join(keys, "\n")
+	sort.Strings(lines)
+	body := strings.Join(lines, "\n")
 	if body != "" {
 		body += "\n"
 	}

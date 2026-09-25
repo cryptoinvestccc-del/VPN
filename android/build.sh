@@ -42,6 +42,23 @@ javac -nowarn -Xlint:-options \
 	-d "$work/classes" \
 	$(find "$app/src" "$work/gen" -name '*.java')
 
+# The app installs on Android 8 (API 26) and is compiled against 14.
+# Compiling it again against 26 fails on any call Android 8 does not
+# have — the crash that would otherwise be found on somebody's phone.
+if [[ -f "$tools/android-26.jar" ]]; then
+	echo "==> minimum-version check (API 26)"
+	rm -rf "$work/api26" && mkdir -p "$work/api26"
+	javac -nowarn -Xlint:-options --release 8 \
+		-cp "$tools/android-26.jar" \
+		-d "$work/api26" \
+		$(find "$app/src" "$work/gen" -name '*.java') || {
+		echo "the app calls something Android 8 does not have (above); guard it with Build.VERSION.SDK_INT" >&2
+		exit 1
+	}
+else
+	echo "==> minimum-version check skipped: run ./toolchain.sh to fetch android-26.jar" >&2
+fi
+
 echo "==> dex"
 ( cd "$work/classes" && java -cp "$tools/dalvik-dx.jar" com.android.dx.command.Main \
 	--dex --output="$work/classes.dex" . )

@@ -88,6 +88,65 @@ final class Provisioning {
         }
     }
 
+    /**
+     * How many people are connected, for the line under the button.
+     * Returns -1 when the server cannot be asked; the screen then says so
+     * rather than showing a number it does not have.
+     */
+    static int connected(String issueEndpoint) {
+        HttpURLConnection http = null;
+        try {
+            http = (HttpURLConnection) new URL(issueEndpoint + "/status").openConnection();
+            http.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            http.setReadTimeout(READ_TIMEOUT_MS);
+            http.setUseCaches(false);
+            http.setRequestProperty("Accept", "application/json");
+            if (http.getResponseCode() != 200) return -1;
+            JSONObject o = new JSONObject(read(http.getInputStream()));
+            return o.optInt("connected", -1);
+        } catch (Exception e) {
+            return -1;
+        } finally {
+            if (http != null) http.disconnect();
+        }
+    }
+
+    /**
+     * Asks the server to remove this device's credential.
+     *
+     * <p>The token was handed to this device, and only to it, when the
+     * credential was created; the server keeps nothing but its hash.
+     * Returns true only when the server confirms the removal.
+     */
+    static boolean forget(String issueEndpoint, String publicKey, String token) {
+        if (token == null || token.length() == 0) return false;
+        HttpURLConnection http = null;
+        try {
+            http = (HttpURLConnection) new URL(issueEndpoint + "/forget").openConnection();
+            http.setRequestMethod("POST");
+            http.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            http.setReadTimeout(READ_TIMEOUT_MS);
+            http.setDoOutput(true);
+            http.setUseCaches(false);
+            http.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+
+            JSONObject body = new JSONObject();
+            body.put("public_key", publicKey);
+            body.put("forget_token", token);
+            OutputStream out = http.getOutputStream();
+            try {
+                out.write(body.toString().getBytes(Charset.forName("UTF-8")));
+            } finally {
+                out.close();
+            }
+            return http.getResponseCode() == 204;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (http != null) http.disconnect();
+        }
+    }
+
     private static String read(InputStream in) throws IOException {
         if (in == null) return "";
         StringBuilder sb = new StringBuilder();

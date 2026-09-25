@@ -241,6 +241,23 @@ func shippedTunnel(t *testing.T, iface string, prefix ...string) {
 			t.Fatalf("what came back is not what went in: %q", got)
 		}
 		t.Log("   the binary from the APK carried real traffic")
+
+		// The app shows how recent the handshake is from these lines.
+		select {
+		case line := <-lines:
+			for !strings.HasPrefix(line, "stat handshake=") {
+				var open bool
+				if line, open = <-lines; !open {
+					t.Fatal("the engine stopped reporting")
+				}
+			}
+			if strings.HasPrefix(line, "stat handshake=0 ") {
+				t.Errorf("the engine reported no handshake after one completed: %s", line)
+			}
+			t.Logf("   engine reports: %s", line)
+		case <-time.After(10 * time.Second):
+			t.Error("the engine never reported its state")
+		}
 		return
 	}
 	t.Fatalf("nothing went through the tunnel: %v", last)

@@ -16,13 +16,21 @@ import android.view.WindowManager;
  * to start or stop and shows what the service reports, so what is on the
  * screen is what is actually happening rather than what was requested.
  */
-public final class MainActivity extends Activity implements GlassView.OnPowerTap {
+public final class MainActivity extends Activity
+        implements GlassView.OnPowerTap, GlassView.OnSettingsTap {
 
     private static final int REQUEST_VPN_PERMISSION = 1;
     private static final long POLL_MS = 400;
 
     private GlassView view;
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    /** The language this screen was built in; a change means rebuild. */
+    private String builtIn;
+
+    @Override protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(Lang.wrap(base));
+    }
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {
@@ -31,6 +39,7 @@ public final class MainActivity extends Activity implements GlassView.OnPowerTap
             // happens while the phone is in a pocket has to still be
             // there when somebody looks.
             view.setError(TunnelService.lastError);
+            view.setInfo(TunnelService.address, handshakeAge(TunnelService.lastHandshake));
             handler.postDelayed(this, POLL_MS);
         }
     };
@@ -41,16 +50,63 @@ public final class MainActivity extends Activity implements GlassView.OnPowerTap
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
 
+        builtIn = Prefs.language(this);
         view = new GlassView(this);
         view.setOnPowerTap(this);
+        view.setOnSettingsTap(this);
         view.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         setContentView(view);
+
+        // Only on a fresh start, and only when the system would not have
+        // to ask: a permission dialog appearing unbidden on launch is
+        // not what "connect on launch" means.
+        if (saved == null && Prefs.autoConnect(this)
+                && TunnelService.state == GlassView.STATE_OFF
+                && VpnService.prepare(this) == null) {
+            send(TunnelService.ACTION_CONNECT);
+        }
+    }
+
+    @Override public void onSettingsTap() {
+        startActivity(new Intent(this, SettingsActivity.class));
+    }
+
+    /** "12 s ago", "3 min ago", or null before the first handshake. */
+    private String handshakeAge(long at) {
+        if (at <= 0) return null;
+        long age = Math.max(0, System.currentTimeMillis() / 1000 - at);
+        return age < 120
+                ? getString(R.string.handshake_sec, age)
+                : getString(R.string.handshake_min, age / 60);
+    }
+
+    /** Asks the server how busy it is, off the main thread. */
+    private void refreshServer() {
+        final String endpoint = Provisioning.endpoint(this);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final int n = Provisioning.connected(endpoint);
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        if (isFinishing()) return;
+                        view.setServer(n >= 0
+                                ? getString(R.string.server_ok, n)
+                                : getString(R.string.server_unreachable));
+                    }
+                });
+            }
+        }, "besy-status").start();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        if (!Prefs.language(this).equals(builtIn)) {
+            recreate();
+            return;
+        }
         handler.post(poll);
+        refreshServer();
     }
 
     @Override protected void onPause() {

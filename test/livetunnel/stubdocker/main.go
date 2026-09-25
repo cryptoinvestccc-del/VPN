@@ -85,6 +85,28 @@ func command(argv []string) {
 		if key == "" {
 			return
 		}
+		// awg set <iface> peer <key> remove
+		for _, a := range argv {
+			if a == "remove" {
+				data, _ := os.ReadFile(os.Getenv("STUB_PEERS"))
+				var kept []string
+				for _, line := range strings.Split(string(data), "\n") {
+					f := strings.Split(line, "\t")
+					if line == "" || (len(f) > 1 && f[1] == key) {
+						continue
+					}
+					kept = append(kept, line)
+				}
+				out := strings.Join(kept, "\n")
+				if out != "" {
+					out += "\n"
+				}
+				if err := os.WriteFile(os.Getenv("STUB_PEERS"), []byte(out), 0o600); err != nil {
+					os.Exit(1)
+				}
+				return
+			}
+		}
 		f, err := os.OpenFile(os.Getenv("STUB_PEERS"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)

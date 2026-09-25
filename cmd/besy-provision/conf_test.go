@@ -171,11 +171,21 @@ func TestRegistryKeepsOnlyKeys(t *testing.T) {
 	}
 
 	other := "8RVUdLEokDorhmcrAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-	if err := reg.Add(context.Background(), other); err != nil {
+	hash := strings.Repeat("ab", 32)
+	if err := reg.Add(context.Background(), other, hash); err != nil {
 		t.Fatal(err)
 	}
-	if last := r.fed[len(r.fed)-1]; !strings.Contains(last, good) || !strings.Contains(last, other) {
+	if last := r.fed[len(r.fed)-1]; !strings.Contains(last, good) || !strings.Contains(last, other+" "+hash) {
 		t.Errorf("wrote %q", last)
+	}
+	// Read back, the hash is what was recorded.
+	r.out["besy-issued.keys"] = r.fed[len(r.fed)-1]
+	again, err := loadRegistry(context.Background(), d, "/opt/amnezia/awg/besy-issued.keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h, ok := again.SecretHash(other); !ok || h != hash {
+		t.Errorf("read back %q, %v", h, ok)
 	}
 	if err := reg.Remove(context.Background(), good); err != nil {
 		t.Fatal(err)

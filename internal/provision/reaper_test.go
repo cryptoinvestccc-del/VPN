@@ -23,19 +23,28 @@ func unusedPeer(key string) Peer {
 // that are about timing rather than ownership.
 type ownsAll struct{ removed []string }
 
-func (o *ownsAll) Owns(string) bool                  { return true }
-func (o *ownsAll) Add(context.Context, string) error { return nil }
+func (o *ownsAll) Owns(string) bool                          { return true }
+func (o *ownsAll) Add(context.Context, string, string) error { return nil }
+func (o *ownsAll) SecretHash(string) (string, bool)          { return "", false }
 func (o *ownsAll) Remove(_ context.Context, k string) error {
 	o.removed = append(o.removed, k)
 	return nil
 }
 
-// memRegistry owns exactly the keys it was given.
-type memRegistry map[string]bool
+// memRegistry owns exactly the keys it was given, each with the hash of
+// its forget token.
+type memRegistry map[string]string
 
-func (m memRegistry) Owns(k string) bool                       { return m[k] }
-func (m memRegistry) Add(_ context.Context, k string) error    { m[k] = true; return nil }
-func (m memRegistry) Remove(_ context.Context, k string) error { delete(m, k); return nil }
+func (m memRegistry) Owns(k string) bool                 { _, ok := m[k]; return ok }
+func (m memRegistry) SecretHash(k string) (string, bool) { h, ok := m[k]; return h, ok }
+func (m memRegistry) Add(_ context.Context, k, h string) error {
+	m[k] = h
+	return nil
+}
+func (m memRegistry) Remove(_ context.Context, k string) error {
+	delete(m, k)
+	return nil
+}
 
 func frozenReaper(device Device, ttl, grace time.Duration) (*Reaper, *time.Time) {
 	now := time.Now()
@@ -212,7 +221,7 @@ func TestNothingIsWithdrawnThatThisServiceDidNotIssue(t *testing.T) {
 		unusedPeer("BESY-UNUSED"),
 		usedPeer("BESY-IDLE", 40*24*time.Hour, now),
 	}
-	registry := memRegistry{"BESY-UNUSED": true, "BESY-IDLE": true}
+	registry := memRegistry{"BESY-UNUSED": "", "BESY-IDLE": ""}
 	r := NewReaper(&fakeDevice{}, registry, 30*24*time.Hour, time.Hour)
 	clock := now
 	r.nowFn = func() time.Time { return clock }

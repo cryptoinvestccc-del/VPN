@@ -1,0 +1,14 @@
+BESY Terms of Use
+Version of 25 September 2026
+
+1. BESY is a free secure-connection service. It is provided "as is": we try to keep it working but do not promise that it will be available always, everywhere or at any particular speed.
+
+2. The service may be changed, suspended or discontinued at any time without prior notice.
+
+3. By using BESY you agree to comply with the laws of the country you are in and not to use the service for anything they prohibit.
+
+4. You may not use the service to send spam, attack other systems, distribute malware or infringe the rights of others. A key used in this way may be deleted.
+
+5. We are not responsible for the content of sites and services you open through BESY or for the consequences of using them.
+
+6. If you do not agree with these terms, do not use the service and uninstall the app.

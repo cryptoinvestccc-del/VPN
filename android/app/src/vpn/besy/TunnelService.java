@@ -44,6 +44,20 @@ public final class TunnelService extends VpnService {
     static volatile int state = GlassView.STATE_OFF;
     static volatile String lastError;
 
+    /** The tunnel address, for the screen; null when there is no tunnel. */
+    static volatile String address;
+
+    /**
+     * When the last handshake happened, in seconds since the epoch, as
+     * the engine reports it every few seconds. Zero means none yet.
+     * Kept only for the screen and only while the tunnel is up.
+     */
+    static volatile long lastHandshake;
+
+    @Override protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(Lang.wrap(base));
+    }
+
     /**
      * Why the tunnel is being stopped on purpose: null while nobody has
      * asked, empty when the person tapped the button, a sentence when
@@ -144,12 +158,14 @@ public final class TunnelService extends VpnService {
     }
 
     private void connect() throws Exception {
-        stage = "ключ";
+        stage = getString(R.string.stage_key);
         Keys keys = Keys.load(this);
-        stage = "конфиг";
+        stage = getString(R.string.stage_config);
         JSONObject issued = Provisioning.issue(Provisioning.endpoint(this), keys.publicKey());
+        // Present only in the reply that created this device's peer.
+        Keys.saveForgetToken(this, issued.optString("forget_token", ""));
 
-        stage = "интерфейс";
+        stage = getString(R.string.stage_interface);
         Builder builder = new Builder();
         builder.setSession("BESY");
         builder.setMtu(issued.optInt("mtu", 1280));
@@ -157,6 +173,7 @@ public final class TunnelService extends VpnService {
         String address = issued.getString("address");     // "10.8.1.42/32"
         String[] parts = address.split("/");
         builder.addAddress(parts[0], parts.length > 1 ? Integer.parseInt(parts[1]) : 32);
+        TunnelService.address = parts[0];
 
         String allowed = issued.optString("allowed_ips", "0.0.0.0/0, ::/0");
         for (String route : allowed.split(",")) {
@@ -185,10 +202,10 @@ public final class TunnelService extends VpnService {
         // The engine takes a literal address; a name never reaches it.
         // This is also the last moment the lookup can happen over the
         // ordinary network in a way that is obvious from the code.
-        stage = "адрес сервера";
+        stage = getString(R.string.stage_server);
         issued.put("endpoint", Endpoints.resolve(issued.optString("endpoint")));
 
-        stage = "движок";
+        stage = getString(R.string.stage_engine);
         String config = Uapi.build(keys.privateKey(), issued);
 
         // The descriptor cannot be handed over as a number. ProcessBuilder
@@ -252,6 +269,12 @@ public final class TunnelService extends VpnService {
             line = line.trim();
             if (line.isEmpty()) continue;
 
+            // The engine's periodic report: shown, never kept.
+            if (line.startsWith("stat ")) {
+                lastHandshake = statHandshake(line);
+                continue;
+            }
+
             if (!up && "ready".equals(line)) {
                 up = true;
                 stage = "";
@@ -271,9 +294,9 @@ public final class TunnelService extends VpnService {
         // without ever seeing "ready" means it refused the configuration
         // and said why on the same stream.
         if (!up && stopRequested == null) {
-            StringBuilder why = new StringBuilder("движок: ");
+            StringBuilder why = new StringBuilder(getString(R.string.stage_engine)).append(": ");
             if (said.isEmpty()) {
-                why.append("вышел молча, не подняв туннель");
+                why.append(getString(R.string.engine_silent));
             } else {
                 boolean first = true;
                 for (String s : said) {
@@ -340,12 +363,14 @@ public final class TunnelService extends VpnService {
         }
         worker = null;
         state = GlassView.STATE_OFF;
+        address = null;
+        lastHandshake = 0;
         stopForeground(true);
     }
 
     @Override public void onRevoke() {
         // The system, or another VPN app, took the interface away.
-        stopRequested = "туннель отключила система или другое VPN-приложение";
+        stopRequested = getString(R.string.revoked);
         lastError = stopRequested;
         stopTunnel();
         stopSelf();
@@ -381,5 +406,19 @@ public final class TunnelService extends VpnService {
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();
+    }
+
+    /** Reads "stat handshake=N rx=… tx=…"; zero if it cannot. */
+    static long statHandshake(String line) {
+        for (String field : line.split(" ")) {
+            if (field.startsWith("handshake=")) {
+                try {
+                    return Long.parseLong(field.substring("handshake=".length()));
+                } catch (NumberFormatException e) {
+                    return 0;
+                }
+            }
+        }
+        return 0;
     }
 }

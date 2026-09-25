@@ -26,6 +26,7 @@ final class Keys {
     private static final String PREFS   = "besy";
     private static final String PRIVATE = "private_key";
     private static final String PUBLIC  = "public_key";
+    private static final String TOKEN   = "forget_token";
 
     private final String privateKey;
     private final String publicKey;
@@ -60,6 +61,32 @@ final class Keys {
             throw new IOException("the key could not be stored");
         }
         return made;
+    }
+
+    /** The stored pair, or null if none has been made yet. Never makes one. */
+    static Keys stored(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String priv = prefs.getString(PRIVATE, null);
+        String pub  = prefs.getString(PUBLIC, null);
+        return priv != null && pub != null ? new Keys(priv, pub) : null;
+    }
+
+    /**
+     * Keeps the secret for removing this device's credential.
+     *
+     * <p>The server sends it once, in the reply that creates the peer, and
+     * never again: asked a second time with the same key, it cannot tell
+     * this device from someone who has merely seen the public key. So an
+     * empty value never overwrites a stored one.
+     */
+    static void saveForgetToken(Context context, String token) {
+        if (token == null || token.length() == 0) return;
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putString(TOKEN, token).commit();
+    }
+
+    static String forgetToken(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TOKEN, null);
     }
 
     /** Forgets the key, so the next connection starts as a new device. */
