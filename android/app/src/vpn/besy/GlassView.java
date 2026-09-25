@@ -240,6 +240,14 @@ final class GlassView extends View {
             default:         title = str(R.string.idle_title); sub = str(R.string.idle_sub); break;
         }
 
+        // The navigation bar is drawn over this view on phones that use
+        // gesture navigation — a Galaxy A13 in Test Lab put its back
+        // arrow across the last line — so everything anchored to the
+        // bottom is measured from above it.
+        android.view.WindowInsets insets = getRootWindowInsets();
+        final float bottom = insets != null ? insets.getSystemWindowInsetBottom() : 0;
+        h -= bottom;
+
         final float x = dp(22);
         float y = h - (error != null && error.length() > 0 ? dp(118) : dp(92));
 

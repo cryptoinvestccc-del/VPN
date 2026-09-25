@@ -39,7 +39,10 @@ public final class DocActivity extends Activity {
         body.setTextSize(14.5f);
         body.setTextColor(Palette.INK_2);
         body.setLineSpacing(0, 1.3f);
-        body.setTextIsSelectable(true);
+        // Not selectable. Selectable text with clickable links crashes
+        // Android 8 on touch — setSpan(-1 … -1) inside the framework's
+        // own Editor — which Firebase Test Lab found on its first crawl.
+        // The links matter more: they lead to the source code.
         body.setPadding(Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8), 0);
         Linkify.addLinks(body, Linkify.WEB_URLS);
         body.setMovementMethod(LinkMovementMethod.getInstance());
