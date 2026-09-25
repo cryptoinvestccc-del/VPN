@@ -276,6 +276,10 @@ public final class TunnelService extends VpnService {
             }
 
             if (!up && "ready".equals(line)) {
+                // Only on the device's own log: one line saying the server
+                // answered, so a test run can tell a working tunnel from
+                // one that was switched off before the engine gave up.
+                Log.i(TAG, "tunnel up: the server answered the handshake");
                 up = true;
                 stage = "";
                 lastError = null;

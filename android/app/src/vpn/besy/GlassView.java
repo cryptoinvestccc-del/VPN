@@ -77,7 +77,13 @@ final class GlassView extends View {
     private static boolean eq(String a, String b) { return a == null ? b == null : a.equals(b); }
 
     void setState(int s) {
-        if (state != s) { state = s; invalidate(); }
+        if (state != s) {
+            state = s;
+            invalidate();
+            // The power button's label follows the state.
+            sendAccessibilityEvent(
+                    android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        }
     }
 
     int getState() { return state; }
@@ -360,6 +366,78 @@ final class GlassView extends View {
             lines.add(line.toString());
         }
         return lines;
+    }
+
+    // ---- Accessibility ------------------------------------------------
+    //
+    // The screen is drawn, not built from widgets, so without this it is
+    // a blank picture to anything that reads the interface: TalkBack said
+    // nothing, and Firebase's crawler reported "outside of app" and never
+    // found the button or the gear. Each control is described as a
+    // virtual node with its bounds, a label and a click action.
+
+    private static final int NODE_POWER = 1;
+    private static final int NODE_GEAR  = 2;
+
+    private final android.view.accessibility.AccessibilityNodeProvider nodes =
+            new android.view.accessibility.AccessibilityNodeProvider() {
+        @Override public android.view.accessibility.AccessibilityNodeInfo createAccessibilityNodeInfo(int id) {
+            android.view.accessibility.AccessibilityNodeInfo info;
+            if (id == View.NO_ID) {
+                info = android.view.accessibility.AccessibilityNodeInfo.obtain(GlassView.this);
+                onInitializeAccessibilityNodeInfo(info);
+                info.addChild(GlassView.this, NODE_POWER);
+                info.addChild(GlassView.this, NODE_GEAR);
+                return info;
+            }
+            if (id != NODE_POWER && id != NODE_GEAR) return null;
+
+            info = android.view.accessibility.AccessibilityNodeInfo.obtain(GlassView.this, id);
+            info.setPackageName(getContext().getPackageName());
+            info.setClassName("android.widget.Button");
+            info.setParent(GlassView.this);
+            info.setContentDescription(label(id));
+            android.graphics.Rect r = bounds(id);
+            info.setBoundsInParent(r);
+            int[] at = new int[2];
+            getLocationOnScreen(at);
+            r.offset(at[0], at[1]);
+            info.setBoundsInScreen(r);
+            info.setEnabled(true);
+            info.setClickable(true);
+            info.setFocusable(true);
+            info.setVisibleToUser(true);
+            info.addAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);
+            return info;
+        }
+
+        @Override public boolean performAction(int id, int action, android.os.Bundle args) {
+            if (action != android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) return false;
+            if (id == NODE_POWER && listener != null) { listener.onPowerTap(); return true; }
+            if (id == NODE_GEAR && settingsListener != null) { settingsListener.onSettingsTap(); return true; }
+            return false;
+        }
+    };
+
+    @Override public android.view.accessibility.AccessibilityNodeProvider getAccessibilityNodeProvider() {
+        return nodes;
+    }
+
+    private String label(int id) {
+        if (id == NODE_GEAR) return str(R.string.settings);
+        switch (state) {
+            case STATE_LIVE: return str(R.string.disconnect);
+            case STATE_BUSY: return str(R.string.wait);
+            default:         return str(R.string.connect);
+        }
+    }
+
+    private android.graphics.Rect bounds(int id) {
+        float cx = id == NODE_GEAR ? gearCx : buttonCx;
+        float cy = id == NODE_GEAR ? gearCy : buttonCy;
+        float r  = id == NODE_GEAR ? dp(24) : Math.max(buttonR, dp(24));
+        return new android.graphics.Rect(Math.round(cx - r), Math.round(cy - r),
+                Math.round(cx + r), Math.round(cy + r));
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
