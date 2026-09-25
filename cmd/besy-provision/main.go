@@ -442,7 +442,7 @@ func checkConf(ctx context.Context, d *awgDevice, onlyCheck bool) error {
 	if err != nil {
 		return err
 	}
-	if existing == "" || hasAddress(existing) {
+	if existing == "" || (hasAddress(existing) && !hasLinkLocalAddress(existing)) {
 		return nil
 	}
 	live, _ := d.liveAddresses(ctx)
@@ -457,7 +457,7 @@ func checkConf(ctx context.Context, d *awgDevice, onlyCheck bool) error {
 	if err != nil {
 		return fmt.Errorf("%s has no Address line and could not be repaired: %w", d.saveConf, err)
 	}
-	log.Printf("besy-provision: repaired %s: it had lost its Address line; wrote Address = %s "+
+	log.Printf("besy-provision: repaired %s: its Address lines were missing or kernel-assigned; wrote Address = %s "+
 		"from the running interface (the file as it was is at %s.before-besy)",
 		d.saveConf, strings.Join(wrote, ", "), d.saveConf)
 	return nil

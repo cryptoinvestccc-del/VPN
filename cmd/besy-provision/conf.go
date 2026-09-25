@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/netip"
 	"strings"
 )
 
@@ -106,15 +107,58 @@ func hasAddress(conf string) bool {
 
 // parseAddrs reads `ip -o addr show dev X`: one line per address, the
 // address following "inet" or "inet6".
+//
+// Link-local addresses are left out. The kernel gives a TUN interface a
+// fe80:: address of its own when it comes up; nobody configured it, and
+// written back as an Address line it would be added by hand at the next
+// start as well — at best a duplicate, at worst the step that makes
+// awg-quick stop halfway. The first run of the repair on the production
+// server wrote 54 bytes where one IPv4 Address line is 22, which is what
+// a second, link-local line looks like.
 func parseAddrs(out string) []string {
 	var addrs []string
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
 		for i := 0; i+1 < len(f); i++ {
 			if f[i] == "inet" || f[i] == "inet6" {
-				addrs = append(addrs, f[i+1])
+				if !linkLocal(f[i+1]) {
+					addrs = append(addrs, f[i+1])
+				}
 			}
 		}
 	}
 	return addrs
+}
+
+// linkLocal reports an address the kernel assigns by itself.
+func linkLocal(cidr string) bool {
+	p, err := netip.ParsePrefix(cidr)
+	if err != nil {
+		return false
+	}
+	return p.Addr().IsLinkLocalUnicast()
+}
+
+// hasLinkLocalAddress reports an Address line carrying a link-local
+// address, which only a previous version of this code would have put
+// there.
+func hasLinkLocalAddress(conf string) bool {
+	section := "interface"
+	for _, line := range strings.Split(conf, "\n") {
+		text := strings.TrimSpace(line)
+		if strings.HasPrefix(text, "[") {
+			section = strings.ToLower(strings.Trim(text, "[]"))
+			continue
+		}
+		key, val, ok := strings.Cut(text, "=")
+		if section != "interface" || !ok || !strings.EqualFold(strings.TrimSpace(key), "address") {
+			continue
+		}
+		for _, a := range strings.Split(val, ",") {
+			if linkLocal(strings.TrimSpace(a)) {
+				return true
+			}
+		}
+	}
+	return false
 }

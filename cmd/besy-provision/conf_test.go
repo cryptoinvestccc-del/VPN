@@ -98,6 +98,24 @@ func TestParseAddrsReadsIP(t *testing.T) {
 	}
 }
 
+// TestLinkLocalAddressesAreNotWrittenBack: the kernel's own fe80::
+// address on a TUN interface is not configuration.
+func TestLinkLocalAddressesAreNotWrittenBack(t *testing.T) {
+	out := "5: awg0    inet 10.8.1.0/24 scope global awg0\\       valid_lft forever preferred_lft forever\n" +
+		"5: awg0    inet6 fe80::6d3e:1c2b:a71f:9c04/64 scope link stable-privacy \\       valid_lft forever preferred_lft forever\n"
+	got := parseAddrs(out)
+	if len(got) != 1 || got[0] != "10.8.1.0/24" {
+		t.Errorf("read %v; the link-local address is the kernel's, not configuration", got)
+	}
+	written := mergeConf(showconfOut, showconfOut, got)
+	if hasLinkLocalAddress(written) {
+		t.Errorf("wrote a link-local Address:\n%s", written)
+	}
+	if !hasLinkLocalAddress("[Interface]\nAddress = 10.8.1.0/24\nAddress = fe80::1/64\n") {
+		t.Error("did not recognise a file an earlier version damaged this way")
+	}
+}
+
 func TestSaveRefusesToWriteAFileWithNoAddress(t *testing.T) {
 	r := &recordingRunner{out: map[string]string{"awg showconf": showconfOut}}
 	d := testDevice(r)
