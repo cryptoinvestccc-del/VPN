@@ -370,8 +370,25 @@ func waitHandshake(dev *device.Device, within time.Duration) error {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	return fmt.Errorf("the server never answered the handshake within %s — "+
-		"the obfuscation parameters or the keys do not match", within)
+	// This used to blame the keys and the obfuscation outright. The
+	// first run against production failed here from a network that lets
+	// no UDP out at all, and the message pointed at the one thing that
+	// was known to be right. Silence has several causes; say them all,
+	// with the counters that tell them apart.
+	state, _ := dev.IpcGet()
+	var tx, rx string
+	for _, line := range strings.Split(state, "\n") {
+		if v, ok := strings.CutPrefix(line, "tx_bytes="); ok {
+			tx = v
+		}
+		if v, ok := strings.CutPrefix(line, "rx_bytes="); ok {
+			rx = v
+		}
+	}
+	return fmt.Errorf("the server never answered the handshake within %s "+
+		"(sent %s bytes, received %s). Either UDP does not get out of the network "+
+		"this runs from, or the server is not listening on that port, or it does "+
+		"not know this key, or the obfuscation differs", within, tx, rx)
 }
 
 func reach(tnet *netstack.Net, target string) error {
