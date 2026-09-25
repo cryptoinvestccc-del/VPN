@@ -13,3 +13,4 @@ cmd/besy-provision/besy-provision
 android/awg/awg
 test/firebase/results/
 test/firebase/last-run.log
+test/firebase/last-stamp
