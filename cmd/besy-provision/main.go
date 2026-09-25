@@ -28,6 +28,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,6 +59,7 @@ func main() {
 		burst     = flag.Float64("burst", provision.DefaultIssueBurst, "requests one source may make at once")
 		forwarded = flag.Bool("trust-forwarded-for", false, "honour X-Forwarded-For; only with a proxy in front, never when exposed directly")
 		persistTo = flag.String("persist-conf", "", "write the peer list to this path inside the container; empty lets awg-quick choose")
+		issuedAt  = flag.String("issued", "", "file inside the container listing the credentials this service issued; only these are ever withdrawn (default: beside -persist-conf, or /opt/amnezia/awg/besy-issued.keys)")
 		persist   = flag.Bool("persist", false, "run 'awg-quick save' after each change so credentials survive a restart")
 		certFile  = flag.String("cert", "", "TLS certificate; with -key, serves HTTPS and prints the pin clients must carry")
 		keyFile   = flag.String("key", "", "TLS private key")
@@ -72,6 +74,7 @@ func main() {
 		ttl: *ttl, grace: *grace, sweep: *sweep, rate: *rate, burst: *burst,
 		forwarded: *forwarded, persist: *persist, check: *check,
 		persistTo: *persistTo,
+		issuedAt:  *issuedAt,
 		certFile:  *certFile, keyFile: *keyFile,
 	}); err != nil {
 		log.Fatalf("besy-provision: %v", err)
@@ -87,7 +90,7 @@ type runOptions struct {
 	rate, burst                        float64
 	forwarded, persist, check          bool
 	certFile, keyFile                  string
-	persistTo                          string
+	persistTo, issuedAt                string
 }
 
 func run(o runOptions) error {
@@ -173,9 +176,34 @@ func run(o runOptions) error {
 	}
 	svc.SetMaxPeers(o.maxPeers)
 
+	registryPath := o.issuedAt
+	if registryPath == "" {
+		registryPath = "/opt/amnezia/awg/besy-issued.keys"
+		if o.persistTo != "" {
+			registryPath = path.Join(path.Dir(o.persistTo), "besy-issued.keys")
+		}
+	}
+	registry, err := loadRegistry(ctx, device, registryPath)
+	if err != nil {
+		return err
+	}
+	svc.SetRegistry(registry)
+	log.Printf("besy-provision: %d credentials on record as issued here (%s); only those are ever withdrawn",
+		registry.Len(), registryPath)
+
 	peers, err := device.Peers(ctx)
 	if err != nil {
 		return err
+	}
+
+	// A configuration file this service damaged before — written from
+	// showconf alone, without its Address — is found and, outside -check,
+	// repaired now rather than at the next restart of the container,
+	// which is when it would take the whole server down.
+	if o.persistTo != "" {
+		if err := checkConf(ctx, device, o.check); err != nil {
+			return err
+		}
 	}
 
 	if o.check {
@@ -202,7 +230,7 @@ func run(o runOptions) error {
 			"or one caller can present a new address per request")
 	}
 
-	reaper := provision.NewReaper(device, o.ttl, o.grace)
+	reaper := provision.NewReaper(device, registry, o.ttl, o.grace)
 	go reaper.Run(ctx, o.sweep)
 	go sweepLimiter(ctx, limiter, o.sweep)
 
@@ -405,4 +433,32 @@ func resolveEndpoint(ctx context.Context, d interface {
 	}
 	return endpoint, "the server listens on port " + port + ", not " + flagPort +
 		" as -endpoint says; telling clients " + endpoint, nil
+}
+
+// checkConf looks for a configuration file without an Address line and,
+// unless only checking, rewrites it the way awg-quick save would.
+func checkConf(ctx context.Context, d *awgDevice, onlyCheck bool) error {
+	existing, err := d.readFile(ctx, d.saveConf)
+	if err != nil {
+		return err
+	}
+	if existing == "" || hasAddress(existing) {
+		return nil
+	}
+	live, _ := d.liveAddresses(ctx)
+	if onlyCheck {
+		log.Printf("besy-provision: WARNING: %s has no Address line, so the next restart of the "+
+			"container would bring %s up with no address and every client down with it. "+
+			"Starting the service rewrites it with Address = %s from the running interface.",
+			d.saveConf, d.iface, strings.Join(live, ", "))
+		return nil
+	}
+	wrote, err := d.saveMerged(ctx)
+	if err != nil {
+		return fmt.Errorf("%s has no Address line and could not be repaired: %w", d.saveConf, err)
+	}
+	log.Printf("besy-provision: repaired %s: it had lost its Address line; wrote Address = %s "+
+		"from the running interface (the file as it was is at %s.before-besy)",
+		d.saveConf, strings.Join(wrote, ", "), d.saveConf)
+	return nil
 }

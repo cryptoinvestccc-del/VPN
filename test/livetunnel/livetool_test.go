@@ -40,7 +40,8 @@ func TestTheLiveToolWorks(t *testing.T) {
 	svc := exec.Command(provision, "-listen", addr,
 		// The installer's guess, and a name: both must be dealt with.
 		"-endpoint", "localhost:51820",
-		"-subnet", "10.8.1.0/24")
+		"-subnet", "10.8.1.0/24",
+		"-issued", filepath.Join(dir, "issued.keys"))
 	svc.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		fmt.Sprintf("STUB_LISTEN_PORT=%d", port),

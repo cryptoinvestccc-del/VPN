@@ -98,12 +98,23 @@ func wholePath(t *testing.T, serverPort int, flagEndpoint, wantEndpoint string) 
 	provision := filepath.Join(dir, "besy-provision")
 	build(t, provision, "../..", "./cmd/besy-provision")
 
+	// The configuration file as the production server most likely has
+	// it: written by the first version of this service from showconf
+	// alone, its Address gone. Starting the service must repair it.
+	confFile := filepath.Join(dir, "awg0.conf")
+	if err := os.WriteFile(confFile, []byte(realShowconf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	issuedFile := filepath.Join(dir, "issued.keys")
+
 	t.Log("2. starting the provisioning service")
 	addr := "127.0.0.1:9187"
 	cmd := exec.Command(provision,
 		"-listen", addr,
 		"-endpoint", flagEndpoint,
-		"-subnet", "10.8.1.0/24")
+		"-subnet", "10.8.1.0/24",
+		"-persist", "-persist-conf", confFile,
+		"-issued", issuedFile)
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("STUB_LISTEN_PORT=%d", serverPort),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -148,6 +159,21 @@ func wholePath(t *testing.T, serverPort int, flagEndpoint, wantEndpoint string) 
 
 	if issuedConfig.Endpoint != wantEndpoint {
 		t.Fatalf("the credential says %s; the server is on %s", issuedConfig.Endpoint, wantEndpoint)
+	}
+
+	conf, err := os.ReadFile(confFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(conf), "Address = 10.8.1.0/24") {
+		t.Errorf("the configuration is still missing its Address:\n%s", conf)
+	}
+	if _, err := os.Stat(confFile + ".before-besy"); err != nil {
+		t.Errorf("no copy of the configuration was kept before rewriting it: %v", err)
+	}
+	issued, err := os.ReadFile(issuedFile)
+	if err != nil || !strings.Contains(string(issued), clientPub) {
+		t.Errorf("the credential just issued is not on record as ours: %q, %v", issued, err)
 	}
 
 	t.Log("5. standing up the server the credential points at")

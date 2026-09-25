@@ -52,12 +52,21 @@ type Reaper struct {
 	// the whole consequence, and it is self-correcting.
 	mu        sync.Mutex
 	firstSeen map[string]time.Time
+	registry  Registry
 
 	nowFn func() time.Time
 }
 
 // NewReaper prepares a reaper. Zero durations take the defaults.
-func NewReaper(device Device, ttl, grace time.Duration) *Reaper {
+// NewReaper sweeps only the peers registry says this service issued.
+//
+// The registry is not optional. The first version swept every peer on
+// the interface, and the interface is shared: Amnezia's own clients sit
+// on it too, in the same subnet, with nothing on the wire to tell them
+// apart from ours. A client Amnezia had handed to somebody who had not
+// yet connected would have been withdrawn after a day. Without a record
+// of what this service created, it touches nothing.
+func NewReaper(device Device, registry Registry, ttl, grace time.Duration) *Reaper {
 	if ttl <= 0 {
 		ttl = DefaultTTL
 	}
@@ -66,6 +75,7 @@ func NewReaper(device Device, ttl, grace time.Duration) *Reaper {
 	}
 	return &Reaper{
 		device:    device,
+		registry:  registry,
 		ttl:       ttl,
 		grace:     grace,
 		firstSeen: map[string]time.Time{},
@@ -113,6 +123,11 @@ func (r *Reaper) Sweep(ctx context.Context) (int, error) {
 			continue
 		}
 		removed++
+		if err := r.registry.Remove(ctx, peer.PublicKey); err != nil {
+			// The peer is gone either way; a stale entry only means
+			// a key that no longer exists is remembered.
+			log.Printf("provision: could not forget a withdrawn credential: %v", err)
+		}
 
 		r.mu.Lock()
 		delete(r.firstSeen, peer.PublicKey)
@@ -134,6 +149,19 @@ func (r *Reaper) Expired(peers []Peer) []Peer {
 
 	// Forget peers that are gone, so the map cannot grow without bound
 	// on a server that churns.
+	// Only what this service issued is ever considered. Everything else
+	// on the interface belongs to somebody else.
+	if r.registry == nil {
+		return nil
+	}
+	owned := peers[:0:0]
+	for _, peer := range peers {
+		if r.registry.Owns(peer.PublicKey) {
+			owned = append(owned, peer)
+		}
+	}
+	peers = owned
+
 	present := make(map[string]bool, len(peers))
 	for _, peer := range peers {
 		present[peer.PublicKey] = true

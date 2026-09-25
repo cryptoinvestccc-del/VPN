@@ -35,13 +35,62 @@ type awgDevice struct {
 
 	// runner is swapped in tests. In production it is exec.
 	runner func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+	// feeder runs a command with data on its standard input, for writing
+	// files inside the container. Swapped in tests like runner.
+	feeder func(ctx context.Context, stdin []byte, name string, args ...string) error
 }
 
 func newAWGDevice(container, iface string, timeout time.Duration) *awgDevice {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	return &awgDevice{container: container, iface: iface, timeout: timeout, runner: runCommand}
+	return &awgDevice{container: container, iface: iface, timeout: timeout,
+		runner: runCommand, feeder: feedCommand}
+}
+
+func feedCommand(ctx context.Context, stdin []byte, name string, args ...string) error {
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin = bytes.NewReader(stdin)
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s %s: %w: %s",
+			name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// readFile returns a file inside the container, or "" if it does not
+// exist.
+func (d *awgDevice) readFile(ctx context.Context, path string) (string, error) {
+	out, err := d.exec(ctx, "sh", "-c",
+		"if [ -e "+shellQuote(path)+" ]; then cat "+shellQuote(path)+"; fi")
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// writeFile replaces a file inside the container in one step: written
+// beside it, then renamed over it, so a failure halfway leaves the old
+// file whole rather than a truncated one that the next restart reads.
+func (d *awgDevice) writeFile(ctx context.Context, path string, data []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, d.timeout)
+	defer cancel()
+	tmp := path + ".besy-tmp"
+	return d.feeder(ctx, data, "docker", "exec", "-i", d.container, "sh", "-c",
+		"cat > "+shellQuote(tmp)+" && mv "+shellQuote(tmp)+" "+shellQuote(path))
+}
+
+// liveAddresses are the addresses the interface is running with, as
+// `ip` reports them — what awg-quick save writes back as Address.
+func (d *awgDevice) liveAddresses(ctx context.Context) ([]string, error) {
+	out, err := d.exec(ctx, "ip", "-o", "addr", "show", "dev", d.iface)
+	if err != nil {
+		return nil, err
+	}
+	return parseAddrs(string(out)), nil
 }
 
 func runCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -203,31 +252,55 @@ func (d *awgDevice) Save(ctx context.Context) error {
 		_, err := d.exec(ctx, "awg-quick", "save", d.iface)
 		return err
 	}
+	_, err := d.saveMerged(ctx)
+	return err
+}
 
-	// Writing the file directly rather than through awg-quick, which
-	// insists the configuration already sit where it expects. What the
-	// interface is running is the thing worth keeping, and showconf
-	// prints exactly that.
+// saveMerged writes the interface's configuration the way awg-quick save
+// would, and reports the addresses it wrote.
+//
+// showconf alone is not the configuration: it has no Address, DNS, MTU
+// or Post* lines, because the interface does not hold them. The first
+// version wrote showconf by itself and so stripped Address from
+// Amnezia's file on every credential issued. Now the addresses come from
+// the running interface and the other awg-quick lines from the file
+// already there. Before the first write a copy of the original is kept
+// beside it, once.
+func (d *awgDevice) saveMerged(ctx context.Context) ([]string, error) {
 	conf, err := d.exec(ctx, "awg", "showconf", d.iface)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(conf) == 0 {
-		return fmt.Errorf("showconf returned nothing for %s", d.iface)
+		return nil, fmt.Errorf("showconf returned nothing for %s", d.iface)
+	}
+	existing, err := d.readFile(ctx, d.saveConf)
+	if err != nil {
+		return nil, err
+	}
+	live, err := d.liveAddresses(ctx)
+	if err != nil {
+		// Not fatal: the file's own Address lines are used instead.
+		live = nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, d.timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", d.container,
-		"sh", "-c", "cat > "+shellQuote(d.saveConf))
-	cmd.Stdin = bytes.NewReader(conf)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("writing %s: %w: %s", d.saveConf, err, strings.TrimSpace(stderr.String()))
+	merged := mergeConf(existing, string(conf), live)
+	if !hasAddress(merged) {
+		// Writing this would be what the old code did. Refuse, and keep
+		// the peers in memory until someone looks.
+		return nil, fmt.Errorf("refusing to write %s: neither the running interface nor the file gives an Address", d.saveConf)
 	}
-	return nil
+
+	backup := d.saveConf + ".before-besy"
+	if _, err := d.exec(ctx, "sh", "-c",
+		"[ -e "+shellQuote(backup)+" ] || [ ! -e "+shellQuote(d.saveConf)+" ] || cp -p "+
+			shellQuote(d.saveConf)+" "+shellQuote(backup)); err != nil {
+		return nil, fmt.Errorf("keeping a copy of %s: %w", d.saveConf, err)
+	}
+	if err := d.writeFile(ctx, d.saveConf, []byte(merged)); err != nil {
+		return nil, err
+	}
+	return live, nil
 }
 
 // shellQuote wraps a path for the one place a shell is unavoidable:

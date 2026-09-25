@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -93,8 +94,18 @@ func command(argv []string) {
 		fmt.Fprintf(f, "%s\t%s\t(none)\t(none)\t%s\t0\t0\t0\toff\n",
 			os.Getenv("STUB_IFACE"), key, allowed)
 
-	case strings.HasPrefix(joined, "sh -c"):
-		// The persistence step writes the config through a shell.
-		os.Exit(0)
+	case strings.HasPrefix(joined, "sh -c") && len(argv) >= 3:
+		// Files inside the container are read and written through a
+		// shell. Run it for real, so the quoting the service builds is
+		// tested by an actual shell rather than taken on trust.
+		cmd := exec.Command("sh", "-c", argv[2])
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			os.Exit(1)
+		}
+
+	case strings.HasPrefix(joined, "ip -o addr show dev"):
+		fmt.Printf("5: %s    inet 10.8.1.0/24 scope global %s\\       valid_lft forever preferred_lft forever\n",
+			os.Getenv("STUB_IFACE"), os.Getenv("STUB_IFACE"))
 	}
 }

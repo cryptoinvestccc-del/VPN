@@ -20,6 +20,15 @@ type recordingRunner struct {
 	// failOn makes only the commands containing this fragment fail, so a
 	// test can break one step of a sequence rather than all of them.
 	failOn string
+
+	// fed collects what was written into files.
+	fed []string
+}
+
+func (r *recordingRunner) feed(_ context.Context, stdin []byte, name string, args ...string) error {
+	r.calls = append(r.calls, append([]string{name}, args...))
+	r.fed = append(r.fed, string(stdin))
+	return nil
 }
 
 func (r *recordingRunner) run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -51,6 +60,7 @@ func (r *recordingRunner) last() string {
 func testDevice(runner *recordingRunner) *awgDevice {
 	d := newAWGDevice("amnezia-awg2", "wg0", time.Second)
 	d.runner = runner.run
+	d.feeder = runner.feed
 	return d
 }
 

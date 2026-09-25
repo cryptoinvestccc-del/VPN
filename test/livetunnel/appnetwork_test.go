@@ -46,7 +46,8 @@ func TestTheAppTalksToTheServer(t *testing.T) {
 	service := exec.Command(provision,
 		"-listen", addr,
 		"-endpoint", "127.0.0.1:51820",
-		"-subnet", "10.8.1.0/24")
+		"-subnet", "10.8.1.0/24",
+		"-issued", filepath.Join(dir, "issued.keys"))
 	service.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"STUB_CONTAINER=amnezia-awg2",

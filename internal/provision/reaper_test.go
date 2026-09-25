@@ -19,9 +19,27 @@ func unusedPeer(key string) Peer {
 	return Peer{PublicKey: key, Addresses: []netip.Prefix{netip.MustParsePrefix("10.8.0.3/32")}}
 }
 
+// ownsAll is a registry that claims every peer, for the tests below
+// that are about timing rather than ownership.
+type ownsAll struct{ removed []string }
+
+func (o *ownsAll) Owns(string) bool                  { return true }
+func (o *ownsAll) Add(context.Context, string) error { return nil }
+func (o *ownsAll) Remove(_ context.Context, k string) error {
+	o.removed = append(o.removed, k)
+	return nil
+}
+
+// memRegistry owns exactly the keys it was given.
+type memRegistry map[string]bool
+
+func (m memRegistry) Owns(k string) bool                       { return m[k] }
+func (m memRegistry) Add(_ context.Context, k string) error    { m[k] = true; return nil }
+func (m memRegistry) Remove(_ context.Context, k string) error { delete(m, k); return nil }
+
 func frozenReaper(device Device, ttl, grace time.Duration) (*Reaper, *time.Time) {
 	now := time.Now()
-	r := NewReaper(device, ttl, grace)
+	r := NewReaper(device, &ownsAll{}, ttl, grace)
 	r.nowFn = func() time.Time { return now }
 	return r, &now
 }
@@ -110,7 +128,7 @@ func TestSweepWithdrawsAndReportsCount(t *testing.T) {
 		usedPeer("stale-1", 40*24*time.Hour, now),
 		usedPeer("stale-2", 90*24*time.Hour, now),
 	}}
-	r := NewReaper(device, 30*24*time.Hour, time.Hour)
+	r := NewReaper(device, &ownsAll{}, 30*24*time.Hour, time.Hour)
 
 	removed, err := r.Sweep(context.Background())
 	if err != nil {
@@ -141,7 +159,7 @@ func TestSweepFreesTheAddressForReuse(t *testing.T) {
 	device.peers[0].LastHandshake = now.Add(-90 * 24 * time.Hour)
 	device.mu.Unlock()
 
-	if _, err := NewReaper(device, 30*24*time.Hour, time.Hour).Sweep(context.Background()); err != nil {
+	if _, err := NewReaper(device, &ownsAll{}, 30*24*time.Hour, time.Hour).Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,7 +179,7 @@ func TestSweepSurvivesAStubbornPeer(t *testing.T) {
 		usedPeer("will-go", 90*24*time.Hour, now),
 	}}, refuse: "wont-go"}
 
-	removed, err := NewReaper(device, 30*24*time.Hour, time.Hour).Sweep(context.Background())
+	removed, err := NewReaper(device, &ownsAll{}, 30*24*time.Hour, time.Hour).Sweep(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,4 +198,52 @@ func (d *stubbornDevice) RemovePeer(ctx context.Context, key string) error {
 		return context.DeadlineExceeded
 	}
 	return d.fakeDevice.RemovePeer(ctx, key)
+}
+
+// TestNothingIsWithdrawnThatThisServiceDidNotIssue is the production
+// server as it stands: Amnezia's own clients share the interface and the
+// subnet, several of them handed out and not yet used. The first version
+// would have withdrawn those a day after starting.
+func TestNothingIsWithdrawnThatThisServiceDidNotIssue(t *testing.T) {
+	now := time.Now()
+	peers := []Peer{
+		unusedPeer("AMNEZIA-NEVER-CONNECTED"),
+		usedPeer("AMNEZIA-LONG-IDLE", 400*24*time.Hour, now),
+		unusedPeer("BESY-UNUSED"),
+		usedPeer("BESY-IDLE", 40*24*time.Hour, now),
+	}
+	registry := memRegistry{"BESY-UNUSED": true, "BESY-IDLE": true}
+	r := NewReaper(&fakeDevice{}, registry, 30*24*time.Hour, time.Hour)
+	clock := now
+	r.nowFn = func() time.Time { return clock }
+
+	r.Expired(peers) // first sighting of the unused ones
+	clock = clock.Add(48 * time.Hour)
+	got := map[string]bool{}
+	for _, p := range r.Expired(peers) {
+		got[p.PublicKey] = true
+	}
+
+	for _, theirs := range []string{"AMNEZIA-NEVER-CONNECTED", "AMNEZIA-LONG-IDLE"} {
+		if got[theirs] {
+			t.Errorf("%s is Amnezia's, and would have been withdrawn", theirs)
+		}
+	}
+	for _, ours := range []string{"BESY-UNUSED", "BESY-IDLE"} {
+		if !got[ours] {
+			t.Errorf("%s is ours and past its time, and was kept", ours)
+		}
+	}
+}
+
+func TestWithoutARegistryNothingIsWithdrawn(t *testing.T) {
+	r := NewReaper(&fakeDevice{}, nil, time.Hour, time.Hour)
+	now := time.Now()
+	r.nowFn = func() time.Time { return now }
+	peers := []Peer{unusedPeer("A"), usedPeer("B", 1000*time.Hour, now)}
+	r.Expired(peers)
+	now = now.Add(100 * time.Hour)
+	if got := r.Expired(peers); len(got) != 0 {
+		t.Errorf("a reaper with no record of what it issued withdrew %d peers", len(got))
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"net/netip"
 	"sync"
 )
@@ -30,6 +31,17 @@ type Device interface {
 
 // Settings are what every issued client shares: where to connect, what
 // to route, and the obfuscation parameters the server expects.
+// Registry remembers which peers this service created.
+//
+// The interface is shared with Amnezia's own clients, in the same
+// subnet, so a peer's presence says nothing about whose it is. Anything
+// that removes peers asks this first.
+type Registry interface {
+	Owns(publicKey string) bool
+	Add(ctx context.Context, publicKey string) error
+	Remove(ctx context.Context, publicKey string) error
+}
+
 type Settings struct {
 	// Endpoint is the server's public address, host:port.
 	Endpoint string
@@ -67,6 +79,7 @@ var (
 
 // Service issues one credential per device.
 type Service struct {
+	registry Registry
 	device   Device
 	pool     *Pool
 	settings Settings
@@ -97,6 +110,13 @@ func NewService(device Device, pool *Pool, settings Settings) (*Service, error) 
 
 // SetMaxPeers overrides the peer ceiling, for a server sized differently
 // from the default assumption.
+// SetRegistry records every peer this service creates from now on.
+func (s *Service) SetRegistry(r Registry) {
+	s.mu.Lock()
+	s.registry = r
+	s.mu.Unlock()
+}
+
 func (s *Service) SetMaxPeers(n int) {
 	if n > 0 {
 		s.mu.Lock()
@@ -149,6 +169,16 @@ func (s *Service) Issue(ctx context.Context, publicKey string) (Config, error) {
 	prefix := netip.PrefixFrom(addr, addr.BitLen())
 	if err := s.device.AddPeer(ctx, publicKey, prefix); err != nil {
 		return Config{}, fmt.Errorf("provision: adding the peer: %w", err)
+	}
+	// Recorded only here, where this service created the peer — not on
+	// the path above that hands back an existing one. Anyone can present
+	// a public key; knowing one must not make its peer ours to remove.
+	if s.registry != nil {
+		if err := s.registry.Add(ctx, publicKey); err != nil {
+			// The client is served either way. Unrecorded, the peer is
+			// never withdrawn automatically, which is the safe side.
+			log.Printf("provision: could not record an issued credential: %v", err)
+		}
 	}
 	return s.configFor(addr), nil
 }
