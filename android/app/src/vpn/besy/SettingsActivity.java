@@ -117,6 +117,22 @@ public final class SettingsActivity extends Activity {
         Ui.divider(this, about);
         about.addView(Ui.row(this, getString(R.string.server), null,
                 Ui.value(this, getString(R.string.server_host))));
+        Ui.divider(this, about);
+        LinearLayout contact = Ui.row(this, getString(R.string.contact),
+                getString(R.string.contact_email), Ui.chevron(this));
+        Ui.clickable(contact, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Intent mail = new Intent(Intent.ACTION_SENDTO,
+                        android.net.Uri.parse("mailto:" + getString(R.string.contact_email)))
+                        .putExtra(Intent.EXTRA_SUBJECT, "BESY " + version());
+                try {
+                    startActivity(mail);
+                } catch (Exception e) {
+                    // No mail app: the address is on the row itself.
+                }
+            }
+        });
+        about.addView(contact);
         col.addView(about);
     }
 

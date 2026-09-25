@@ -60,4 +60,6 @@
   <!-- Куда приложение обращается за конфигом. Заменить на свой сервер. -->
   <string name="provision_endpoint" translatable="false">https://besyvpn.online/v1/issue</string>
   <string name="server_host" translatable="false">besyvpn.online</string>
+  <string name="contact">Написать нам</string>
+  <string name="contact_email" translatable="false">workmail196@yahoo.com</string>
 </resources>
