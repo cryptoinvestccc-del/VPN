@@ -184,6 +184,13 @@ func wholePath(t *testing.T, serverPort int, flagEndpoint, wantEndpoint string) 
 // provisioning service advertised, with the peers it handed out.
 func startServerOn(t *testing.T, privateKey, peersFile string, port int) (*netstack.Net, *device.Device) {
 	t.Helper()
+	return startServerWith(t, privateKey, peersFile, port, false)
+}
+
+// startServerWith is startServerOn for a caller that adds its peers once
+// the server is running, as a real server does.
+func startServerWith(t *testing.T, privateKey, peersFile string, port int, allowEmpty bool) (*netstack.Net, *device.Device) {
+	t.Helper()
 
 	tun, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{netip.MustParseAddr("10.8.1.1")},
@@ -228,7 +235,7 @@ func startServerOn(t *testing.T, privateKey, peersFile string, port int) (*netst
 		fmt.Fprintf(&b, "public_key=%s\nallowed_ip=%s\n", pub, fields[4])
 		added++
 	}
-	if added == 0 {
+	if added == 0 && !allowEmpty {
 		t.Fatal("the provisioning service added no peer to the interface")
 	}
 

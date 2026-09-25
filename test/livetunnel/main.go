@@ -93,16 +93,27 @@ func run(endpoint, target string) error {
 	}
 	ok(fmt.Sprintf("mtu %d, %d obfuscation parameters", cfg.MTU, len(cfg.Awg)))
 
-	// 4. Build the configuration the app would build.
-	step(4, "build the tunnel configuration")
+	// 4. The engine takes a literal address and never a name, so the
+	//    name is looked up first, as the app looks it up. Without this
+	//    the tool fails exactly where a phone once did.
+	step(4, "look the server up, as the app does")
+	resolved, err := resolveServer(cfg.Endpoint)
+	if err != nil {
+		return err
+	}
+	ok(cfg.Endpoint + " is " + resolved)
+	cfg.Endpoint = resolved
+
+	// 5. Build the configuration the app would build.
+	step(5, "build the tunnel configuration")
 	uapi, err := buildUAPI(private, cfg)
 	if err != nil {
 		return err
 	}
 	ok(fmt.Sprintf("%d lines", strings.Count(uapi, "\n")))
 
-	// 5. Bring it up against the real server.
-	step(5, "bring the tunnel up")
+	// 6. Bring it up against the real server.
+	step(6, "bring the tunnel up")
 	tnet, dev, err := bringUp(cfg, uapi)
 	if err != nil {
 		return err
@@ -110,17 +121,17 @@ func run(endpoint, target string) error {
 	defer dev.Close()
 	ok("interface created")
 
-	// 6. A handshake is the first thing that can fail for a reason the
+	// 7. A handshake is the first thing that can fail for a reason the
 	//    configuration alone cannot show: wrong keys, wrong obfuscation,
 	//    a server that never answers.
-	step(6, "complete a handshake")
+	step(7, "complete a handshake")
 	if err := waitHandshake(dev, 25*time.Second); err != nil {
 		return err
 	}
 	ok("server answered")
 
-	// 7. And traffic, which is the only thing that proves the rest.
-	step(7, "carry traffic through it")
+	// 8. And traffic, which is the only thing that proves the rest.
+	step(8, "carry traffic through it")
 	if err := reach(tnet, target); err != nil {
 		return err
 	}
@@ -263,6 +274,35 @@ func buildUAPI(privateKey string, c *issued) (string, error) {
 		fmt.Fprintf(&b, "persistent_keepalive_interval=%d\n", c.Keepalive)
 	}
 	return b.String(), nil
+}
+
+// resolveServer turns host:port into a literal address, preferring
+// IPv4 the way the app's Endpoints class does.
+func resolveServer(endpoint string) (string, error) {
+	host, port, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("the server address %q has no port", endpoint)
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return endpoint, nil
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(context.Background(), "ip", host)
+	if err != nil || len(addrs) == 0 {
+		return "", fmt.Errorf("could not look up %s: %v", host, err)
+	}
+	chosen := addrs[0]
+	for _, a := range addrs {
+		if a.Unmap().Is4() {
+			chosen = a
+			break
+		}
+	}
+	return netip.AddrPortFrom(chosen.Unmap(), mustPort(port)).String(), nil
+}
+
+func mustPort(p string) uint16 {
+	n, _ := strconv.Atoi(p)
+	return uint16(n)
 }
 
 func hexKey(base64Key string) (string, error) {
