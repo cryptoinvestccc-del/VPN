@@ -29,7 +29,13 @@ import (
 // the point of this file: the tidy ones passed every test while the real
 // ones broke three separate things — a guessed config path, a header
 // read as an integer, and a DNS list read as a string.
-const realShowconf = `ListenPort = 51820
+// realShowconf is what the production server reports, checked against
+// `awg show` on it. The port was once written here as 51820 without
+// being checked; the server listens on 36635, and that one unchecked
+// line is the value every credential carried while phones connected and
+// carried nothing. The parser ignores ListenPort, so it is here only to
+// be true.
+const realShowconf = `ListenPort = 36635
 Jc = 5
 Jmin = 10
 Jmax = 50
