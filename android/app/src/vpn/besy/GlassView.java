@@ -136,6 +136,7 @@ final class GlassView extends View {
     private Shader titleChrome;
     private float titleBase = -1f;
     private float planetR, lampY;
+    private final RectF[] tiles = { new RectF(), new RectF(), new RectF(), new RectF() };
 
     private static final int LAMP_OFF = 0, LAMP_WAIT = 1, LAMP_ON = 2;
     private static final int[] LAMP_COLORS = { Palette.LAMP_OFF, Palette.LAMP_WAIT, Palette.LAMP_ON };
@@ -144,10 +145,19 @@ final class GlassView extends View {
         super.onSizeChanged(w, h, oldw, oldh);
         if (w <= 0 || h <= 0) return;
         buttonCx = w / 2f;
-        buttonCy = h * 0.40f;
-        buttonR  = Math.min(w * 0.38f, h * 0.24f);
+        buttonCy = h * 0.28f;
+        buttonR  = Math.min(w * 0.19f, h * 0.12f);
         planetR  = buttonR * 0.46f;
-        lampY    = buttonCy + buttonR + dp(30);
+        lampY    = buttonCy + buttonR + dp(24);
+
+        // the four tiles, two by two, under the lamp
+        final float side = dp(20), gap = dp(12), tileH = dp(84);
+        final float tileW = (w - 2 * side - gap) / 2f;
+        final float top = lampY + dp(56);
+        for (int i = 0; i < 4; i++) {
+            final float x = side + (i % 2) * (tileW + gap), y = top + (i / 2) * (tileH + gap);
+            tiles[i].set(x, y, x + tileW, y + tileH);
+        }
 
         skyGlow = new RadialGradient(buttonCx, buttonCy, buttonR * 2.2f,
                 0x30FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
@@ -249,6 +259,7 @@ final class GlassView extends View {
         drawTitle(canvas);
         drawButton(canvas);
         drawLamp(canvas);
+        drawStats(canvas);
         drawGear(canvas, w);
         drawReadout(canvas, w, h);
 
@@ -484,6 +495,102 @@ final class GlassView extends View {
         canvas.drawCircle(cx, cy, r, fill);
     }
 
+    // ---- The tiles ----------------------------------------------------
+
+    /**
+     * Time connected, traffic, speed and the address the internet sees,
+     * in four glass tiles. They read what the tunnel service keeps; while
+     * the tunnel is down they show dashes and dim with the rest of the
+     * screen.
+     */
+    private void drawStats(Canvas canvas) {
+        final boolean up = state == STATE_LIVE && TunnelService.connectedAt > 0;
+        final String[] labels = {
+                str(R.string.tile_time), str(R.string.tile_ip),
+                str(R.string.tile_traffic), str(R.string.tile_speed) };
+        final String[][] values = up ? statValues() : new String[][] {
+                { "—" }, { "—" }, { "—" }, { "—" } };
+        final float dim = 0.45f + 0.55f * lit;
+
+        for (int i = 0; i < 4; i++) {
+            final RectF r = tiles[i];
+            final float radius = dp(18);
+            fill.setShader(null);
+            fill.setColor(0x0EFFFFFF);
+            canvas.drawRoundRect(r, radius, radius, fill);
+            stroke.setShader(null);
+            stroke.setColor(0x1FFFFFFF);
+            stroke.setStrokeWidth(dp(1));
+            canvas.drawRoundRect(r, radius, radius, stroke);
+
+            final float x = r.left + dp(14), room = r.width() - dp(28);
+            text.setTextAlign(Paint.Align.LEFT);
+            text.setLetterSpacing(0.08f);
+            text.setTextSize(dp(11));
+            text.setColor(Palette.INK_3);
+            canvas.drawText(labels[i].toUpperCase(java.util.Locale.getDefault()), x, r.top + dp(24), text);
+            text.setLetterSpacing(0f);
+
+            text.setColor(Palette.INK);
+            text.setAlpha((int) (255 * dim));
+            final String[] v = values[i];
+            if (v.length == 1) {
+                fit(v[0], dp(19), room);
+                canvas.drawText(v[0], x, r.top + dp(58), text);
+            } else {
+                fit(longer(v[0], v[1]), dp(15), room);
+                canvas.drawText(v[0], x, r.top + dp(49), text);
+                canvas.drawText(v[1], x, r.top + dp(70), text);
+            }
+            text.setAlpha(255);
+        }
+    }
+
+    /** Sets the text size to at most {@code size}, smaller if the text would not fit. */
+    private void fit(String s, float size, float room) {
+        text.setTextSize(size);
+        final float wide = text.measureText(s);
+        if (wide > room) text.setTextSize(size * room / wide);
+    }
+
+    private static String longer(String a, String b) { return a.length() >= b.length() ? a : b; }
+
+    private String[][] statValues() {
+        long sec = Math.max(0, (android.os.SystemClock.elapsedRealtime() - TunnelService.connectedAt) / 1000);
+        final String time = String.format(java.util.Locale.ROOT, "%02d:%02d:%02d", sec / 3600, sec / 60 % 60, sec % 60);
+        final String ip = TunnelService.exitIp != null ? TunnelService.exitIp : "—";
+        final String perSec = str(R.string.per_second);
+        return new String[][] {
+                { time },
+                { ip },
+                { "↓ " + bytes(TunnelService.rxBytes), "↑ " + bytes(TunnelService.txBytes) },
+                { "↓ " + bytes((long) TunnelService.rxRate) + perSec, "↑ " + bytes((long) TunnelService.txRate) + perSec },
+        };
+    }
+
+    /** 812 B, 3.4 KB, 148 MB, 1.2 GB — one decimal below ten, whole numbers above. */
+    private String bytes(long n) {
+        final int[] units = { R.string.unit_b, R.string.unit_kb, R.string.unit_mb, R.string.unit_gb };
+        double v = n;
+        int u = 0;
+        while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+        final java.util.Locale here = getResources().getConfiguration().locale;
+        final String num = u == 0 || v >= 10
+                ? String.format(here, "%d", Math.round(v))
+                : String.format(here, "%.1f", v);
+        return num + " " + str(units[u]);
+    }
+
+    /** What the tiles say, read out as one sentence for TalkBack. */
+    private String statsSpoken() {
+        if (state != STATE_LIVE || TunnelService.connectedAt <= 0) return str(R.string.tiles_off);
+        final String[][] v = statValues();
+        return str(R.string.tile_time) + " " + v[0][0] + ". "
+                + str(R.string.tile_ip) + " " + v[1][0] + ". "
+                + str(R.string.tile_traffic) + " " + v[2][0] + ", " + v[2][1] + ". "
+                + str(R.string.tile_speed) + " " + v[3][0] + ", " + v[3][1] + ".";
+    }
+
     private void drawReadout(Canvas canvas, float w, float h) {
         // Words only while the switch is moving; at rest the lamp says it.
         final String title = state == STATE_BUSY ? str(R.string.busy_title)
@@ -492,7 +599,7 @@ final class GlassView extends View {
         if (title != null) {
             text.setColor(Palette.INK);
             text.setTextSize(dp(18));
-            canvas.drawText(title, w / 2f, buttonCy + buttonR + dp(72), text);
+            canvas.drawText(title, w / 2f, lampY + dp(34), text);
         }
 
         // The navigation bar is drawn over this view on phones that use
@@ -597,6 +704,7 @@ final class GlassView extends View {
 
     private static final int NODE_POWER = 1;
     private static final int NODE_GEAR  = 2;
+    private static final int NODE_STATS = 3;
 
     private final android.view.accessibility.AccessibilityNodeProvider nodes =
             new android.view.accessibility.AccessibilityNodeProvider() {
@@ -607,6 +715,25 @@ final class GlassView extends View {
                 onInitializeAccessibilityNodeInfo(info);
                 info.addChild(GlassView.this, NODE_POWER);
                 info.addChild(GlassView.this, NODE_GEAR);
+                info.addChild(GlassView.this, NODE_STATS);
+                return info;
+            }
+            if (id == NODE_STATS) {
+                info = android.view.accessibility.AccessibilityNodeInfo.obtain(GlassView.this, id);
+                info.setPackageName(getContext().getPackageName());
+                info.setClassName("android.widget.TextView");
+                info.setParent(GlassView.this);
+                info.setContentDescription(statsSpoken());
+                android.graphics.Rect r = new android.graphics.Rect();
+                RectF all = new RectF(tiles[0].left, tiles[0].top, tiles[3].right, tiles[3].bottom);
+                all.round(r);
+                info.setBoundsInParent(r);
+                int[] at = new int[2];
+                getLocationOnScreen(at);
+                r.offset(at[0], at[1]);
+                info.setBoundsInScreen(r);
+                info.setFocusable(true);
+                info.setVisibleToUser(true);
                 return info;
             }
             if (id != NODE_POWER && id != NODE_GEAR) return null;

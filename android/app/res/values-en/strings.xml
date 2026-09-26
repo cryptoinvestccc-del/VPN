@@ -59,4 +59,14 @@
   <string name="version">Version</string>
   <string name="server">Server</string>
   <string name="contact">Contact us</string>
+  <string name="tile_time">Time</string>
+  <string name="tile_ip">IP</string>
+  <string name="tile_traffic">Traffic</string>
+  <string name="tile_speed">Speed</string>
+  <string name="tiles_off">VPN is off, no connection data</string>
+  <string name="unit_b">B</string>
+  <string name="unit_kb">KB</string>
+  <string name="unit_mb">MB</string>
+  <string name="unit_gb">GB</string>
+  <string name="per_second">/s</string>
 </resources>

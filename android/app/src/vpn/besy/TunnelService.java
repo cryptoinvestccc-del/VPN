@@ -54,6 +54,18 @@ public final class TunnelService extends VpnService {
      */
     static volatile long lastHandshake;
 
+    /**
+     * For the tiles under the button, and only while the tunnel is up:
+     * when it came up (elapsedRealtime, ms; 0 = not up), the address the
+     * internet sees (the server's), the byte counters the engine reports
+     * every few seconds, and the rates worked out between two reports.
+     */
+    static volatile long connectedAt;
+    static volatile String exitIp;
+    static volatile long rxBytes, txBytes;
+    static volatile double rxRate, txRate;
+    private long statAt;
+
     @Override protected void attachBaseContext(android.content.Context base) {
         super.attachBaseContext(Lang.wrap(base));
     }
@@ -203,7 +215,9 @@ public final class TunnelService extends VpnService {
         // This is also the last moment the lookup can happen over the
         // ordinary network in a way that is obvious from the code.
         stage = getString(R.string.stage_server);
-        issued.put("endpoint", Endpoints.resolve(issued.optString("endpoint")));
+        final String endpoint = Endpoints.resolve(issued.optString("endpoint"));
+        issued.put("endpoint", endpoint);
+        exitIp = hostOf(endpoint);
 
         stage = getString(R.string.stage_engine);
         String config = Uapi.build(keys.privateKey(), issued);
@@ -272,6 +286,7 @@ public final class TunnelService extends VpnService {
             // The engine's periodic report: shown, never kept.
             if (line.startsWith("stat ")) {
                 lastHandshake = statHandshake(line);
+                countTraffic(statField(line, "rx"), statField(line, "tx"));
                 continue;
             }
 
@@ -283,6 +298,10 @@ public final class TunnelService extends VpnService {
                 up = true;
                 stage = "";
                 lastError = null;
+                connectedAt = android.os.SystemClock.elapsedRealtime();
+                rxBytes = txBytes = 0;
+                rxRate = txRate = 0;
+                statAt = 0;
                 state = GlassView.STATE_LIVE;
                 continue;
             }
@@ -369,6 +388,10 @@ public final class TunnelService extends VpnService {
         state = GlassView.STATE_OFF;
         address = null;
         lastHandshake = 0;
+        connectedAt = 0;
+        exitIp = null;
+        rxBytes = txBytes = 0;
+        rxRate = txRate = 0;
         stopForeground(true);
     }
 
@@ -410,6 +433,53 @@ public final class TunnelService extends VpnService {
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();
+    }
+
+    /**
+     * Takes the engine's running totals and works out bytes per second
+     * since the previous report. A total that went backwards (the engine
+     * restarted its counters) resets the rate instead of showing a
+     * negative one.
+     */
+    private void countTraffic(long rx, long tx) {
+        if (rx < 0 || tx < 0) return;
+        final long now = android.os.SystemClock.elapsedRealtime();
+        if (statAt > 0 && now > statAt && rx >= rxBytes && tx >= txBytes) {
+            final double dt = (now - statAt) / 1000.0;
+            rxRate = (rx - rxBytes) / dt;
+            txRate = (tx - txBytes) / dt;
+        } else {
+            rxRate = txRate = 0;
+        }
+        statAt = now;
+        rxBytes = rx;
+        txBytes = tx;
+    }
+
+    /** One numeric field of a "stat" line; -1 if it is missing or unreadable. */
+    static long statField(String line, String name) {
+        final String key = name + "=";
+        for (String field : line.split(" ")) {
+            if (field.startsWith(key)) {
+                try {
+                    return Long.parseLong(field.substring(key.length()));
+                } catch (NumberFormatException e) {
+                    return -1;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /** The host of a literal "host:port" or "[v6]:port". */
+    static String hostOf(String endpoint) {
+        if (endpoint == null) return null;
+        if (endpoint.startsWith("[")) {
+            final int close = endpoint.indexOf(']');
+            return close > 1 ? endpoint.substring(1, close) : null;
+        }
+        final int colon = endpoint.lastIndexOf(':');
+        return colon > 0 ? endpoint.substring(0, colon) : endpoint;
     }
 
     /** Reads "stat handshake=N rx=… tx=…"; zero if it cannot. */

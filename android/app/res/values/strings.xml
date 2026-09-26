@@ -63,4 +63,14 @@
   <string name="server_host" translatable="false">besyvpn.online</string>
   <string name="contact">Написать нам</string>
   <string name="contact_email" translatable="false">workmail196@yahoo.com</string>
+  <string name="tile_time">Время</string>
+  <string name="tile_ip">IP</string>
+  <string name="tile_traffic">Трафик</string>
+  <string name="tile_speed">Скорость</string>
+  <string name="tiles_off">VPN выключен, данных о подключении нет</string>
+  <string name="unit_b">Б</string>
+  <string name="unit_kb">КБ</string>
+  <string name="unit_mb">МБ</string>
+  <string name="unit_gb">ГБ</string>
+  <string name="per_second">/с</string>
 </resources>
