@@ -44,8 +44,6 @@ final class GlassView extends View {
     /** Until when "disconnecting" is shown after the button turned the tunnel off. */
     private long leavingUntil;
     private String error;
-    private float spin;          // the waiting ring's angle
-    private float spinSlow = 20f; // the planet's turn
     private OnPowerTap listener;
     private OnSettingsTap settingsListener;
 
@@ -124,153 +122,284 @@ final class GlassView extends View {
 
     private float dp(float v) { return v * getResources().getDisplayMetrics().density; }
 
-    @Override protected void onDraw(Canvas canvas) {
-        final float w = getWidth(), h = getHeight();
-        if (w <= 0 || h <= 0) return;
+    // ---- Layout and cached shaders -------------------------------------
+    //
+    // Shaders are built once per size, not per frame: a gradient allocated
+    // in onDraw sixty times a second is garbage the collector has to chase,
+    // and on a slow phone that shows up as a stutter in exactly the part of
+    // the screen that is supposed to look smooth.
 
+    private Shader skyGlow, orbGlow, ringArcs, chrome, sparkGlow;
+    private final Shader[] lampHalo = new Shader[3];
+    private final android.graphics.Matrix ringTurn = new android.graphics.Matrix();
+    private android.graphics.Typeface heavy;
+    private Shader titleChrome;
+    private float titleBase = -1f;
+    private float planetR, lampY;
+
+    private static final int LAMP_OFF = 0, LAMP_WAIT = 1, LAMP_ON = 2;
+    private static final int[] LAMP_COLORS = { Palette.LAMP_OFF, Palette.LAMP_WAIT, Palette.LAMP_ON };
+
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        if (w <= 0 || h <= 0) return;
         buttonCx = w / 2f;
         buttonCy = h * 0.40f;
         buttonR  = Math.min(w * 0.38f, h * 0.24f);
+        planetR  = buttonR * 0.46f;
+        lampY    = buttonCy + buttonR + dp(30);
 
-        drawSky(canvas, w, h);
+        skyGlow = new RadialGradient(buttonCx, buttonCy, buttonR * 2.2f,
+                0x30FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        orbGlow = new RadialGradient(buttonCx, buttonCy - buttonR * 0.1f, buttonR,
+                new int[] { 0x44DDE6FF, 0x1A8FA3D9, 0x00000000 },
+                new float[] { 0f, 0.6f, 1f }, Shader.TileMode.CLAMP);
+
+        // Two arcs with gaps between them, their ends fading out rather
+        // than stopping: a long one over 230 degrees and a short one over
+        // 60, painted as one gradient around the circle and turned by a
+        // matrix, so a frame costs one circle and no new objects.
+        final int t = 0x00FFFFFF, o = 0xFFFFFFFF;
+        ringArcs = new android.graphics.SweepGradient(buttonCx, buttonCy,
+                new int[] { t, o, o, t, t, o, o, t, t },
+                new float[] { 0f, 28 / 360f, 202 / 360f, 230 / 360f,
+                        262 / 360f, 278 / 360f, 306 / 360f, 322 / 360f, 1f });
+
+        chrome = new LinearGradient(0, buttonCy - planetR * 1.25f, 0, buttonCy + planetR * 1.25f,
+                new int[] { 0xFFFFFFFF, 0xFFDCDEE3, 0xFF7A7D85, 0xFF3A3C42, 0xFFB7BAC1, 0xFFF4F5F7, 0xFF9295A0 },
+                new float[] { 0f, 0.22f, 0.42f, 0.5f, 0.6f, 0.8f, 1f }, Shader.TileMode.CLAMP);
+
+        final float r = dp(7) * 3.2f;
+        for (int i = 0; i < 3; i++) {
+            final int c = LAMP_COLORS[i];
+            lampHalo[i] = new RadialGradient(buttonCx, lampY, r,
+                    (0x66 << 24) | (c & 0x00FFFFFF), c & 0x00FFFFFF, Shader.TileMode.CLAMP);
+        }
+        sparkGlow = null;
+        titleBase = -1f;
+    }
+
+    // ---- Motion -------------------------------------------------------
+    //
+    // Everything that moves is driven by elapsed time rather than by frame
+    // count, so a 120 Hz screen turns things at the same speed as a 60 Hz
+    // one, and every change of state eases in instead of jumping: the ring
+    // spins up when a connection starts and coasts down to a slow drift
+    // once it is made. When the tunnel is off and all of it has come to
+    // rest, the view stops asking for frames.
+
+    private long lastFrame;          // uptime of the previous frame; 0 = the loop was idle
+    private float ringAngle = -90f;  // degrees
+    private float ringSpeed;         // degrees per second, eased
+    private float ringLight = 0.3f;  // 0..1, eased
+    private float planetAngle = 20f; // degrees
+    private float planetSpeed;       // degrees per second, eased
+    private float lit;               // 0 = grey planet, 1 = chrome, eased
+    private float pulse;             // the amber lamp's breathing, radians
+    private int lampFrom = LAMP_OFF, lampTo = LAMP_OFF;
+    private float lampMix = 1f;      // 0 = lampFrom, 1 = lampTo
+
+    private static float approach(float value, float target, float rate, float dt) {
+        return target + (value - target) * (float) Math.exp(-rate * dt);
+    }
+
+    /** Moves everything on to now; says whether another frame is needed. */
+    private boolean step() {
+        final long now = android.os.SystemClock.uptimeMillis();
+        final float dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+        lastFrame = now;
+
+        final boolean live = state == STATE_LIVE, moving = state == STATE_BUSY || leaving();
+        ringSpeed   = approach(ringSpeed,   moving ? 240f : live ? 16f : 0f,   3f,   dt);
+        ringLight   = approach(ringLight,   moving ? 0.95f : live ? 1f : 0.3f, 4f,   dt);
+        planetSpeed = approach(planetSpeed, moving ? 60f : live ? 12f : 0f,    2.5f, dt);
+        lit         = approach(lit,         live ? 1f : moving ? 0.75f : 0f,   3.5f, dt);
+        ringAngle   = (ringAngle + ringSpeed * dt) % 360f;
+        planetAngle = (planetAngle + planetSpeed * dt) % 360f;
+        if (moving) pulse = (pulse + dt * 5f) % (float) (2 * Math.PI);
+
+        final int lamp = moving ? LAMP_WAIT : live ? LAMP_ON : LAMP_OFF;
+        if (lamp != lampTo) { lampFrom = lampTo; lampTo = lamp; lampMix = 0f; }
+        lampMix = Math.min(1f, lampMix + dt / 0.25f);
+
+        if (live || moving || lampMix < 1f) return true;
+        final boolean still = ringSpeed < 0.5f && planetSpeed < 0.5f
+                && Math.abs(ringLight - 0.3f) < 0.004f && lit < 0.004f;
+        if (still) { ringSpeed = 0f; planetSpeed = 0f; ringLight = 0.3f; lit = 0f; }
+        return !still;
+    }
+
+    @Override protected void onDraw(Canvas canvas) {
+        final float w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0 || chrome == null) return;
+
+        final boolean again = step();
+
+        fill.setShader(null);
+        fill.setColor(Palette.VOID_);
+        canvas.drawRect(0, 0, w, h, fill);
+        fill.setShader(skyGlow);
+        fill.setAlpha((int) (255 * (0.5f + 0.5f * lit)));
+        canvas.drawRect(0, 0, w, h, fill);
+        fill.setShader(null);
+        fill.setAlpha(255);
+
         drawTitle(canvas);
         drawButton(canvas);
         drawLamp(canvas);
         drawGear(canvas, w);
         drawReadout(canvas, w, h);
 
-        if (state == STATE_BUSY || leaving()) {
-            spin += 6f;
-            if (spin >= 360f) spin -= 360f;
-        }
-        if (state != STATE_OFF || leaving()) {
-            // the planet keeps turning, slowly, while the tunnel is up
-            spinSlow += state == STATE_LIVE ? 0.35f : 1.2f;
-            if (spinSlow >= 360f) spinSlow -= 360f;
-            invalidate();
-        }
-    }
-
-    /** Black, with a faint light behind the circle. */
-    private void drawSky(Canvas canvas, float w, float h) {
-        fill.setShader(null);
-        fill.setColor(Palette.VOID_);
-        canvas.drawRect(0, 0, w, h, fill);
-
-        fill.setShader(new RadialGradient(buttonCx, buttonCy, buttonR * 2.2f,
-                state == STATE_LIVE ? 0x30FFFFFF : 0x18FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
-        canvas.drawRect(0, 0, w, h, fill);
-        fill.setShader(null);
+        if (again) postInvalidateOnAnimation(); else lastFrame = 0;
     }
 
     /**
      * The one control: a dark orb with the logo's planet in it — the globe
-     * and its orbit, drawn in chrome — and a thin ring around it.
+     * and its orbit, drawn in chrome — inside a ring of two gapped arcs.
      */
     private void drawButton(Canvas canvas) {
-        final boolean live = state == STATE_LIVE, moving = state == STATE_BUSY || leaving();
-
-        // the orb, lit from inside when the tunnel is up
-        fill.setShader(new RadialGradient(buttonCx, buttonCy - buttonR * 0.1f, buttonR,
-                new int[] { live ? 0x44DDE6FF : 0x1CFFFFFF, live ? 0x1A8FA3D9 : 0x0AFFFFFF, 0x00000000 },
-                new float[] { 0f, 0.6f, 1f }, Shader.TileMode.CLAMP));
+        // the orb, lit from inside as the tunnel comes up
+        fill.setShader(orbGlow);
+        fill.setAlpha((int) (255 * (0.4f + 0.6f * lit)));
         canvas.drawCircle(buttonCx, buttonCy, buttonR, fill);
         fill.setShader(null);
+        fill.setAlpha(255);
 
-        // the ring: faint at rest, whole and bright when live, a running arc while switching
+        // a hairline for the circle's shape, then the arcs and their glow
         stroke.setShader(null);
-        stroke.setStrokeCap(Paint.Cap.ROUND);
-        stroke.setStrokeWidth(dp(2));
-        stroke.setColor(live ? 0xCCFFFFFF : 0x2EFFFFFF);
+        stroke.setColor(0x14FFFFFF);
+        stroke.setStrokeWidth(dp(1));
         canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
-        if (moving) {
-            stroke.setColor(0xFFFFFFFF);
-            stroke.setStrokeWidth(dp(2.6f));
-            rect.set(buttonCx - buttonR, buttonCy - buttonR, buttonCx + buttonR, buttonCy + buttonR);
-            canvas.drawArc(rect, spin, 70f, false, stroke);
-            canvas.drawArc(rect, spin + 180f, 30f, false, stroke);
-        }
-        stroke.setStrokeCap(Paint.Cap.BUTT);
 
-        drawPlanet(canvas, buttonCx, buttonCy, buttonR * 0.46f, live, moving);
+        ringTurn.setRotate(ringAngle, buttonCx, buttonCy);
+        ringArcs.setLocalMatrix(ringTurn);
+        stroke.setShader(ringArcs);
+        stroke.setColor(0xFFFFFFFF);
+        stroke.setAlpha((int) (255 * 0.16f * ringLight));
+        stroke.setStrokeWidth(dp(7));
+        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
+        stroke.setAlpha((int) (255 * ringLight));
+        stroke.setStrokeWidth(dp(2.2f));
+        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
+        stroke.setShader(null);
+        stroke.setAlpha(255);
+
+        drawPlanet(canvas, buttonCx, buttonCy, planetR);
     }
 
     /**
      * The globe with its orbit, as in the logo: a wireframe sphere tilted
      * a little, the orbit's far half behind it and its near half in front,
-     * and the sparkle on the orbit. Grey while the tunnel is down, chrome
-     * when it is up; it turns slowly while connected or connecting.
+     * and the sparkle on the orbit. It fades from grey to chrome as the
+     * tunnel comes up: each part is drawn grey, then chrome over it, in
+     * proportion, so the change is a cross-fade rather than a switch.
      */
-    private void drawPlanet(Canvas canvas, float cx, float cy, float r, boolean live, boolean moving) {
-        final float turn = (float) Math.toRadians(live || moving ? spinSlow : 20f);
-        final Shader chrome = new LinearGradient(0, cy - r * 1.25f, 0, cy + r * 1.25f,
-                new int[] { 0xFFFFFFFF, 0xFFDCDEE3, 0xFF7A7D85, 0xFF3A3C42, 0xFFB7BAC1, 0xFFF4F5F7, 0xFF9295A0 },
-                new float[] { 0f, 0.22f, 0.42f, 0.5f, 0.6f, 0.8f, 1f }, Shader.TileMode.CLAMP);
-        final int alpha = live ? 255 : moving ? 200 : 110;
+    private void drawPlanet(Canvas canvas, float cx, float cy, float r) {
+        final float orx = r * 1.72f, ory = r * 0.46f;
+        final int greyA = (int) (110 * (1f - lit)), chromeA = (int) (255 * lit);
+        final double turn = Math.toRadians(planetAngle);
 
         canvas.save();
         canvas.rotate(-16f, cx, cy);
         stroke.setStrokeCap(Paint.Cap.ROUND);
-        if (live || moving) { stroke.setColor(0xFFFFFFFF); stroke.setShader(chrome); }
-        else { stroke.setShader(null); stroke.setColor(0xFF8A8D95); }
 
-        // orbit, far half (behind the globe)
-        final float orx = r * 1.72f, ory = r * 0.46f;
+        // orbit, far half
         rect.set(cx - orx, cy - ory, cx + orx, cy + ory);
-        stroke.setAlpha(alpha * 7 / 10);
         stroke.setStrokeWidth(r * 0.1f);
-        canvas.drawArc(rect, 180f, 180f, false, stroke);
+        for (int layer = 0; layer < 2; layer++) {
+            if (!paintLayer(layer, greyA * 7 / 10, chromeA * 7 / 10)) continue;
+            canvas.drawArc(rect, 180f, 180f, false, stroke);
+        }
 
-        // a dark disc so the far half of the orbit hides behind the sphere
+        // the sphere hides the far half of the orbit
         fill.setShader(null);
         fill.setColor(0xFF08090B);
         canvas.drawCircle(cx, cy, r, fill);
 
-        // meridians: the far ones faint, the near ones full
-        stroke.setStrokeWidth(r * 0.035f);
-        for (int i = 0; i < 12; i++) {
-            final double lam = i * Math.PI / 6 + turn;
-            final float rx = (float) Math.abs(Math.sin(lam)) * r;
-            if (rx < 0.5f) continue;
-            stroke.setAlpha(Math.cos(lam) > 0 ? alpha : alpha / 4);
-            rect.set(cx - rx, cy - r, cx + rx, cy + r);
-            canvas.drawArc(rect, Math.sin(lam) > 0 ? -90f : 90f, 180f, false, stroke);
+        for (int layer = 0; layer < 2; layer++) {
+            final int base = layer == 0 ? greyA : chromeA;
+            if (!paintLayer(layer, base, base)) continue;
+            // meridians: the far ones faint, the near ones full
+            stroke.setStrokeWidth(r * 0.035f);
+            for (int i = 0; i < 12; i++) {
+                final double lam = i * Math.PI / 6 + turn;
+                final float rx = (float) Math.abs(Math.sin(lam)) * r;
+                if (rx < 0.5f) continue;
+                stroke.setAlpha(Math.cos(lam) > 0 ? base : base / 4);
+                rect.set(cx - rx, cy - r, cx + rx, cy + r);
+                canvas.drawArc(rect, Math.sin(lam) > 0 ? -90f : 90f, 180f, false, stroke);
+            }
+            // parallels: near half full, far half faint
+            for (int ph : PARALLELS) {
+                final double a = Math.toRadians(ph);
+                final float y = cy - r * (float) Math.sin(a), rx = r * (float) Math.cos(a), ry = rx * 0.2f;
+                rect.set(cx - rx, y - ry, cx + rx, y + ry);
+                stroke.setAlpha(base);
+                canvas.drawArc(rect, 0f, 180f, false, stroke);
+                stroke.setAlpha(base / 4);
+                canvas.drawArc(rect, 180f, 180f, false, stroke);
+            }
+            stroke.setAlpha(base);
+            stroke.setStrokeWidth(r * 0.07f);
+            canvas.drawCircle(cx, cy, r, stroke);
         }
-        // parallels: near half full, far half faint
-        for (int ph : new int[] { -55, -25, 5, 35 }) {
-            final double a = Math.toRadians(ph);
-            final float y = cy - r * (float) Math.sin(a), rx = r * (float) Math.cos(a), ry = rx * 0.2f;
-            rect.set(cx - rx, y - ry, cx + rx, y + ry);
-            stroke.setAlpha(alpha);
-            canvas.drawArc(rect, 0f, 180f, false, stroke);
-            stroke.setAlpha(alpha / 4);
-            canvas.drawArc(rect, 180f, 180f, false, stroke);
-        }
-        stroke.setAlpha(alpha);
-        stroke.setStrokeWidth(r * 0.07f);
-        canvas.drawCircle(cx, cy, r, stroke);
 
-        // orbit, near half (in front of the globe)
+        // orbit, near half
         rect.set(cx - orx, cy - ory, cx + orx, cy + ory);
         stroke.setStrokeWidth(r * 0.12f);
-        canvas.drawArc(rect, 0f, 180f, false, stroke);
+        for (int layer = 0; layer < 2; layer++) {
+            if (!paintLayer(layer, greyA, chromeA)) continue;
+            canvas.drawArc(rect, 0f, 180f, false, stroke);
+        }
         stroke.setShader(null);
         stroke.setAlpha(255);
         stroke.setStrokeCap(Paint.Cap.BUTT);
 
-        // the sparkle sits on the orbit's left end, as in the logo
-        final float sx = cx - orx * 0.93f, sy = cy + ory * 0.35f;
-        drawSparkle(canvas, sx, sy, r * (live ? 0.26f : 0.18f), live ? 0xFFFFFFFF : 0x99A0A3AB, live);
+        // the sparkle on the orbit's left end, as in the logo
+        final float sx = cx - orx * 0.93f, sy = cy + ory * 0.35f, sr = r * (0.18f + 0.08f * lit);
+        if (sparkGlow == null) {
+            sparkGlow = new RadialGradient(sx, sy, r * 0.26f * 1.8f, 0x88FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        }
+        if (lit > 0.01f) {
+            fill.setShader(sparkGlow);
+            fill.setAlpha((int) (255 * lit));
+            canvas.drawCircle(sx, sy, r * 0.26f * 1.8f, fill);
+            fill.setShader(null);
+        }
+        final int grey = 0xA0A3AB;
+        final int a = (int) (0x99 + (0xFF - 0x99) * lit);
+        final int rgb = lerpRgb(grey, 0xFFFFFF, lit);
+        drawSparkle(canvas, sx, sy, sr, (a << 24) | rgb);
         canvas.restore();
     }
 
-    /** The four-point star from the logo. */
-    private void drawSparkle(Canvas canvas, float x, float y, float r, int color, boolean glow) {
-        if (glow) {
-            fill.setShader(new RadialGradient(x, y, r * 1.8f, 0x88FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
-            canvas.drawCircle(x, y, r * 1.8f, fill);
-            fill.setShader(null);
+    private static final int[] PARALLELS = { -55, -25, 5, 35 };
+
+    /** Sets the stroke up for the grey (0) or chrome (1) layer; false if that layer is invisible. */
+    private boolean paintLayer(int layer, int greyAlpha, int chromeAlpha) {
+        if (layer == 0) {
+            if (greyAlpha < 2) return false;
+            stroke.setShader(null);
+            stroke.setColor(0xFF8A8D95);
+            stroke.setAlpha(greyAlpha);
+        } else {
+            if (chromeAlpha < 2) return false;
+            stroke.setColor(0xFFFFFFFF);
+            stroke.setShader(chrome);
+            stroke.setAlpha(chromeAlpha);
         }
+        return true;
+    }
+
+    private static int lerpRgb(int a, int b, float u) {
+        final int r = (int) (((a >> 16) & 0xFF) + (((b >> 16) & 0xFF) - ((a >> 16) & 0xFF)) * u);
+        final int g = (int) (((a >> 8) & 0xFF) + (((b >> 8) & 0xFF) - ((a >> 8) & 0xFF)) * u);
+        final int bl = (int) ((a & 0xFF) + ((b & 0xFF) - (a & 0xFF)) * u);
+        return (r << 16) | (g << 8) | bl;
+    }
+
+    /** The four-point star from the logo. */
+    private void drawSparkle(Canvas canvas, float x, float y, float r, int color) {
         final float k = r / 12f;
         path.reset();
         path.moveTo(x, y - 12 * k);
@@ -279,6 +408,7 @@ final class GlassView extends View {
         path.cubicTo(x - .8f * k, y + 4 * k, x - 4 * k, y + .8f * k, x - 12 * k, y);
         path.cubicTo(x - 4 * k, y - .8f * k, x - .8f * k, y - 4 * k, x, y - 12 * k);
         path.close();
+        fill.setShader(null);
         fill.setColor(color);
         canvas.drawPath(path, fill);
     }
@@ -294,7 +424,16 @@ final class GlassView extends View {
         final float x = dp(22), base = top + dp(40);
         final String name = "BESY VPN";
 
-        text.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD));
+        if (heavy == null) {
+            heavy = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD);
+        }
+        if (base != titleBase) {
+            titleBase = base;
+            titleChrome = new LinearGradient(0, base - dp(20), 0, base + dp(2),
+                    new int[] { 0xFFFFFFFF, 0xFFC4C7CE, 0xFFFFFFFF, 0xFFB9BCC4 },
+                    new float[] { 0f, 0.45f, 0.55f, 1f }, Shader.TileMode.CLAMP);
+        }
+        text.setTypeface(heavy);
         text.setTextSkewX(-0.22f);
         text.setTextSize(dp(26));
         text.setTextAlign(Paint.Align.LEFT);
@@ -303,9 +442,7 @@ final class GlassView extends View {
         text.setStyle(Paint.Style.STROKE);
         text.setStrokeJoin(Paint.Join.ROUND);
         text.setStrokeWidth(dp(4f));
-        text.setShader(new LinearGradient(0, base - dp(20), 0, base + dp(2),
-                new int[] { 0xFFFFFFFF, 0xFFC4C7CE, 0xFFFFFFFF, 0xFFB9BCC4 },
-                new float[] { 0f, 0.45f, 0.55f, 1f }, Shader.TileMode.CLAMP));
+        text.setShader(titleChrome);
         canvas.drawText(name, x, base, text);
 
         text.setShader(null);
@@ -321,26 +458,28 @@ final class GlassView extends View {
 
     /**
      * The small lamp under the circle: green when the tunnel is up, red
-     * when it is down, amber and breathing while it is being set up.
+     * when it is down, amber and breathing while it is being switched.
+     * A change of colour cross-fades over a quarter of a second.
      */
     private void drawLamp(Canvas canvas) {
-        final float cx = buttonCx, cy = buttonCy + buttonR + dp(30), r = dp(7);
-        int color;
-        float glow = 1f;
-        if (state == STATE_BUSY || leaving()) {
-            color = Palette.LAMP_WAIT;
-            glow = 0.55f + 0.45f * (float) Math.abs(Math.sin(Math.toRadians(spin * 2)));
-        } else {
-            color = state == STATE_LIVE ? Palette.LAMP_ON : Palette.LAMP_OFF;
-        }
-        final int halo = ((int) (0x66 * glow) << 24) | (color & 0x00FFFFFF);
-        fill.setShader(new RadialGradient(cx, cy, r * 3.2f, halo, color & 0x00FFFFFF, Shader.TileMode.CLAMP));
-        canvas.drawCircle(cx, cy, r * 3.2f, fill);
-        fill.setShader(null);
-        fill.setColor(color);
-        canvas.drawCircle(cx, cy, r, fill);
+        final float cx = buttonCx, cy = lampY, r = dp(7);
+        if (lampMix < 1f) lampLayer(canvas, lampFrom, 1f - lampMix, cx, cy, r);
+        lampLayer(canvas, lampTo, lampMix, cx, cy, r);
+        fill.setAlpha(255);
         fill.setColor(0x66FFFFFF);
         canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.3f, fill);
+    }
+
+    private void lampLayer(Canvas canvas, int which, float amount, float cx, float cy, float r) {
+        float glow = 1f;
+        if (which == LAMP_WAIT) glow = 0.55f + 0.45f * (float) Math.abs(Math.sin(pulse));
+        fill.setShader(lampHalo[which]);
+        fill.setAlpha((int) (255 * glow * amount));
+        canvas.drawCircle(cx, cy, r * 3.2f, fill);
+        fill.setShader(null);
+        fill.setColor(LAMP_COLORS[which]);
+        fill.setAlpha((int) (255 * amount));
+        canvas.drawCircle(cx, cy, r, fill);
     }
 
     private void drawReadout(Canvas canvas, float w, float h) {
