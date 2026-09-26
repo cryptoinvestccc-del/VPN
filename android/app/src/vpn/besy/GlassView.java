@@ -230,16 +230,16 @@ final class GlassView extends View {
     private boolean pressed;
     private float spin, pulse;              // spinner angle, amber dot breathing
     private float shownMbps, angle = -132f; // the number and the pointer, eased
-    private float scaleMax = 50f;           // the dial's top value
+    private float scaleMax = 10f;           // the dial's top value
     private long lowSince;                  // since when the speed sits well under the scale
 
     private static float approach(float v, float target, float rate, float dt) {
         return target + (v - target) * (float) Math.exp(-rate * dt);
     }
 
-    /** Download speed through the tunnel, Mbit/s. */
+    /** Speed through the tunnel, Mbit/s: whichever way is busier, so an upload moves the dial too. */
     private float mbps() {
-        return state == STATE_LIVE ? (float) (TunnelService.rxRate * 8 / 1e6) : 0f;
+        return state == STATE_LIVE ? (float) (Math.max(TunnelService.rxRate, TunnelService.txRate) * 8 / 1e6) : 0f;
     }
 
     /** Moves everything on to now; says whether the next frame should come at once. */
@@ -271,7 +271,10 @@ final class GlassView extends View {
             else if (now - lowSince > 10000) { scaleMax = want; lowSince = 0; }
         } else lowSince = 0;
         shownMbps = approach(shownMbps, v, 4, dt);
-        final float target = -132f + Math.min(1f, v / scaleMax) * 264f;
+        // Square-root travel, as on a real speedometer: everyday speeds of
+        // one to a few Mbit/s move the needle a third to two thirds of the
+        // way instead of a sliver of a linear dial.
+        final float target = -132f + (float) Math.sqrt(Math.min(1f, v / scaleMax)) * 264f;
         angle = approach(angle, target, 3.5f, dt);
 
         return busy || pressed
@@ -283,7 +286,7 @@ final class GlassView extends View {
     }
 
     private static float scaleFor(float mbps) {
-        final float[] steps = { 50, 100, 200, 500, 1000, 2000 };
+        final float[] steps = { 10, 25, 50, 100, 200, 500, 1000, 2000 };
         for (float s : steps) if (mbps * 1.15f <= s) return s;
         return steps[steps.length - 1];
     }
