@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="vpn.besy"
-    android:versionCode="20"
-    android:versionName="0.3.1">
+    android:versionCode="21"
+    android:versionName="0.4.0">
 
   <!-- 26 because nothing here needs more. The earlier floor of 31 was
        set for RenderEffect, and this build does not use it: the frosted
        surfaces are painted with gradients on a Canvas. Live backdrop
        blur, if it is ever added, has to be asked for behind a version
        check rather than by raising this number. -->
-  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
 
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

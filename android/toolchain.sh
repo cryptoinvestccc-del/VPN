@@ -9,13 +9,22 @@ mkdir -p "$tools"
 
 # Pinned, because a build that silently changes its compiler is not a
 # reproducible build.
-ANDROID_JAR_URL="https://raw.githubusercontent.com/Sable/android-platforms/master/android-34/android.jar"
+# API 36 (Android 16): what Google Play asks new apps to target in 2026.
+ANDROID_JAR_URL="https://raw.githubusercontent.com/Sable/android-platforms/master/android-36/android.jar"
 # The oldest Android the app installs on. Compiling against it as well is
 # the check that nothing newer is called: javac against API 34 accepts a
 # call that does not exist on Android 8 and the phone finds out instead.
 ANDROID_MIN_JAR_URL="https://raw.githubusercontent.com/Sable/android-platforms/master/android-26/android.jar"
 DX_VERSION="16.0.1"
 DX_URL="https://repo1.maven.org/maven2/com/jakewharton/android/repackaged/dalvik-dx/${DX_VERSION}/dalvik-dx-${DX_VERSION}.jar"
+# Google's own aapt2. The one Debian ships (2.19-debian) cannot read the
+# resource table of android-35 and later ("entry offsets overlap"), and
+# it is the only thing that stood between this build and API 36.
+AAPT2_VERSION="8.7.3-12006047"
+AAPT2_URL="https://dl.google.com/android/maven2/com/android/tools/build/aapt2/${AAPT2_VERSION}/aapt2-${AAPT2_VERSION}-linux.jar"
+# Builds the Android App Bundle that Google Play takes.
+BUNDLETOOL_VERSION="1.17.2"
+BUNDLETOOL_URL="https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
 
 fetch() { # url dest minimum-bytes
 	local url="$1" dest="$2" min="$3"
@@ -51,11 +60,21 @@ if ((${#missing[@]})); then
 fi
 echo "  aapt2, apksigner, zipalign, javac present"
 
-echo "==> android.jar (API 34)"
+echo "==> android.jar (API 36)"
 fetch "$ANDROID_JAR_URL" "$tools/android.jar" 20000000
 
 echo "==> android.jar (API 26, for the minimum-version check)"
 fetch "$ANDROID_MIN_JAR_URL" "$tools/android-26.jar" 20000000
+
+echo "==> aapt2 ${AAPT2_VERSION}"
+if [[ ! -x "$tools/aapt2" ]]; then
+	fetch "$AAPT2_URL" "$tools/aapt2.jar" 1000000
+	( cd "$tools" && unzip -o -q aapt2.jar aapt2 && chmod +x aapt2 && rm -f aapt2.jar )
+fi
+"$tools/aapt2" version
+
+echo "==> bundletool ${BUNDLETOOL_VERSION}"
+fetch "$BUNDLETOOL_URL" "$tools/bundletool.jar" 10000000
 
 echo "==> dexer"
 fetch "$DX_URL" "$tools/dalvik-dx.jar" 500000

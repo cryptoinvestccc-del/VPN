@@ -5,3 +5,6 @@
 *.apk
 *.idsig
 app/jni/
+*.aab
+*.jks
+*.p12

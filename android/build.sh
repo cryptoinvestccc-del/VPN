@@ -19,18 +19,31 @@ for f in "$tools/android.jar" "$tools/dalvik-dx.jar"; do
 	[[ -f "$f" ]] || { echo "missing $(basename "$f") — run ./android/toolchain.sh" >&2; exit 1; }
 done
 
+# Google's aapt2 from toolchain.sh; Debian's cannot read android-36.jar.
+AAPT2="$tools/aapt2"
+[[ -x "$AAPT2" ]] || { echo "missing aapt2 — run ./android/toolchain.sh" >&2; exit 1; }
+TARGET_SDK=36
+
 rm -rf "$work"
 mkdir -p "$work"/{classes,gen,res}
 
 echo "==> resources"
-aapt2 compile --dir "$app/res" -o "$work/res.zip"
-aapt2 link \
+"$AAPT2" compile --dir "$app/res" -o "$work/res.zip"
+"$AAPT2" link \
 	-o "$work/base.apk" \
 	-I "$tools/android.jar" \
 	--manifest "$app/AndroidManifest.xml" \
 	--java "$work/gen" \
 	--min-sdk-version 26 \
-	--target-sdk-version 34 \
+	--target-sdk-version $TARGET_SDK \
+	"$work/res.zip"
+# The same resources in the protobuf form an app bundle carries.
+"$AAPT2" link --proto-format \
+	-o "$work/proto.apk" \
+	-I "$tools/android.jar" \
+	--manifest "$app/AndroidManifest.xml" \
+	--min-sdk-version 26 \
+	--target-sdk-version $TARGET_SDK \
 	"$work/res.zip"
 
 echo "==> java"
@@ -42,7 +55,7 @@ javac -nowarn -Xlint:-options \
 	-d "$work/classes" \
 	$(find "$app/src" "$work/gen" -name '*.java')
 
-# The app installs on Android 8 (API 26) and is compiled against 14.
+# The app installs on Android 8 (API 26) and is compiled against 16.
 # Compiling it again against 26 fails on any call Android 8 does not
 # have — the crash that would otherwise be found on somebody's phone.
 if [[ -f "$tools/android-26.jar" ]]; then
@@ -118,4 +131,40 @@ echo "==> verify"
 apksigner verify --print-certs "$out" 2>/dev/null | head -2
 echo
 echo "$(basename "$out")  $(stat -c%s "$out") bytes"
-aapt dump badging "$out" 2>/dev/null | head -3
+"$AAPT2" dump badging "$out" 2>/dev/null | head -3
+
+# ---- The app bundle Google Play takes ---------------------------------
+#
+# The base module is the proto resources, the dex and the engines laid
+# out the way bundletool expects. Native libraries stay compressed in the
+# APKs Play builds from it, so Android unpacks them at install time: the
+# engine is started as a program from nativeLibraryDir, and a library
+# left inside the APK (Play's default for bundles) would not be there.
+#
+# Signed with the upload key when BESY_UPLOAD_KEYSTORE and
+# BESY_UPLOAD_PASSWORD are set. Without them the bundle is signed with the
+# debug key and named so; never upload that one: the first bundle Play
+# receives decides which key every later upload must be signed with.
+if [[ -f "$tools/bundletool.jar" ]]; then
+	echo "==> app bundle"
+	rm -rf "$work/aab" && mkdir -p "$work/aab/base"
+	( cd "$work/aab/base" && unzip -q "$work/proto.apk" \
+		&& mkdir manifest dex && mv AndroidManifest.xml manifest/ \
+		&& cp "$work/classes.dex" dex/ && { [[ -d "$work/lib" ]] && cp -r "$work/lib" . || true; } \
+		&& zip -qr ../base.zip . )
+	printf '%s' '{"optimizations":{"uncompressNativeLibraries":{"enabled":false}}}' > "$work/aab/config.json"
+	if [[ -n "${BESY_UPLOAD_KEYSTORE:-}" && -n "${BESY_UPLOAD_PASSWORD:-}" ]]; then
+		aab="${out%.apk}.aab"
+		ks="$BESY_UPLOAD_KEYSTORE"; kp="$BESY_UPLOAD_PASSWORD"; alias="${BESY_UPLOAD_ALIAS:-besy-upload}"
+	else
+		aab="${out%.apk}-debug.aab"
+		ks="$here/.debug.keystore"; kp="android"; alias="besy-debug"
+	fi
+	rm -f "$aab"
+	java -jar "$tools/bundletool.jar" build-bundle --modules="$work/aab/base.zip" \
+		--config="$work/aab/config.json" --output="$aab"
+	jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore "$ks" \
+		-storepass "$kp" -keypass "$kp" "$aab" "$alias" >/dev/null
+	java -jar "$tools/bundletool.jar" validate --bundle="$aab" >/dev/null
+	echo "$(basename "$aab")  $(stat -c%s "$aab") bytes, signed with $alias"
+fi
