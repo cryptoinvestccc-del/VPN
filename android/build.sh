@@ -60,11 +60,16 @@ javac -nowarn -Xlint:-options \
 # have — the crash that would otherwise be found on somebody's phone.
 if [[ -f "$tools/android-26.jar" ]]; then
 	echo "==> minimum-version check (API 26)"
-	rm -rf "$work/api26" && mkdir -p "$work/api26"
+	rm -rf "$work/api26" && mkdir -p "$work/api26/newer"
+	# NewerApi.java holds the version-guarded calls into newer Android;
+	# it alone is built against the current platform, and the rest is
+	# checked against 26 with it on the classpath.
+	javac -nowarn -Xlint:-options --release 8 -cp "$tools/android.jar" \
+		-d "$work/api26/newer" "$app/src/vpn/besy/NewerApi.java"
 	javac -nowarn -Xlint:-options --release 8 \
-		-cp "$tools/android-26.jar" \
+		-cp "$tools/android-26.jar:$work/api26/newer" \
 		-d "$work/api26" \
-		$(find "$app/src" "$work/gen" -name '*.java') || {
+		$(find "$app/src" "$work/gen" -name '*.java' ! -name NewerApi.java) || {
 		echo "the app calls something Android 8 does not have (above); guard it with Build.VERSION.SDK_INT" >&2
 		exit 1
 	}

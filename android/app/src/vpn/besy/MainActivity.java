@@ -60,9 +60,15 @@ public final class MainActivity extends Activity
         view = new GlassView(this);
         view.setOnPowerTap(this);
         view.setOnSettingsTap(this);
+        // The screen is light, so the status and navigation bar icons are
+        // dark. Android 11 and later take that from the insets controller;
+        // earlier versions from the flags.
         view.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         setContentView(view);
+        if (android.os.Build.VERSION.SDK_INT >= 30) NewerApi.lightSystemBars(getWindow());
 
         // Only on a fresh start, and only when the system would not have
         // to ask: a permission dialog appearing unbidden on launch is

@@ -1,34 +1,26 @@
 package vpn.besy;
 
 /**
- * The colours the design is built from, in one place.
- *
- * <p>Named for what they are in the picture rather than for where they
- * are used, because the same light serves several surfaces: the ground
- * is the night behind the glass, the flare is the source sitting behind
- * it, and the ember is the one warm note that keeps the screen from
- * going monochrome.
+ * The colours of the screens around the main one (settings, documents),
+ * from the approved design's handoff: a light app on #F5F6F8 with white
+ * cards, dark text, and one violet accent. The main screen keeps its own
+ * colours next to the code that draws it.
  */
 final class Palette {
-    static final int VOID_    = 0xFF050506;
-    static final int DEEP     = 0xFF23394D;
-    static final int HAZE     = 0xFF5F86A6;
-    static final int FLARE    = 0xFFEAF4FF;
-    static final int EMBER    = 0xFFC9A88B;
-    static final int LIVE     = 0xFF6FE3C0;
+    static final int VOID_    = 0xFFF5F6F8;   // app background
+    static final int DEEP     = 0xFFF5F6F8;
+    static final int INK      = 0xFF111318;   // primary text
+    static final int INK_2    = 0xFF4A4E57;   // values
+    static final int INK_3    = 0xFF8A8E97;   // labels, hints
+    static final int LIVE     = 0xFF7C6CFF;   // accent: switches, links
+    static final int EMBER    = 0xFFD0463B;   // the destructive action
+    static final int SURFACE  = 0xFFFFFFFF;   // cards
+    static final int RIM_SOFT = 0xFFE8EAF0;   // card borders, dividers
 
-    // the lamp under the circle
-    static final int LAMP_ON   = 0xFF2FD66B;
-    static final int LAMP_OFF  = 0xFFE5484D;
+    // the lamp and dot colours on the main screen
+    static final int LAMP_ON   = 0xFF58D68D;
+    static final int LAMP_OFF  = 0xFF6F737C;
     static final int LAMP_WAIT = 0xFFF2B33D;
-
-    static final int INK      = 0xFFEAF2FA;
-    static final int INK_2    = 0x9EEAF2FA;
-    static final int INK_3    = 0x61EAF2FA;
-
-    static final int GLASS    = 0x11FFFFFF;
-    static final int RIM      = 0x52FFFFFF;
-    static final int RIM_SOFT = 0x24FFFFFF;
 
     private Palette() {}
 }

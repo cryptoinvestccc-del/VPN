@@ -1,29 +1,40 @@
 package vpn.besy;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import android.graphics.LinearGradient;
+import android.graphics.Typeface;
+import android.os.Build;
+import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * The whole screen, drawn by hand: the name top left, a circle with the
- * logo's planet in it,
- * a lamp under it that says whether the tunnel is up, and the gear.
+ * The main screen, drawn by hand, after the approved design.
  *
- * <p>There is no Compose and no AndroidX here: those live on a Maven
- * host this build cannot reach, so every surface is a shape on a Canvas.
- * That turns out to suit the design, which is mostly gradients and one
- * button, and it keeps the APK in the tens of kilobytes.
+ * <p>The top is the handoff's dark card: the BESY VPN wordmark, the gear
+ * for settings, the connection status and a full-width pill button. Below
+ * it, as in the HTML prototype: "Overview", a wide speed card with a dial,
+ * two cards for session time and connection state, and the fixed location.
  *
- * <p>The order of drawing is the design: the light source is painted
- * first, the glass over it. Reversing those two is what makes a frosted
- * surface look like a flat translucent panel instead.
+ * <p>There is no Compose and no AndroidX here: those live on a Maven host
+ * this build did not reach, so every surface is a shape on a Canvas. It
+ * keeps the APK small and puts all motion under one clock.
+ *
+ * <p>Motion is driven by elapsed time rather than frames, so a 120 Hz
+ * screen moves at the speed a 60 Hz one does, and every change of state
+ * eases in over about a quarter of a second, as the handoff asks ("soft
+ * scale and glow", nothing pulsing hard). Shaders are built when the
+ * layout changes, never per frame. When nothing moves the view asks for no
+ * frames; while connected and idle it wakes once a second, on the second,
+ * for the timer.
  */
 final class GlassView extends View {
 
@@ -34,62 +45,85 @@ final class GlassView extends View {
     static final int STATE_BUSY = 1;
     static final int STATE_LIVE = 2;
 
-    private final Paint fill   = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint text   = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final RectF rect   = new RectF();
-    private final Path  path   = new Path();
+    // ---- Colours ----------------------------------------------------------
+    // Top, from the handoff JSON.
+    private static final int BG       = 0xFFF5F6F8;
+    private static final int HERO_A   = 0xFF1A1D24;
+    private static final int HERO_B   = 0xFF111318;
+    private static final int ACCENT   = 0xFF7C6CFF;
+    private static final int SUCCESS  = 0xFF58D68D;
+    private static final int BUSY_BTN = 0xFF2A2D36;
+    private static final int INK      = 0xFF111318;
+    private static final int GREY_DOT = 0xFF6F737C;
+    private static final int WAIT     = 0xFFF2B33D;
+    // Bottom, from the HTML prototype.
+    private static final int CARD         = 0xFFFFFFFF;
+    private static final int CARD_BORDER  = 0xFFE6EBED;
+    private static final int CARD_HEAD    = 0xFF747D84;
+    private static final int UNIT         = 0xFF818B92;
+    private static final int ICON         = 0xFF8C989E;
+    private static final int DIAL_LABEL   = 0xFF8C969B;
+    private static final int TRACK        = 0xFFEEF0F4;
+    private static final int TRACK_DARK   = 0xFFC9CDD6;
+    private static final int GAUGE_FROM   = 0xFFB3A9FF;
+    private static final int LIVE_BG      = 0xFFE6F4F1;
+    private static final int LIVE_BORDER  = 0xFFD6EAE4;
+    private static final int LIVE_HEAD    = 0xFF648C83;
+    private static final int LIVE_INK     = 0xFF23786D;
+    private static final int WAIT_ICON    = 0xFFB68D49;
+    private static final int NOTE         = 0xFF808B92;
+    private static final int NOTE_ICON    = 0xFF97A1A7;
+    private static final int ERROR        = 0xFFC0392B;
+
+    private final Paint fill    = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint stroke  = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint text    = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private final Paint picture = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final RectF rect    = new RectF();
+    private final Path  path    = new Path();
 
     private int state = STATE_OFF;
-    /** Until when "disconnecting" is shown after the button turned the tunnel off. */
-    private long leavingUntil;
+    private long leavingUntil;       // "disconnecting" is shown until then
     private String error;
     private OnPowerTap listener;
     private OnSettingsTap settingsListener;
-
-    private float buttonCx, buttonCy, buttonR;
-    private float gearCx, gearCy;
-
-    // What the rows under the button show. Set from the activity.
+    // Kept for the activity's calls; the design does not show them.
     private String address, handshake, server;
+
+    private Bitmap logo;
+    private final Typeface regular, medium, semibold;
 
     GlassView(Context c) {
         super(c);
         setClickable(true);
         stroke.setStyle(Paint.Style.STROKE);
-        text.setTextAlign(Paint.Align.LEFT);
+        regular  = face(400);
+        medium   = face(500);
+        semibold = face(620);
+    }
+
+    /** A system sans-serif at the given weight; before Android 9 only medium and bold exist. */
+    private static Typeface face(int weight) {
+        if (Build.VERSION.SDK_INT >= 28) return NewerApi.weight(Typeface.DEFAULT, weight);
+        if (weight >= 600) return Typeface.create("sans-serif-medium", Typeface.BOLD);
+        if (weight >= 500) return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+        return Typeface.create("sans-serif", Typeface.NORMAL);
     }
 
     void setOnPowerTap(OnPowerTap l) { listener = l; }
     void setOnSettingsTap(OnSettingsTap l) { settingsListener = l; }
 
-    /** The tunnel's address and how long ago the server last answered. */
-    void setInfo(String address, String handshake) {
-        if (!eq(address, this.address) || !eq(handshake, this.handshake)) {
-            this.address = address;
-            this.handshake = handshake;
-            invalidate();
-        }
-    }
+    void setInfo(String address, String handshake) { this.address = address; this.handshake = handshake; }
+    void setServer(String line) { server = line; }
 
-    /** One line about the server, shown while disconnected. */
-    void setServer(String line) {
-        if (!eq(line, server)) { server = line; invalidate(); }
-    }
-
-    private static boolean eq(String a, String b) { return a == null ? b == null : a.equals(b); }
-
-    /**
-     * Shows "disconnecting" for a moment. The tunnel itself goes down at
-     * once, so without this the word would never be seen.
-     */
+    /** Shows "disconnecting" for a moment; the tunnel itself goes down at once. */
     void showLeaving() {
-        leavingUntil = android.os.SystemClock.uptimeMillis() + 1200;
+        leavingUntil = SystemClock.uptimeMillis() + 1200;
         invalidate();
     }
 
     private boolean leaving() {
-        return state == STATE_OFF && android.os.SystemClock.uptimeMillis() < leavingUntil;
+        return state == STATE_OFF && SystemClock.uptimeMillis() < leavingUntil;
     }
 
     void setState(int s) {
@@ -97,22 +131,13 @@ final class GlassView extends View {
         if (state != s) {
             state = s;
             invalidate();
-            // The power button's label follows the state.
-            sendAccessibilityEvent(
-                    android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
         }
     }
 
     int getState() { return state; }
 
-    /**
-     * Shows why the last attempt failed, until the next one.
-     *
-     * <p>It was a toast before, which is the wrong shape for this: the
-     * message appears for a few seconds and is gone, and a failure that
-     * happens while the phone is in somebody's pocket leaves nothing
-     * behind. A screen with one button has room to say what went wrong.
-     */
+    /** Why the last attempt failed, kept on screen until the next one. */
     void setError(String message) {
         if (message == null ? error != null : !message.equals(error)) {
             error = message;
@@ -121,561 +146,589 @@ final class GlassView extends View {
     }
 
     private float dp(float v) { return v * getResources().getDisplayMetrics().density; }
+    private float sp(float v) { return v * getResources().getDisplayMetrics().scaledDensity; }
+    private String str(int id) { return getContext().getString(id); }
 
-    // ---- Layout and cached shaders -------------------------------------
-    //
-    // Shaders are built once per size, not per frame: a gradient allocated
-    // in onDraw sixty times a second is garbage the collector has to chase,
-    // and on a slow phone that shows up as a stutter in exactly the part of
-    // the screen that is supposed to look smooth.
+    // ---- Layout -----------------------------------------------------------
 
-    private Shader skyGlow, orbGlow, ringArcs, chrome, sparkGlow;
-    private final Shader[] lampHalo = new Shader[3];
-    private final android.graphics.Matrix ringTurn = new android.graphics.Matrix();
-    private android.graphics.Typeface heavy;
-    private Shader titleChrome;
-    private float titleBase = -1f;
-    private float planetR, lampY;
-    private final RectF[] tiles = { new RectF(), new RectF(), new RectF(), new RectF() };
+    private final RectF hero = new RectF(), button = new RectF(), speedCard = new RectF(),
+            timeCard = new RectF(), stateCard = new RectF(), logoBox = new RectF(), overview = new RectF();
+    private float gearCx, gearCy, statusY, dotX, dotY, headingY, noteY, dialCx, dialCy, dialR, k = 1f;
+    private int laidTop = -1, laidBottom = -1, laidW, laidH;
+    private Shader heroShade, haloGreen, haloAmber, gaugeShade;
 
-    private static final int LAMP_OFF = 0, LAMP_WAIT = 1, LAMP_ON = 2;
-    private static final int[] LAMP_COLORS = { Palette.LAMP_OFF, Palette.LAMP_WAIT, Palette.LAMP_ON };
+    /** Places everything and builds the shaders; redone only when the size or the bars change. */
+    private void layout(int w, int h) {
+        android.view.WindowInsets in = getRootWindowInsets();
+        final int top = in != null ? in.getSystemWindowInsetTop() : (int) dp(24);
+        final int bottom = in != null ? in.getSystemWindowInsetBottom() : 0;
+        if (top == laidTop && bottom == laidBottom && w == laidW && h == laidH) return;
+        laidTop = top; laidBottom = bottom; laidW = w; laidH = h;
 
-    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        if (w <= 0 || h <= 0) return;
-        buttonCx = w / 2f;
-        buttonCy = h * 0.28f;
-        buttonR  = Math.min(w * 0.19f, h * 0.12f);
-        planetR  = buttonR * 0.46f;
-        lampY    = buttonCy + buttonR + dp(24);
+        // At most 480dp wide, centred, as the handoff asks for large screens.
+        final float content = Math.min(w, dp(480));
+        final float side = w / getResources().getDisplayMetrics().density < 360 ? dp(14) : dp(16);
+        final float left = (w - content) / 2f + side, right = (w + content) / 2f - side;
 
-        // the four tiles, two by two, under the lamp
-        final float side = dp(20), gap = dp(12), tileH = dp(84);
-        final float tileW = (w - 2 * side - gap) / 2f;
-        final float top = lampY + dp(56);
-        for (int i = 0; i < 4; i++) {
-            final float x = side + (i % 2) * (tileW + gap), y = top + (i / 2) * (tileH + gap);
-            tiles[i].set(x, y, x + tileW, y + tileH);
-        }
+        // The column at the design's sizes is about 750dp tall; a shorter
+        // screen scales the heights (never the widths) to fit.
+        final float avail = h - top - bottom - dp(24);
+        k = Math.max(0.72f, Math.min(1f, avail / dp(752)));
 
-        skyGlow = new RadialGradient(buttonCx, buttonCy, buttonR * 2.2f,
-                0x30FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
-        orbGlow = new RadialGradient(buttonCx, buttonCy - buttonR * 0.1f, buttonR,
-                new int[] { 0x44DDE6FF, 0x1A8FA3D9, 0x00000000 },
-                new float[] { 0f, 0.6f, 1f }, Shader.TileMode.CLAMP);
+        float y = top + dp(12);
+        hero.set(left, y, right, y + dp(300) * k);
+        final float pad = dp(20);
+        final float logoW = Math.min(dp(232), hero.width() - 2 * pad - dp(44));
+        final float logoH = logoW * 308f / 1000f;
+        logoBox.set(hero.left + pad - dp(6), hero.top + pad, hero.left + pad - dp(6) + logoW, hero.top + pad + logoH);
+        gearCx = hero.right - pad - dp(11);
+        gearCy = logoBox.centerY();
+        final float btnH = Math.max(dp(56), dp(64) * k);
+        button.set(hero.left + pad, hero.bottom - pad - btnH, hero.right - pad, hero.bottom - pad);
+        statusY = button.top - dp(18) * Math.max(k, 0.85f);
+        text.setTypeface(medium);
+        text.setTextSize(sp(16) * Math.max(k, 0.9f));
+        dotX = hero.left + pad + dp(4);
+        dotY = statusY + (text.ascent() + text.descent()) / 2f;
 
-        // Two arcs with wide gaps between them, their ends fading out over
-        // a few degrees rather than stopping: a long one over 150 degrees
-        // and a short one over 70, painted as one gradient around the
-        // circle and turned by a matrix, so a frame costs one circle and
-        // no new objects. (The first cut had 230 and 60 with long fades,
-        // and on a phone it read as one closed ring.)
-        final int t = 0x00FFFFFF, o = 0xFFFFFFFF;
-        ringArcs = new android.graphics.SweepGradient(buttonCx, buttonCy,
-                new int[] { t, o, o, t, t, o, o, t, t },
-                new float[] { 0f, 12 / 360f, 138 / 360f, 150 / 360f,
-                        215 / 360f, 225 / 360f, 275 / 360f, 285 / 360f, 1f });
+        y = hero.bottom + dp(24) * k;
+        headingY = y + dp(18) * k;
+        y = headingY + dp(14) * k;
 
-        chrome = new LinearGradient(0, buttonCy - planetR * 1.25f, 0, buttonCy + planetR * 1.25f,
-                new int[] { 0xFFFFFFFF, 0xFFDCDEE3, 0xFF7A7D85, 0xFF3A3C42, 0xFFB7BAC1, 0xFFF4F5F7, 0xFF9295A0 },
-                new float[] { 0f, 0.22f, 0.42f, 0.5f, 0.6f, 0.8f, 1f }, Shader.TileMode.CLAMP);
+        speedCard.set(left, y, right, y + dp(180) * k);
+        dialR = Math.min(dp(64) * k, (speedCard.height() - dp(44)) / 2f);
+        dialCx = speedCard.right - dp(20) - dialR;
+        dialCy = speedCard.centerY() - dp(4);
 
-        final float r = dp(7) * 3.2f;
-        for (int i = 0; i < 3; i++) {
-            final int c = LAMP_COLORS[i];
-            lampHalo[i] = new RadialGradient(buttonCx, lampY, r,
-                    (0x66 << 24) | (c & 0x00FFFFFF), c & 0x00FFFFFF, Shader.TileMode.CLAMP);
-        }
-        sparkGlow = null;
-        titleBase = -1f;
+        y = speedCard.bottom + dp(12);
+        final float half = (right - left - dp(12)) / 2f;
+        timeCard.set(left, y, left + half, y + dp(160) * k);
+        stateCard.set(right - half, y, right, y + dp(160) * k);
+        noteY = timeCard.bottom + dp(18) * k + dp(12);
+        overview.set(left, hero.bottom, right, noteY);
+
+        final android.graphics.SweepGradient sweep = new android.graphics.SweepGradient(dialCx, dialCy,
+                new int[] { GAUGE_FROM, ACCENT, ACCENT }, new float[] { 0f, 264f / 360f, 1f });
+        final android.graphics.Matrix turn = new android.graphics.Matrix();
+        turn.setRotate(138f, dialCx, dialCy);
+        sweep.setLocalMatrix(turn);
+        gaugeShade = sweep;
+        heroShade = new LinearGradient(hero.left, hero.top, hero.right, hero.bottom,
+                HERO_A, HERO_B, Shader.TileMode.CLAMP);
+        haloGreen = new RadialGradient(dotX, dotY, dp(13), (0x8C << 24) | (SUCCESS & 0xFFFFFF),
+                SUCCESS & 0xFFFFFF, Shader.TileMode.CLAMP);
+        haloAmber = new RadialGradient(dotX, dotY, dp(13), (0x8C << 24) | (WAIT & 0xFFFFFF),
+                WAIT & 0xFFFFFF, Shader.TileMode.CLAMP);
     }
 
-    // ---- Motion -------------------------------------------------------
-    //
-    // Everything that moves is driven by elapsed time rather than by frame
-    // count, so a 120 Hz screen turns things at the same speed as a 60 Hz
-    // one, and every change of state eases in instead of jumping: the ring
-    // spins up when a connection starts and coasts down to a slow drift
-    // once it is made. When the tunnel is off and all of it has come to
-    // rest, the view stops asking for frames.
+    // ---- Motion -----------------------------------------------------------
 
-    private long lastFrame;          // uptime of the previous frame; 0 = the loop was idle
-    private float ringAngle = -90f;  // degrees
-    private float ringSpeed;         // degrees per second, eased
-    private float ringLight = 0.3f;  // 0..1, eased
-    private float planetAngle = 20f; // degrees
-    private float planetSpeed;       // degrees per second, eased
-    private float lit;               // 0 = grey planet, 1 = chrome, eased
-    private float pulse;             // the amber lamp's breathing, radians
-    private int lampFrom = LAMP_OFF, lampTo = LAMP_OFF;
-    private float lampMix = 1f;      // 0 = lampFrom, 1 = lampTo
+    private long lastFrame;
+    private float offW = 1, busyW, onW;     // how much of each state the button shows
+    private float live;                     // the connected colours, 0..1
+    private float press = 1;                // button scale while pressed
+    private boolean pressed;
+    private float spin, pulse;              // spinner angle, amber dot breathing
+    private float shownMbps, angle = -132f; // the number and the pointer, eased
+    private float scaleMax = 50f;           // the dial's top value
+    private long lowSince;                  // since when the speed sits well under the scale
 
-    private static float approach(float value, float target, float rate, float dt) {
-        return target + (value - target) * (float) Math.exp(-rate * dt);
+    private static float approach(float v, float target, float rate, float dt) {
+        return target + (v - target) * (float) Math.exp(-rate * dt);
     }
 
-    /** Moves everything on to now; says whether another frame is needed. */
+    /** Download speed through the tunnel, Mbit/s. */
+    private float mbps() {
+        return state == STATE_LIVE ? (float) (TunnelService.rxRate * 8 / 1e6) : 0f;
+    }
+
+    /** Moves everything on to now; says whether the next frame should come at once. */
     private boolean step() {
-        final long now = android.os.SystemClock.uptimeMillis();
+        final long now = SystemClock.uptimeMillis();
         final float dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
         lastFrame = now;
+        final boolean busy = state == STATE_BUSY || leaving(), on = state == STATE_LIVE && !busy;
+        final float offT = !busy && !on ? 1 : 0, busyT = busy ? 1 : 0, onT = on ? 1 : 0;
 
-        final boolean live = state == STATE_LIVE, moving = state == STATE_BUSY || leaving();
-        ringSpeed   = approach(ringSpeed,   moving ? 240f : live ? 16f : 0f,   3f,   dt);
-        ringLight   = approach(ringLight,   moving ? 0.95f : live ? 1f : 0.3f, 4f,   dt);
-        planetSpeed = approach(planetSpeed, moving ? 60f : live ? 12f : 0f,    2.5f, dt);
-        lit         = approach(lit,         live ? 1f : moving ? 0.75f : 0f,   3.5f, dt);
-        ringAngle   = (ringAngle + ringSpeed * dt) % 360f;
-        planetAngle = (planetAngle + planetSpeed * dt) % 360f;
-        if (moving) pulse = (pulse + dt * 5f) % (float) (2 * Math.PI);
+        offW  = approach(offW,  offT,  12, dt);
+        busyW = approach(busyW, busyT, 12, dt);
+        onW   = approach(onW,   onT,   12, dt);
+        live  = approach(live,  onT,    9, dt);
+        press = approach(press, pressed ? 0.97f : 1f, 18, dt);
+        if (busy) {
+            spin = (spin + 400f * dt) % 360f;
+            pulse = (pulse + 4f * dt) % (float) (2 * Math.PI);
+        }
 
-        final int lamp = moving ? LAMP_WAIT : live ? LAMP_ON : LAMP_OFF;
-        if (lamp != lampTo) { lampFrom = lampTo; lampTo = lamp; lampMix = 0f; }
-        lampMix = Math.min(1f, lampMix + dt / 0.25f);
+        // The scale grows as soon as the speed needs it and shrinks only
+        // after the speed has stayed well under it for ten seconds, so it
+        // does not hop back and forth on a bursty connection.
+        final float v = mbps();
+        final float want = scaleFor(v);
+        if (want > scaleMax) { scaleMax = want; lowSince = 0; }
+        else if (want < scaleMax) {
+            if (lowSince == 0) lowSince = now;
+            else if (now - lowSince > 10000) { scaleMax = want; lowSince = 0; }
+        } else lowSince = 0;
+        shownMbps = approach(shownMbps, v, 4, dt);
+        final float target = -132f + Math.min(1f, v / scaleMax) * 264f;
+        angle = approach(angle, target, 3.5f, dt);
 
-        if (live || moving || lampMix < 1f) return true;
-        final boolean still = ringSpeed < 0.5f && planetSpeed < 0.5f
-                && Math.abs(ringLight - 0.3f) < 0.004f && lit < 0.004f;
-        if (still) { ringSpeed = 0f; planetSpeed = 0f; ringLight = 0.3f; lit = 0f; }
-        return !still;
+        return busy || pressed
+                || Math.abs(offW - offT) > 0.002f || Math.abs(onW - onT) > 0.002f
+                || Math.abs(busyW - busyT) > 0.002f || Math.abs(live - onT) > 0.002f
+                || Math.abs(press - (pressed ? 0.97f : 1f)) > 0.001f
+                || Math.abs(shownMbps - v) > 0.05f
+                || Math.abs(angle - target) > 0.2f;
+    }
+
+    private static float scaleFor(float mbps) {
+        final float[] steps = { 50, 100, 200, 500, 1000, 2000 };
+        for (float s : steps) if (mbps * 1.15f <= s) return s;
+        return steps[steps.length - 1];
     }
 
     @Override protected void onDraw(Canvas canvas) {
-        final float w = getWidth(), h = getHeight();
-        if (w <= 0 || h <= 0 || chrome == null) return;
-
+        final int w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0) return;
+        layout(w, h);
         final boolean again = step();
 
-        fill.setShader(null);
-        fill.setColor(Palette.VOID_);
-        canvas.drawRect(0, 0, w, h, fill);
-        fill.setShader(skyGlow);
-        fill.setAlpha((int) (255 * (0.5f + 0.5f * lit)));
-        canvas.drawRect(0, 0, w, h, fill);
-        fill.setShader(null);
-        fill.setAlpha(255);
+        canvas.drawColor(BG);
+        drawHero(canvas);
+        drawOverview(canvas);
 
-        drawTitle(canvas);
-        drawButton(canvas);
-        drawLamp(canvas);
-        drawStats(canvas);
-        drawGear(canvas, w);
-        drawReadout(canvas, w, h);
-
-        if (again) postInvalidateOnAnimation(); else lastFrame = 0;
+        if (again) {
+            postInvalidateOnAnimation();
+        } else {
+            lastFrame = 0;
+            if (state == STATE_LIVE && TunnelService.connectedAt > 0) {
+                // wake on the next whole second, for the timer, and no sooner
+                final long ms = SystemClock.elapsedRealtime() - TunnelService.connectedAt;
+                postInvalidateDelayed(1000 - ms % 1000 + 5);
+            } else if (leavingUntil > SystemClock.uptimeMillis()) {
+                postInvalidateDelayed(leavingUntil - SystemClock.uptimeMillis() + 5);
+            }
+        }
     }
 
-    /**
-     * The one control: a dark orb with the logo's planet in it — the globe
-     * and its orbit, drawn in chrome — inside a ring of two gapped arcs.
-     */
-    private void drawButton(Canvas canvas) {
-        // the orb, lit from inside as the tunnel comes up
-        fill.setShader(orbGlow);
-        fill.setAlpha((int) (255 * (0.4f + 0.6f * lit)));
-        canvas.drawCircle(buttonCx, buttonCy, buttonR, fill);
-        fill.setShader(null);
-        fill.setAlpha(255);
+    // ---- The dark card ----------------------------------------------------
 
-        // a hairline for the circle's shape, then the arcs and their glow
-        stroke.setShader(null);
-        stroke.setColor(0x0BFFFFFF);
-        stroke.setStrokeWidth(dp(1));
-        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
-
-        ringTurn.setRotate(ringAngle, buttonCx, buttonCy);
-        ringArcs.setLocalMatrix(ringTurn);
-        stroke.setShader(ringArcs);
-        stroke.setColor(0xFFFFFFFF);
-        stroke.setAlpha((int) (255 * 0.16f * ringLight));
-        stroke.setStrokeWidth(dp(7));
-        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
-        stroke.setAlpha((int) (255 * ringLight));
-        stroke.setStrokeWidth(dp(2.2f));
-        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
-        stroke.setShader(null);
-        stroke.setAlpha(255);
-
-        drawPlanet(canvas, buttonCx, buttonCy, planetR);
+    private String statusWord(boolean busy) {
+        if (busy) return str(leaving() ? R.string.leaving_title : R.string.busy_title);
+        return str(state == STATE_LIVE ? R.string.live_title : R.string.idle_title);
     }
 
-    /**
-     * The globe with its orbit, as in the logo: a wireframe sphere tilted
-     * a little, the orbit's far half behind it and its near half in front,
-     * and the sparkle on the orbit. It fades from grey to chrome as the
-     * tunnel comes up: each part is drawn grey, then chrome over it, in
-     * proportion, so the change is a cross-fade rather than a switch.
-     */
-    private void drawPlanet(Canvas canvas, float cx, float cy, float r) {
-        final float orx = r * 1.72f, ory = r * 0.46f;
-        final int greyA = (int) (110 * (1f - lit)), chromeA = (int) (255 * lit);
-        final double turn = Math.toRadians(planetAngle);
+    private void drawHero(Canvas canvas) {
+        final float r = dp(28);
+        fill.setShader(heroShade);
+        canvas.drawRoundRect(hero, r, r, fill);
+        fill.setShader(null);
 
+        if (logo == null) logo = BitmapFactory.decodeResource(getResources(), R.drawable.logo_wordmark);
+        if (logo != null) canvas.drawBitmap(logo, null, logoBox, picture);
+        drawGear(canvas);
+
+        // status: a dot and a word
+        final boolean busy = state == STATE_BUSY || leaving();
+        final float dotR = dp(4);
+        if (onW > 0.01f) {
+            fill.setShader(haloGreen);
+            fill.setAlpha((int) (255 * onW));
+            canvas.drawCircle(dotX, dotY, dp(13), fill);
+        }
+        if (busyW > 0.01f) {
+            fill.setShader(haloAmber);
+            fill.setAlpha((int) (255 * busyW * (0.45f + 0.4f * (float) Math.abs(Math.sin(pulse)))));
+            canvas.drawCircle(dotX, dotY, dp(13), fill);
+        }
+        fill.setShader(null);
+        fill.setAlpha(255);
+        fill.setColor(mix3(GREY_DOT, WAIT, SUCCESS));
+        canvas.drawCircle(dotX, dotY, dotR, fill);
+
+        text.setTypeface(medium);
+        text.setTextSize(sp(16) * Math.max(k, 0.9f));
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0xCCFFFFFF);
+        canvas.drawText(statusWord(busy), dotX + dotR + dp(8), statusY, text);
+
+        drawButton(canvas, busy);
+    }
+
+    /** The pill: violet to connect, dark while working, white to disconnect. */
+    private void drawButton(Canvas canvas, boolean busy) {
         canvas.save();
-        canvas.rotate(-16f, cx, cy);
-        stroke.setStrokeCap(Paint.Cap.ROUND);
+        canvas.scale(press, press, button.centerX(), button.centerY());
+        final float r = button.height() / 2f;
 
-        // orbit, far half
-        rect.set(cx - orx, cy - ory, cx + orx, cy + ory);
-        stroke.setStrokeWidth(r * 0.1f);
-        for (int layer = 0; layer < 2; layer++) {
-            if (!paintLayer(layer, greyA * 7 / 10, chromeA * 7 / 10)) continue;
-            canvas.drawArc(rect, 180f, 180f, false, stroke);
-        }
-
-        // the sphere hides the far half of the orbit
-        fill.setShader(null);
-        fill.setColor(0xFF08090B);
-        canvas.drawCircle(cx, cy, r, fill);
-
-        for (int layer = 0; layer < 2; layer++) {
-            final int base = layer == 0 ? greyA : chromeA;
-            if (!paintLayer(layer, base, base)) continue;
-            // meridians: the far ones faint, the near ones full
-            stroke.setStrokeWidth(r * 0.035f);
-            for (int i = 0; i < 12; i++) {
-                final double lam = i * Math.PI / 6 + turn;
-                final float rx = (float) Math.abs(Math.sin(lam)) * r;
-                if (rx < 0.5f) continue;
-                stroke.setAlpha(Math.cos(lam) > 0 ? base : base / 4);
-                rect.set(cx - rx, cy - r, cx + rx, cy + r);
-                canvas.drawArc(rect, Math.sin(lam) > 0 ? -90f : 90f, 180f, false, stroke);
-            }
-            // parallels: near half full, far half faint
-            for (int ph : PARALLELS) {
-                final double a = Math.toRadians(ph);
-                final float y = cy - r * (float) Math.sin(a), rx = r * (float) Math.cos(a), ry = rx * 0.2f;
-                rect.set(cx - rx, y - ry, cx + rx, y + ry);
-                stroke.setAlpha(base);
-                canvas.drawArc(rect, 0f, 180f, false, stroke);
-                stroke.setAlpha(base / 4);
-                canvas.drawArc(rect, 180f, 180f, false, stroke);
-            }
-            stroke.setAlpha(base);
-            stroke.setStrokeWidth(r * 0.07f);
-            canvas.drawCircle(cx, cy, r, stroke);
-        }
-
-        // orbit, near half
-        rect.set(cx - orx, cy - ory, cx + orx, cy + ory);
-        stroke.setStrokeWidth(r * 0.12f);
-        for (int layer = 0; layer < 2; layer++) {
-            if (!paintLayer(layer, greyA, chromeA)) continue;
-            canvas.drawArc(rect, 0f, 180f, false, stroke);
-        }
-        stroke.setShader(null);
-        stroke.setAlpha(255);
-        stroke.setStrokeCap(Paint.Cap.BUTT);
-
-        // the sparkle on the orbit's left end, as in the logo
-        final float sx = cx - orx * 0.93f, sy = cy + ory * 0.35f, sr = r * (0.18f + 0.08f * lit);
-        if (sparkGlow == null) {
-            sparkGlow = new RadialGradient(sx, sy, r * 0.26f * 1.8f, 0x88FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
-        }
-        if (lit > 0.01f) {
-            fill.setShader(sparkGlow);
-            fill.setAlpha((int) (255 * lit));
-            canvas.drawCircle(sx, sy, r * 0.26f * 1.8f, fill);
+        // a soft glow under it: violet while idle, green once connected
+        final int glowColor = blend(ACCENT, SUCCESS, onW / Math.max(0.001f, offW + onW));
+        final float glowAmount = offW * 0.55f + onW * 0.45f;
+        if (glowAmount > 0.01f) {
             fill.setShader(null);
+            for (int i = 6; i >= 1; i--) {
+                final float grow = dp(2.2f) * i;
+                rect.set(button.left - grow, button.top - grow + dp(4), button.right + grow, button.bottom + grow + dp(4));
+                fill.setColor(glowColor);
+                fill.setAlpha((int) (glowAmount * 22 * (7 - i) / 6f));
+                canvas.drawRoundRect(rect, r + grow, r + grow, fill);
+            }
+            fill.setAlpha(255);
         }
-        final int grey = 0xA0A3AB;
-        final int a = (int) (0x99 + (0xFF - 0x99) * lit);
-        final int rgb = lerpRgb(grey, 0xFFFFFF, lit);
-        drawSparkle(canvas, sx, sy, sr, (a << 24) | rgb);
+
+        fill.setColor(mix3(ACCENT, BUSY_BTN, 0xFFFFFFFF));
+        canvas.drawRoundRect(button, r, r, fill);
+
+        final String label = busy ? statusWord(true)
+                : str(state == STATE_LIVE ? R.string.btn_disconnect : R.string.btn_connect);
+        text.setTypeface(semibold);
+        text.setTextSize(sp(17));
+        text.setTextAlign(Paint.Align.LEFT);
+        final float labelW = text.measureText(label);
+        final float spinnerW = (dp(18) + dp(10)) * busyW;
+        float x = button.centerX() - (labelW + spinnerW) / 2f;
+        final float baseline = button.centerY() - (text.descent() + text.ascent()) / 2f;
+        if (busyW > 0.01f) {
+            final float sr = dp(9), scx = x + sr, scy = button.centerY();
+            stroke.setShader(null);
+            stroke.setStrokeWidth(dp(2));
+            stroke.setStrokeCap(Paint.Cap.ROUND);
+            stroke.setColor(0xFFFFFFFF);
+            stroke.setAlpha((int) (0x55 * busyW));
+            canvas.drawCircle(scx, scy, sr, stroke);
+            stroke.setAlpha((int) (255 * busyW));
+            rect.set(scx - sr, scy - sr, scx + sr, scy + sr);
+            canvas.drawArc(rect, spin, 90, false, stroke);
+            stroke.setAlpha(255);
+            stroke.setStrokeCap(Paint.Cap.BUTT);
+            x += spinnerW;
+        }
+        text.setColor(blend(0xFFFFFFFF, INK, onW));
+        canvas.drawText(label, x, baseline, text);
         canvas.restore();
     }
 
-    private static final int[] PARALLELS = { -55, -25, 5, 35 };
-
-    /** Sets the stroke up for the grey (0) or chrome (1) layer; false if that layer is invisible. */
-    private boolean paintLayer(int layer, int greyAlpha, int chromeAlpha) {
-        if (layer == 0) {
-            if (greyAlpha < 2) return false;
-            stroke.setShader(null);
-            stroke.setColor(0xFF8A8D95);
-            stroke.setAlpha(greyAlpha);
-        } else {
-            if (chromeAlpha < 2) return false;
-            stroke.setColor(0xFFFFFFFF);
-            stroke.setShader(chrome);
-            stroke.setAlpha(chromeAlpha);
+    /** A colour from the three state weights: idle, working, connected. */
+    private int mix3(int a, int b, int c) {
+        final float t = Math.max(0.001f, offW + busyW + onW);
+        final float wa = offW / t, wb = busyW / t, wc = onW / t;
+        int out = 0xFF000000;
+        for (int shift = 0; shift <= 16; shift += 8) {
+            final float v = ((a >> shift) & 0xFF) * wa + ((b >> shift) & 0xFF) * wb + ((c >> shift) & 0xFF) * wc;
+            out |= (Math.round(v) & 0xFF) << shift;
         }
-        return true;
+        return out;
     }
 
-    private static int lerpRgb(int a, int b, float u) {
-        final int r = (int) (((a >> 16) & 0xFF) + (((b >> 16) & 0xFF) - ((a >> 16) & 0xFF)) * u);
-        final int g = (int) (((a >> 8) & 0xFF) + (((b >> 8) & 0xFF) - ((a >> 8) & 0xFF)) * u);
-        final int bl = (int) ((a & 0xFF) + ((b & 0xFF) - (a & 0xFF)) * u);
-        return (r << 16) | (g << 8) | bl;
-    }
-
-    /** The four-point star from the logo. */
-    private void drawSparkle(Canvas canvas, float x, float y, float r, int color) {
-        final float k = r / 12f;
-        path.reset();
-        path.moveTo(x, y - 12 * k);
-        path.cubicTo(x + .8f * k, y - 4 * k, x + 4 * k, y - .8f * k, x + 12 * k, y);
-        path.cubicTo(x + 4 * k, y + .8f * k, x + .8f * k, y + 4 * k, x, y + 12 * k);
-        path.cubicTo(x - .8f * k, y + 4 * k, x - 4 * k, y + .8f * k, x - 12 * k, y);
-        path.cubicTo(x - 4 * k, y - .8f * k, x - .8f * k, y - 4 * k, x, y - 12 * k);
-        path.close();
-        fill.setShader(null);
-        fill.setColor(color);
-        canvas.drawPath(path, fill);
-    }
-
-    /**
-     * The name, top left, lettered like the logo: heavy italic capitals,
-     * black inside a chrome outline.
-     */
-    private void drawTitle(Canvas canvas) {
-        int top = (int) dp(24);
-        android.view.WindowInsets insets = getRootWindowInsets();
-        if (insets != null) top = insets.getSystemWindowInsetTop();
-        final float x = dp(22), base = top + dp(40);
-        final String name = "BESY VPN";
-
-        if (heavy == null) {
-            heavy = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD);
+    private static int blend(int a, int b, float u) {
+        u = Math.max(0, Math.min(1, u));
+        int out = 0;
+        for (int shift = 0; shift <= 24; shift += 8) {
+            final int x = (a >>> shift) & 0xFF, y = (b >>> shift) & 0xFF;
+            out |= (Math.round(x + (y - x) * u) & 0xFF) << shift;
         }
-        if (base != titleBase) {
-            titleBase = base;
-            titleChrome = new LinearGradient(0, base - dp(20), 0, base + dp(2),
-                    new int[] { 0xFFFFFFFF, 0xFFC4C7CE, 0xFFFFFFFF, 0xFFB9BCC4 },
-                    new float[] { 0f, 0.45f, 0.55f, 1f }, Shader.TileMode.CLAMP);
-        }
-        text.setTypeface(heavy);
-        text.setTextSkewX(-0.22f);
-        text.setTextSize(dp(26));
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setLetterSpacing(0.03f);
-
-        text.setStyle(Paint.Style.STROKE);
-        text.setStrokeJoin(Paint.Join.ROUND);
-        text.setStrokeWidth(dp(4f));
-        text.setShader(titleChrome);
-        canvas.drawText(name, x, base, text);
-
-        text.setShader(null);
-        text.setStyle(Paint.Style.FILL);
-        text.setColor(0xFF050506);
-        canvas.drawText(name, x, base, text);
-
-        text.setTypeface(null);
-        text.setTextSkewX(0f);
-        text.setLetterSpacing(0f);
-        text.setStrokeWidth(0f);
+        return out;
     }
 
-    /**
-     * The small lamp under the circle: green when the tunnel is up, red
-     * when it is down, amber and breathing while it is being switched.
-     * A change of colour cross-fades over a quarter of a second.
-     */
-    private void drawLamp(Canvas canvas) {
-        final float cx = buttonCx, cy = lampY, r = dp(7);
-        if (lampMix < 1f) lampLayer(canvas, lampFrom, 1f - lampMix, cx, cy, r);
-        lampLayer(canvas, lampTo, lampMix, cx, cy, r);
-        fill.setAlpha(255);
-        fill.setColor(0x66FFFFFF);
-        canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.3f, fill);
-    }
-
-    private void lampLayer(Canvas canvas, int which, float amount, float cx, float cy, float r) {
-        float glow = 1f;
-        if (which == LAMP_WAIT) glow = 0.55f + 0.45f * (float) Math.abs(Math.sin(pulse));
-        fill.setShader(lampHalo[which]);
-        fill.setAlpha((int) (255 * glow * amount));
-        canvas.drawCircle(cx, cy, r * 3.2f, fill);
-        fill.setShader(null);
-        fill.setColor(LAMP_COLORS[which]);
-        fill.setAlpha((int) (255 * amount));
-        canvas.drawCircle(cx, cy, r, fill);
-    }
-
-    // ---- The tiles ----------------------------------------------------
-
-    /**
-     * Time connected, traffic, speed and the address the internet sees,
-     * in four glass tiles. They read what the tunnel service keeps; while
-     * the tunnel is down they show dashes and dim with the rest of the
-     * screen.
-     */
-    private void drawStats(Canvas canvas) {
-        final boolean up = state == STATE_LIVE && TunnelService.connectedAt > 0;
-        final String[] labels = {
-                str(R.string.tile_time), str(R.string.tile_ip),
-                str(R.string.tile_traffic), str(R.string.tile_speed) };
-        final String[][] values = up ? statValues() : new String[][] {
-                { "—" }, { "—" }, { "—" }, { "—" } };
-        final float dim = 0.45f + 0.55f * lit;
-
-        for (int i = 0; i < 4; i++) {
-            final RectF r = tiles[i];
-            final float radius = dp(18);
-            fill.setShader(null);
-            fill.setColor(0x0EFFFFFF);
-            canvas.drawRoundRect(r, radius, radius, fill);
-            stroke.setShader(null);
-            stroke.setColor(0x1FFFFFFF);
-            stroke.setStrokeWidth(dp(1));
-            canvas.drawRoundRect(r, radius, radius, stroke);
-
-            final float x = r.left + dp(14), room = r.width() - dp(28);
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setLetterSpacing(0.08f);
-            text.setTextSize(dp(11));
-            text.setColor(Palette.INK_3);
-            canvas.drawText(labels[i].toUpperCase(java.util.Locale.getDefault()), x, r.top + dp(24), text);
-            text.setLetterSpacing(0f);
-
-            text.setColor(Palette.INK);
-            text.setAlpha((int) (255 * dim));
-            final String[] v = values[i];
-            if (v.length == 1) {
-                fit(v[0], dp(19), room);
-                canvas.drawText(v[0], x, r.top + dp(58), text);
-            } else {
-                fit(longer(v[0], v[1]), dp(15), room);
-                canvas.drawText(v[0], x, r.top + dp(49), text);
-                canvas.drawText(v[1], x, r.top + dp(70), text);
-            }
-            text.setAlpha(255);
-        }
-    }
-
-    /** Sets the text size to at most {@code size}, smaller if the text would not fit. */
-    private void fit(String s, float size, float room) {
-        text.setTextSize(size);
-        final float wide = text.measureText(s);
-        if (wide > room) text.setTextSize(size * room / wide);
-    }
-
-    private static String longer(String a, String b) { return a.length() >= b.length() ? a : b; }
-
-    private String[][] statValues() {
-        long sec = Math.max(0, (android.os.SystemClock.elapsedRealtime() - TunnelService.connectedAt) / 1000);
-        final String time = String.format(java.util.Locale.ROOT, "%02d:%02d:%02d", sec / 3600, sec / 60 % 60, sec % 60);
-        final String ip = TunnelService.exitIp != null ? TunnelService.exitIp : "—";
-        final String perSec = str(R.string.per_second);
-        return new String[][] {
-                { time },
-                { ip },
-                { "↓ " + bytes(TunnelService.rxBytes), "↑ " + bytes(TunnelService.txBytes) },
-                { "↓ " + bytes((long) TunnelService.rxRate) + perSec, "↑ " + bytes((long) TunnelService.txRate) + perSec },
-        };
-    }
-
-    /** 812 B, 3.4 KB, 148 MB, 1.2 GB — one decimal below ten, whole numbers above. */
-    private String bytes(long n) {
-        final int[] units = { R.string.unit_b, R.string.unit_kb, R.string.unit_mb, R.string.unit_gb };
-        double v = n;
-        int u = 0;
-        while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
-        final java.util.Locale here = getResources().getConfiguration().locale;
-        final String num = u == 0 || v >= 10
-                ? String.format(here, "%d", Math.round(v))
-                : String.format(here, "%.1f", v);
-        return num + " " + str(units[u]);
-    }
-
-    /** What the tiles say, read out as one sentence for TalkBack. */
-    private String statsSpoken() {
-        if (state != STATE_LIVE || TunnelService.connectedAt <= 0) return str(R.string.tiles_off);
-        final String[][] v = statValues();
-        return str(R.string.tile_time) + " " + v[0][0] + ". "
-                + str(R.string.tile_ip) + " " + v[1][0] + ". "
-                + str(R.string.tile_traffic) + " " + v[2][0] + ", " + v[2][1] + ". "
-                + str(R.string.tile_speed) + " " + v[3][0] + ", " + v[3][1] + ".";
-    }
-
-    private void drawReadout(Canvas canvas, float w, float h) {
-        // Words only while the switch is moving; at rest the lamp says it.
-        final String title = state == STATE_BUSY ? str(R.string.busy_title)
-                : leaving() ? str(R.string.leaving_title) : null;
-        text.setTextAlign(Paint.Align.CENTER);
-        if (title != null) {
-            text.setColor(Palette.INK);
-            text.setTextSize(dp(18));
-            canvas.drawText(title, w / 2f, lampY + dp(34), text);
-        }
-
-        // The navigation bar is drawn over this view on phones that use
-        // gesture navigation — a Galaxy A13 in Test Lab put its back
-        // arrow across the last line — so everything anchored to the
-        // bottom is measured from above it.
-        android.view.WindowInsets insets = getRootWindowInsets();
-        final float bottom = h - (insets != null ? insets.getSystemWindowInsetBottom() : 0);
-
-        if (error != null && error.length() > 0) {
-            text.setColor(Palette.EMBER);
-            text.setTextSize(dp(12.5f));
-            java.util.List<String> lines = wrap(error, w - dp(44), text);
-            float ey = bottom - dp(24) - (lines.size() - 1) * dp(16);
-            for (String piece : lines) {
-                canvas.drawText(piece, w / 2f, ey, text);
-                ey += dp(16);
-            }
-        } else {
-            text.setColor(Palette.INK_3);
-            text.setTextSize(dp(11.5f));
-            canvas.drawText(str(R.string.key_local), w / 2f, bottom - dp(24), text);
-        }
-        text.setTextAlign(Paint.Align.LEFT);
-    }
-
-    /**
-     * Settings, top right, below the status bar.
-     *
-     * <p>Drawn as a lobed wheel with a hole: eight teeth with flat tops.
-     * The first version of the mockup drew rays around a circle and was
-     * read as a sun, so the teeth are wide and short.
-     */
-    private void drawGear(Canvas canvas, float w) {
-        int top = (int) dp(24);
-        android.view.WindowInsets insets = getRootWindowInsets();
-        if (insets != null) top = insets.getSystemWindowInsetTop();
-
-        gearCx = w - dp(34);
-        gearCy = top + dp(30);
+    /** Settings: a lobed wheel with a hole, white on the dark card. */
+    private void drawGear(Canvas canvas) {
         final float outer = dp(11), inner = dp(8.2f);
-
         path.reset();
         for (int i = 0; i < 8; i++) {
-            double a = Math.toRadians(i * 45);
-            double[] offs = { -16, -9, 9, 16 };
-            float[] radii = { inner, outer, outer, inner };
-            for (int k = 0; k < 4; k++) {
-                double t = a + Math.toRadians(offs[k]);
-                float x = gearCx + (float) (radii[k] * Math.cos(t));
-                float y = gearCy + (float) (radii[k] * Math.sin(t));
-                if (i == 0 && k == 0) path.moveTo(x, y); else path.lineTo(x, y);
+            final double a = Math.toRadians(i * 45);
+            final double[] offs = { -16, -9, 9, 16 };
+            final float[] radii = { inner, outer, outer, inner };
+            for (int j = 0; j < 4; j++) {
+                final double t = a + Math.toRadians(offs[j]);
+                final float x = gearCx + (float) (radii[j] * Math.cos(t));
+                final float y = gearCy + (float) (radii[j] * Math.sin(t));
+                if (i == 0 && j == 0) path.moveTo(x, y); else path.lineTo(x, y);
             }
         }
         path.close();
-
-        stroke.setColor(Palette.INK_2);
-        stroke.setStrokeWidth(dp(1.5f));
+        stroke.setShader(null);
+        stroke.setColor(0xCCFFFFFF);
+        stroke.setStrokeWidth(dp(1.6f));
         stroke.setStrokeJoin(Paint.Join.ROUND);
         canvas.drawPath(path, stroke);
         canvas.drawCircle(gearCx, gearCy, dp(3.2f), stroke);
         stroke.setStrokeJoin(Paint.Join.MITER);
     }
 
-    private String str(int id) { return getContext().getString(id); }
+    // ---- The light part ---------------------------------------------------
+
+    private void drawOverview(Canvas canvas) {
+        text.setTypeface(semibold);
+        text.setTextSize(sp(18) * Math.max(k, 0.9f));
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(INK);
+        canvas.drawText(str(R.string.overview), speedCard.left + dp(3), headingY, text);
+
+        drawCard(canvas, speedCard, CARD, CARD_BORDER);
+        drawSpeed(canvas);
+        drawCard(canvas, timeCard, CARD, CARD_BORDER);
+        drawTime(canvas);
+        drawCard(canvas, stateCard, blend(CARD, LIVE_BG, live), blend(CARD_BORDER, LIVE_BORDER, live));
+        drawStateCard(canvas);
+        drawNote(canvas);
+    }
+
+    private void drawCard(Canvas canvas, RectF r, int color, int border) {
+        final float radius = dp(23);
+        // the faintest shadow, two soft steps under the card
+        fill.setShader(null);
+        for (int i = 2; i >= 1; i--) {
+            rect.set(r.left - i, r.top + dp(3) + i, r.right + i, r.bottom + dp(3) + i * 2);
+            fill.setColor(0x06141D26);
+            canvas.drawRoundRect(rect, radius + i, radius + i, fill);
+        }
+        fill.setColor(color);
+        canvas.drawRoundRect(r, radius, radius, fill);
+        stroke.setShader(null);
+        stroke.setColor(border);
+        stroke.setStrokeWidth(Math.max(1f, dp(1)));
+        rect.set(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f);
+        canvas.drawRoundRect(rect, radius, radius, stroke);
+    }
+
+    private void heading(Canvas canvas, String s, float x, float y, int color) {
+        text.setTypeface(medium);
+        text.setTextSize(sp(13));
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(color);
+        canvas.drawText(s, x, y, text);
+    }
+
+    private void drawSpeed(Canvas canvas) {
+        final RectF c = speedCard;
+        final float x = c.left + dp(20);
+        // heading, number and unit as one block, centred in the card's height
+        final float numSize = sp(52) * Math.max(k, 0.85f);
+        final float block = sp(13) + dp(15) + numSize * 0.74f + dp(8) + sp(13);
+        float y = c.centerY() - block / 2f + sp(13) * 0.8f;
+        heading(canvas, str(R.string.tile_speed), x, y, CARD_HEAD);
+
+        text.setTypeface(semibold);
+        text.setFontFeatureSettings("tnum");
+        text.setLetterSpacing(-0.045f);
+        text.setColor(INK);
+        y += dp(15) + numSize * 0.74f;
+        final String number = number(shownMbps);
+        fit(number, numSize, dialCx - dialR - dp(12) - x);
+        canvas.drawText(number, x, y, text);
+        text.setLetterSpacing(0f);
+        text.setFontFeatureSettings(null);
+
+        text.setTypeface(regular);
+        text.setTextSize(sp(13));
+        text.setColor(UNIT);
+        canvas.drawText(str(R.string.mbps), x, y + dp(8) + sp(13), text);
+
+        drawDial(canvas);
+    }
+
+    /** One decimal below a hundred, whole numbers from a hundred up. */
+    private String number(float mbps) {
+        final java.util.Locale here = getResources().getConfiguration().locale;
+        if (mbps < 0.05f) mbps = 0f;
+        return mbps >= 100 ? String.format(here, "%d", Math.round(mbps)) : String.format(here, "%.1f", mbps);
+    }
+
+    /** Sets the text size to at most {@code size}, smaller if the text would not fit. */
+    private void fit(String s, float size, float room) {
+        text.setTextSize(size);
+        final float wide = text.measureText(s);
+        if (wide > room && room > 0) text.setTextSize(size * room / wide);
+    }
 
     /**
-     * Breaks a message into lines that fit.
+     * The speed gauge: an open arc on the white card, a light track and a
+     * violet band that grows with the speed, ending in a small knob. It is
+     * the handoff's "minimal, decorative" speedometer; it does not dominate
+     * the card, the number does.
+     */
+    private void drawDial(Canvas canvas) {
+        final float cx = dialCx, cy = dialCy, R = dialR;
+        final float band = Math.max(dp(7), R * 0.13f);
+        final float rr = R - band / 2f;
+        rect.set(cx - rr, cy - rr, cx + rr, cy + rr);
+
+        stroke.setShader(null);
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        stroke.setStrokeWidth(band);
+        stroke.setColor(TRACK);
+        canvas.drawArc(rect, 138f, 264f, false, stroke);
+
+        final float part = Math.max(0f, Math.min(1f, (angle + 132f) / 264f));
+        if (part > 0.004f) {
+            stroke.setShader(gaugeShade);
+            stroke.setColor(0xFFFFFFFF);
+            canvas.drawArc(rect, 138f, 264f * part, false, stroke);
+            stroke.setShader(null);
+        }
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+
+        // the knob at the end of the band
+        final double a = Math.toRadians(138f + 264f * part);
+        final float kx = cx + rr * (float) Math.cos(a), ky = cy + rr * (float) Math.sin(a);
+        fill.setShader(null);
+        fill.setColor(0x1F7C6CFF);
+        canvas.drawCircle(kx, ky, band * 1.15f, fill);
+        fill.setColor(0xFFFFFFFF);
+        canvas.drawCircle(kx, ky, band * 0.62f, fill);
+        stroke.setColor(part > 0.004f ? ACCENT : TRACK_DARK);
+        stroke.setStrokeWidth(dp(2.2f));
+        canvas.drawCircle(kx, ky, band * 0.62f, stroke);
+
+        text.setTypeface(regular);
+        text.setTextSize(sp(10));
+        text.setColor(DIAL_LABEL);
+        text.setTextAlign(Paint.Align.CENTER);
+        final double a0 = Math.toRadians(138), a1 = Math.toRadians(402);
+        final float ly = cy + rr * (float) Math.sin(a0) + band + sp(10);
+        canvas.drawText("0", cx + rr * (float) Math.cos(a0), ly, text);
+        canvas.drawText(Integer.toString((int) scaleMax), cx + rr * (float) Math.cos(a1), ly, text);
+        text.setTextAlign(Paint.Align.LEFT);
+    }
+
+    private void drawTime(Canvas canvas) {
+        final RectF c = timeCard;
+        final float x = c.left + dp(19);
+        heading(canvas, str(R.string.session_time), x, c.top + dp(19) + sp(13) * 0.8f, CARD_HEAD);
+
+        long sec = 0;
+        if (state == STATE_LIVE && TunnelService.connectedAt > 0) {
+            sec = Math.max(0, (SystemClock.elapsedRealtime() - TunnelService.connectedAt) / 1000);
+        }
+        final long hh = sec / 3600, mm = sec / 60 % 60, ss = sec % 60;
+        final String t = hh > 0
+                ? String.format(java.util.Locale.ROOT, "%02d:%02d:%02d", hh, mm, ss)
+                : String.format(java.util.Locale.ROOT, "%02d:%02d", mm, ss);
+
+        text.setTypeface(semibold);
+        text.setFontFeatureSettings("tnum");
+        text.setLetterSpacing(-0.03f);
+        text.setColor(INK);
+        final float base = c.bottom - dp(19);
+        final float size = (hh > 0 ? sp(26) : sp(34)) * Math.max(k, 0.85f);
+        fit(t, size, c.width() - dp(38));
+        canvas.drawText(t, x, base, text);
+        final float cap = text.getTextSize() * 0.72f;
+        text.setLetterSpacing(0f);
+        text.setFontFeatureSettings(null);
+
+        drawClock(canvas, x - dp(2), base - cap - dp(10) - dp(27), dp(27), ICON);
+    }
+
+    private void drawStateCard(Canvas canvas) {
+        final RectF c = stateCard;
+        final float x = c.left + dp(19);
+        final boolean busy = state == STATE_BUSY || leaving();
+        heading(canvas, str(R.string.tile_connection), x, c.top + dp(19) + sp(13) * 0.8f,
+                blend(CARD_HEAD, LIVE_HEAD, live));
+
+        text.setTypeface(semibold);
+        text.setTextSize(sp(busy ? 18 : 20) * Math.max(k, 0.85f));
+        text.setLetterSpacing(-0.02f);
+        text.setColor(blend(INK, LIVE_INK, live));
+        final java.util.List<String> lines = wrap(statusWord(busy), c.width() - dp(38), text, 2);
+        final float lh = text.getTextSize() * 1.15f;
+        final float first = c.bottom - dp(19) - (lines.size() - 1) * lh;
+        float y = first;
+        for (String line : lines) { canvas.drawText(line, x, y, text); y += lh; }
+        final float cap = text.getTextSize() * 0.72f;
+        text.setLetterSpacing(0f);
+
+        final int iconColor = blend(busy ? WAIT_ICON : ICON, LIVE_INK, live);
+        drawSignal(canvas, x - dp(3), first - cap - dp(12) - dp(27), dp(27), iconColor);
+    }
+
+    private void drawNote(Canvas canvas) {
+        final String place = str(R.string.location_name);
+        text.setTypeface(regular);
+        text.setTextSize(sp(12));
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(NOTE);
+        final float iw = dp(14), gap = dp(5), tw = text.measureText(place);
+        final float x = speedCard.centerX() - (iw + gap + tw) / 2f;
+        drawPin(canvas, x, noteY - iw + dp(2), iw, NOTE_ICON);
+        canvas.drawText(place, x + iw + gap, noteY, text);
+
+        if (error != null && error.length() > 0) {
+            text.setTextSize(sp(12.5f));
+            text.setColor(ERROR);
+            text.setTextAlign(Paint.Align.CENTER);
+            float y = noteY + dp(22);
+            for (String line : wrap(error, speedCard.width() - dp(16), text, 3)) {
+                canvas.drawText(line, speedCard.centerX(), y, text);
+                y += dp(16);
+            }
+            text.setTextAlign(Paint.Align.LEFT);
+        }
+    }
+
+    // ---- Icons: the design's 24-unit outline icons, drawn to size -----------
+
+    private void iconStroke(float size, int color) {
+        stroke.setShader(null);
+        stroke.setColor(color);
+        stroke.setStrokeWidth(1.7f * size / 24f);
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        stroke.setStrokeJoin(Paint.Join.ROUND);
+    }
+
+    private void drawClock(Canvas canvas, float x, float y, float size, int color) {
+        final float u = size / 24f;
+        iconStroke(size, color);
+        canvas.drawCircle(x + 12 * u, y + 12 * u, 9 * u, stroke);
+        path.reset();
+        path.moveTo(x + 12 * u, y + 7 * u);
+        path.lineTo(x + 12 * u, y + 12 * u);
+        path.lineTo(x + 15 * u, y + 14 * u);
+        canvas.drawPath(path, stroke);
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+        stroke.setStrokeJoin(Paint.Join.MITER);
+    }
+
+    private void drawSignal(Canvas canvas, float x, float y, float size, int color) {
+        final float u = size / 24f;
+        iconStroke(size, color);
+        rect.set(x + 3 * u, y + 14 * u, x + 6 * u, y + 19 * u);
+        canvas.drawRect(rect, stroke);
+        rect.set(x + 10.5f * u, y + 10 * u, x + 13.5f * u, y + 19 * u);
+        canvas.drawRect(rect, stroke);
+        rect.set(x + 18 * u, y + 5 * u, x + 21 * u, y + 19 * u);
+        canvas.drawRect(rect, stroke);
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+        stroke.setStrokeJoin(Paint.Join.MITER);
+    }
+
+    private void drawPin(Canvas canvas, float x, float y, float size, int color) {
+        final float u = size / 24f;
+        iconStroke(size, color);
+        stroke.setStrokeWidth(1.6f * u);
+        path.reset();
+        path.moveTo(x + 20 * u, y + 10 * u);
+        path.cubicTo(x + 20 * u, y + 16 * u, x + 12 * u, y + 22 * u, x + 12 * u, y + 22 * u);
+        path.cubicTo(x + 12 * u, y + 22 * u, x + 4 * u, y + 16 * u, x + 4 * u, y + 10 * u);
+        rect.set(x + 4 * u, y + 2 * u, x + 20 * u, y + 18 * u);
+        path.arcTo(rect, 180, 180, false);
+        canvas.drawPath(path, stroke);
+        canvas.drawCircle(x + 12 * u, y + 10 * u, 2.5f * u, stroke);
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+        stroke.setStrokeJoin(Paint.Join.MITER);
+    }
+
+    /**
+     * Breaks text into lines that fit.
      *
      * <p>Clipped text is worse than no text: it stops exactly where the
      * useful part of an error usually begins.
      */
-    private static java.util.List<String> wrap(String message, float width, Paint paint) {
+    private static java.util.List<String> wrap(String message, float width, Paint paint, int max) {
         java.util.List<String> lines = new java.util.ArrayList<String>();
         StringBuilder line = new StringBuilder();
-
         for (String word : message.split("\\s+")) {
             String candidate = line.length() == 0 ? word : line + " " + word;
             if (paint.measureText(candidate) <= width || line.length() == 0) {
@@ -686,21 +739,17 @@ final class GlassView extends View {
                 line.setLength(0);
                 line.append(word);
             }
-            if (lines.size() >= 3) break;
+            if (lines.size() >= max) break;
         }
-        if (line.length() > 0 && lines.size() < 3) {
-            lines.add(line.toString());
-        }
+        if (line.length() > 0 && lines.size() < max) lines.add(line.toString());
         return lines;
     }
 
-    // ---- Accessibility ------------------------------------------------
+    // ---- Accessibility ----------------------------------------------------
     //
-    // The screen is drawn, not built from widgets, so without this it is
-    // a blank picture to anything that reads the interface: TalkBack said
-    // nothing, and Firebase's crawler reported "outside of app" and never
-    // found the button or the gear. Each control is described as a
-    // virtual node with its bounds, a label and a click action.
+    // The screen is drawn, not built from widgets, so each control is a
+    // virtual node with bounds, a label and an action, and the cards are
+    // read out as one sentence.
 
     private static final int NODE_POWER = 1;
     private static final int NODE_GEAR  = 2;
@@ -718,41 +767,27 @@ final class GlassView extends View {
                 info.addChild(GlassView.this, NODE_STATS);
                 return info;
             }
-            if (id == NODE_STATS) {
-                info = android.view.accessibility.AccessibilityNodeInfo.obtain(GlassView.this, id);
-                info.setPackageName(getContext().getPackageName());
-                info.setClassName("android.widget.TextView");
-                info.setParent(GlassView.this);
-                info.setContentDescription(statsSpoken());
-                android.graphics.Rect r = new android.graphics.Rect();
-                RectF all = new RectF(tiles[0].left, tiles[0].top, tiles[3].right, tiles[3].bottom);
-                all.round(r);
-                info.setBoundsInParent(r);
-                int[] at = new int[2];
-                getLocationOnScreen(at);
-                r.offset(at[0], at[1]);
-                info.setBoundsInScreen(r);
-                info.setFocusable(true);
-                info.setVisibleToUser(true);
-                return info;
-            }
-            if (id != NODE_POWER && id != NODE_GEAR) return null;
-
+            if (id != NODE_POWER && id != NODE_GEAR && id != NODE_STATS) return null;
             info = android.view.accessibility.AccessibilityNodeInfo.obtain(GlassView.this, id);
             info.setPackageName(getContext().getPackageName());
-            info.setClassName("android.widget.Button");
             info.setParent(GlassView.this);
-            info.setContentDescription(label(id));
             android.graphics.Rect r = bounds(id);
             info.setBoundsInParent(r);
             int[] at = new int[2];
             getLocationOnScreen(at);
             r.offset(at[0], at[1]);
             info.setBoundsInScreen(r);
+            info.setVisibleToUser(true);
+            info.setFocusable(true);
+            if (id == NODE_STATS) {
+                info.setClassName("android.widget.TextView");
+                info.setContentDescription(spoken());
+                return info;
+            }
+            info.setClassName("android.widget.Button");
+            info.setContentDescription(label(id));
             info.setEnabled(true);
             info.setClickable(true);
-            info.setFocusable(true);
-            info.setVisibleToUser(true);
             info.addAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK);
             return info;
         }
@@ -772,40 +807,62 @@ final class GlassView extends View {
     private String label(int id) {
         if (id == NODE_GEAR) return str(R.string.settings);
         switch (state) {
-            case STATE_LIVE: return str(R.string.disconnect);
-            case STATE_BUSY: return str(R.string.wait);
-            default:         return str(R.string.connect);
+            case STATE_LIVE: return str(R.string.btn_disconnect);
+            case STATE_BUSY: return str(R.string.busy_title);
+            default:         return str(R.string.btn_connect);
         }
+    }
+
+    private String spoken() {
+        long sec = state == STATE_LIVE && TunnelService.connectedAt > 0
+                ? (SystemClock.elapsedRealtime() - TunnelService.connectedAt) / 1000 : 0;
+        return str(R.string.tile_speed) + " " + number(mbps()) + " " + str(R.string.mbps) + ". "
+                + str(R.string.session_time) + " " + (sec / 60) + ":" + String.format(java.util.Locale.ROOT, "%02d", sec % 60) + ". "
+                + statusWord(state == STATE_BUSY || leaving()) + ". " + str(R.string.location_name) + ".";
     }
 
     private android.graphics.Rect bounds(int id) {
-        float cx = id == NODE_GEAR ? gearCx : buttonCx;
-        float cy = id == NODE_GEAR ? gearCy : buttonCy;
-        float r  = id == NODE_GEAR ? dp(24) : Math.max(buttonR, dp(24));
-        return new android.graphics.Rect(Math.round(cx - r), Math.round(cy - r),
-                Math.round(cx + r), Math.round(cy + r));
+        final RectF r = new RectF();
+        if (id == NODE_GEAR) r.set(gearCx - dp(24), gearCy - dp(24), gearCx + dp(24), gearCy + dp(24));
+        else if (id == NODE_POWER) r.set(button);
+        else r.set(overview);
+        final android.graphics.Rect out = new android.graphics.Rect();
+        r.round(out);
+        return out;
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
-        if (e.getAction() == MotionEvent.ACTION_UP) {
-            // The gear's target is 48dp across, well past what is drawn.
-            final float gx = e.getX() - gearCx, gy = e.getY() - gearCy;
-            if (gx * gx + gy * gy <= dp(26) * dp(26)) {
-                performClick();
-                if (settingsListener != null) settingsListener.onSettingsTap();
+        final float x = e.getX(), y = e.getY();
+        final boolean onGear = Math.hypot(x - gearCx, y - gearCy) <= dp(26);
+        final boolean onButton = x >= button.left - dp(4) && x <= button.right + dp(4)
+                && y >= button.top - dp(6) && y <= button.bottom + dp(6);
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                if (onButton) { pressed = true; invalidate(); return true; }
+                return onGear || super.onTouchEvent(e);
+            case MotionEvent.ACTION_MOVE:
+                if (pressed && !onButton) { pressed = false; invalidate(); }
+                return true;
+            case MotionEvent.ACTION_UP: {
+                final boolean wasPressed = pressed;
+                pressed = false;
+                invalidate();
+                if (onGear) {
+                    performClick();
+                    if (settingsListener != null) settingsListener.onSettingsTap();
+                } else if (wasPressed && onButton) {
+                    performClick();
+                    if (listener != null) listener.onPowerTap();
+                }
                 return true;
             }
-            final float dx = e.getX() - buttonCx, dy = e.getY() - buttonCy;
-            // The hit area is grown past the drawn circle: 48dp is what a
-            // finger needs, whatever the design wants to look like.
-            final float reach = Math.max(buttonR, dp(24));
-            if (dx * dx + dy * dy <= reach * reach) {
-                performClick();
-                if (listener != null) listener.onPowerTap();
+            case MotionEvent.ACTION_CANCEL:
+                pressed = false;
+                invalidate();
                 return true;
-            }
+            default:
+                return super.onTouchEvent(e);
         }
-        return super.onTouchEvent(e);
     }
 
     @Override public boolean performClick() { return super.performClick(); }

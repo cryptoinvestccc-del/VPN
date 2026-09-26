@@ -56,7 +56,7 @@ public final class SettingsActivity extends Activity {
                 new int[] { Palette.LIVE, Palette.INK_2 }));
         auto.setTrackTintList(new ColorStateList(
                 new int[][] { { android.R.attr.state_checked }, {} },
-                new int[] { 0x806FE3C0, 0x40FFFFFF }));
+                new int[] { 0x807C6CFF, 0x33111318 }));
         auto.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override public void onCheckedChanged(CompoundButton b, boolean on) {
                 Prefs.setAutoConnect(SettingsActivity.this, on);

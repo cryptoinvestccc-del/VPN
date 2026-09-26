@@ -446,8 +446,12 @@ public final class TunnelService extends VpnService {
         final long now = android.os.SystemClock.elapsedRealtime();
         if (statAt > 0 && now > statAt && rx >= rxBytes && tx >= txBytes) {
             final double dt = (now - statAt) / 1000.0;
-            rxRate = (rx - rxBytes) / dt;
-            txRate = (tx - txBytes) / dt;
+            // Reports come every second; a single second of traffic is
+            // bursty, so the rate is smoothed a little (half-life about a
+            // second and a half) before the dial shows it.
+            final double k = 1 - Math.exp(-dt / 2.0);
+            rxRate += ((rx - rxBytes) / dt - rxRate) * k;
+            txRate += ((tx - txBytes) / dt - txRate) * k;
         } else {
             rxRate = txRate = 0;
         }

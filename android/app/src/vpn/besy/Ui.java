@@ -32,10 +32,10 @@ final class Ui {
                 TypedValue.COMPLEX_UNIT_DIP, v, c.getResources().getDisplayMetrics()));
     }
 
-    /** The night background, matching the main screen. */
+    /** The light background of the app. */
     static GradientDrawable sky() {
         return new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[] { Palette.DEEP, Palette.VOID_ });
+                new int[] { Palette.VOID_, Palette.VOID_ });
     }
 
     /** A screen: scrolling column under a header with a back arrow. */
@@ -90,12 +90,12 @@ final class Ui {
         return t;
     }
 
-    /** A rounded glass card to put rows in. */
+    /** A rounded white card to put rows in. */
     static LinearLayout card(Context c) {
         LinearLayout card = new LinearLayout(c);
         card.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0x14FFFFFF);
+        bg.setColor(Palette.SURFACE);
         bg.setCornerRadius(dp(c, 18));
         bg.setStroke(Math.max(1, dp(c, 1)), Palette.RIM_SOFT);
         card.setBackground(bg);
@@ -107,7 +107,7 @@ final class Ui {
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(0xFFFFFFFF);
         mask.setCornerRadius(radius);
-        return new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), null, mask);
+        return new RippleDrawable(ColorStateList.valueOf(0x1A111318), null, mask);
     }
 
     /**

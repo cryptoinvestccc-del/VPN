@@ -73,4 +73,11 @@
   <string name="unit_mb">МБ</string>
   <string name="unit_gb">ГБ</string>
   <string name="per_second">/с</string>
+  <string name="btn_connect">Подключить</string>
+  <string name="btn_disconnect">Отключить</string>
+  <string name="overview">Обзор</string>
+  <string name="session_time">Время сеанса</string>
+  <string name="tile_connection">Подключение</string>
+  <string name="mbps">Мбит/с</string>
+  <string name="location_name">Стокгольм, Швеция</string>
 </resources>

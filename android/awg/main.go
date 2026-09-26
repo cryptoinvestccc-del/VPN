@@ -214,8 +214,10 @@ func awaitHandshake(dev *device.Device, within time.Duration) error {
 	}
 }
 
-// reportState tells the app, every few seconds, when the last handshake
-// was, so the screen can say how fresh the connection is.
+// reportState tells the app, once a second, when the last handshake was
+// and how many bytes have gone each way, so the screen can show how
+// fresh the connection is and how fast it is running. A second is short
+// enough for a speed dial to feel live and costs one IpcGet.
 //
 // Written to standard output and read by the app only to be shown;
 // nothing keeps it. A history of when a tunnel was used is a log of who
@@ -228,7 +230,7 @@ func reportState(dev *device.Device) {
 		}
 		st := parseState(state)
 		fmt.Printf("stat handshake=%d rx=%d tx=%d\n", st.handshake, st.rx, st.tx)
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Second)
 	}
 }
 
