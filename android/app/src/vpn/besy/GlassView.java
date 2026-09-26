@@ -296,15 +296,15 @@ final class GlassView extends View {
 
         text.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD));
         text.setTextSkewX(-0.22f);
-        text.setTextSize(dp(24));
+        text.setTextSize(dp(26));
         text.setTextAlign(Paint.Align.LEFT);
         text.setLetterSpacing(0.03f);
 
         text.setStyle(Paint.Style.STROKE);
         text.setStrokeJoin(Paint.Join.ROUND);
-        text.setStrokeWidth(dp(3.4f));
-        text.setShader(new LinearGradient(0, base - dp(18), 0, base + dp(2),
-                new int[] { 0xFFFFFFFF, 0xFF8C8F98, 0xFFF2F3F5, 0xFF8A8D95 },
+        text.setStrokeWidth(dp(4f));
+        text.setShader(new LinearGradient(0, base - dp(20), 0, base + dp(2),
+                new int[] { 0xFFFFFFFF, 0xFFC4C7CE, 0xFFFFFFFF, 0xFFB9BCC4 },
                 new float[] { 0f, 0.45f, 0.55f, 1f }, Shader.TileMode.CLAMP));
         canvas.drawText(name, x, base, text);
 
