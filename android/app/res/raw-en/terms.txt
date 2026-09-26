@@ -1,6 +1,8 @@
 BESY Terms of Use
 Version of 25 September 2026
 
+BESY is provided by sole proprietor (IP) Vladislav Vitalievich Zadorozhny, taxpayer number (INN) 380806643503, registration number (OGRNIP) 326385000091769, Irkutsk, Russia.
+
 1. BESY is a free secure-connection service. It is provided "as is": we try to keep it working but do not promise that it will be available always, everywhere or at any particular speed.
 
 2. The service may be changed, suspended or discontinued at any time without prior notice.

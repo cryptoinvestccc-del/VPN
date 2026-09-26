@@ -37,8 +37,8 @@ a{color:#cfd3db}
 """
 
 def page(lang, title, body, active, other_href):
-    t = {'ru': {'home': 'Главная', 'privacy': 'Конфиденциальность', 'terms': 'Условия', 'other': 'English'},
-         'en': {'home': 'Home', 'privacy': 'Privacy', 'terms': 'Terms', 'other': 'Русский'}}[lang]
+    t = {'ru': {'home': 'Главная', 'privacy': 'Конфиденциальность', 'terms': 'Условия', 'other': 'English', 'who': 'ИП Задорожный В. В., ИНН 380806643503'},
+         'en': {'home': 'Home', 'privacy': 'Privacy', 'terms': 'Terms', 'other': 'Русский', 'who': 'IP Zadorozhny V. V., INN 380806643503'}}[lang]
     pre = '' if lang == 'ru' else 'en/'
     root = '/' 
     links = [('home', root + pre), ('privacy', root + pre + 'privacy.html'), ('terms', root + pre + 'terms.html')]
@@ -49,8 +49,8 @@ def page(lang, title, body, active, other_href):
             '<title>%s</title><style>%s</style></head><body><main>'
             '<span class="lang"><a href="%s">%s</a></span>'
             '<a class="brand" href="%s">BESY VPN</a><nav>%s</nav>%s'
-            '<footer>BESY VPN · <a href="mailto:workmail196@yahoo.com">workmail196@yahoo.com</a></footer>'
-            '</main></body></html>\n') % (lang, html.escape(title), STYLE, other_href, t['other'], root + pre, nav, body)
+            '<footer>BESY VPN · %s · <a href="mailto:workmail196@yahoo.com">workmail196@yahoo.com</a></footer>'
+            '</main></body></html>\n') % (lang, html.escape(title), STYLE, other_href, t['other'], root + pre, nav, body, t['who'])
 
 def from_text(path):
     """First line: title. Second: version. A line "N. …" is a heading, "• …" a list item, the rest paragraphs."""
@@ -73,7 +73,7 @@ def from_text(path):
         if re.match(r'^\d+\. ', l) and len(l) < 70 and nxt and not re.match(r'^\d+\. ', nxt):
             out.append('<h2>%s</h2>' % html.escape(l))
         else:
-            cls = ' class="lead"' if first and not re.match(r'^\d+\. ', l) and 'Коротко' in l or first and l.startswith('In short') else ''
+            cls = ' class="lead"' if l.startswith('Коротко') or l.startswith('In short') else ''
             out.append('<p%s>%s</p>' % (cls, linkify(l)))
         first = False
     flush()
