@@ -12,7 +12,8 @@ import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * The whole screen, drawn by hand: a chrome circle with the logo in it,
+ * The whole screen, drawn by hand: the name top left, a circle with the
+ * logo's planet in it,
  * a lamp under it that says whether the tunnel is up, and the gear.
  *
  * <p>There is no Compose and no AndroidX here: those live on a Maven
@@ -38,14 +39,13 @@ final class GlassView extends View {
     private final Paint text   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect   = new RectF();
     private final Path  path   = new Path();
-    private final Paint picture = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private android.graphics.Bitmap logo;
 
     private int state = STATE_OFF;
     /** Until when "disconnecting" is shown after the button turned the tunnel off. */
     private long leavingUntil;
     private String error;
     private float spin;          // the waiting ring's angle
+    private float spinSlow = 20f; // the planet's turn
     private OnPowerTap listener;
     private OnSettingsTap settingsListener;
 
@@ -133,6 +133,7 @@ final class GlassView extends View {
         buttonR  = Math.min(w * 0.38f, h * 0.24f);
 
         drawSky(canvas, w, h);
+        drawTitle(canvas);
         drawButton(canvas);
         drawLamp(canvas);
         drawGear(canvas, w);
@@ -141,6 +142,11 @@ final class GlassView extends View {
         if (state == STATE_BUSY || leaving()) {
             spin += 6f;
             if (spin >= 360f) spin -= 360f;
+        }
+        if (state != STATE_OFF || leaving()) {
+            // the planet keeps turning, slowly, while the tunnel is up
+            spinSlow += state == STATE_LIVE ? 0.35f : 1.2f;
+            if (spinSlow >= 360f) spinSlow -= 360f;
             invalidate();
         }
     }
@@ -158,59 +164,159 @@ final class GlassView extends View {
     }
 
     /**
-     * The one control: a chrome ring with the logo inside.
-     *
-     * <p>The logo's own background is pure black, so the disc under it is
-     * black too and the picture sits in it without a visible edge.
+     * The one control: a dark orb with the logo's planet in it — the globe
+     * and its orbit, drawn in chrome — and a thin ring around it.
      */
     private void drawButton(Canvas canvas) {
-        final boolean live = state == STATE_LIVE;
-        final float ring = dp(7);
+        final boolean live = state == STATE_LIVE, moving = state == STATE_BUSY || leaving();
 
-        // chrome ring
-        fill.setShader(new android.graphics.SweepGradient(buttonCx, buttonCy,
-                new int[] { 0xFFFFFFFF, 0xFF6D7078, 0xFFE9EBEF, 0xFF3B3D43, 0xFFFFFFFF, 0xFF8B8E96, 0xFFFFFFFF },
-                null));
+        // the orb, lit from inside when the tunnel is up
+        fill.setShader(new RadialGradient(buttonCx, buttonCy - buttonR * 0.1f, buttonR,
+                new int[] { live ? 0x44DDE6FF : 0x1CFFFFFF, live ? 0x1A8FA3D9 : 0x0AFFFFFF, 0x00000000 },
+                new float[] { 0f, 0.6f, 1f }, Shader.TileMode.CLAMP));
         canvas.drawCircle(buttonCx, buttonCy, buttonR, fill);
         fill.setShader(null);
-        fill.setColor(0xFF000000);
-        canvas.drawCircle(buttonCx, buttonCy, buttonR - ring, fill);
 
-        // the logo, grey and dim while the tunnel is down
-        if (logo == null) {
-            logo = android.graphics.BitmapFactory.decodeResource(getResources(), R.drawable.logo);
-        }
-        if (logo != null) {
-            final float lw = (buttonR - ring) * 1.78f;
-            final float lh = lw * logo.getHeight() / logo.getWidth();
-            rect.set(buttonCx - lw / 2f, buttonCy - lh / 2f, buttonCx + lw / 2f, buttonCy + lh / 2f);
-            if (live) {
-                picture.setColorFilter(null);
-                picture.setAlpha(255);
-            } else {
-                android.graphics.ColorMatrix grey = new android.graphics.ColorMatrix();
-                grey.setSaturation(0f);
-                picture.setColorFilter(new android.graphics.ColorMatrixColorFilter(grey));
-                picture.setAlpha(state == STATE_BUSY || leaving() ? 190 : 120);
-            }
-            canvas.save();
-            path.reset();
-            path.addCircle(buttonCx, buttonCy, buttonR - ring, Path.Direction.CW);
-            canvas.clipPath(path);
-            canvas.drawBitmap(logo, null, rect, picture);
-            canvas.restore();
-        }
-
-        if (state == STATE_BUSY || leaving()) {
-            stroke.setShader(null);
+        // the ring: faint at rest, whole and bright when live, a running arc while switching
+        stroke.setShader(null);
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        stroke.setStrokeWidth(dp(2));
+        stroke.setColor(live ? 0xCCFFFFFF : 0x2EFFFFFF);
+        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
+        if (moving) {
             stroke.setColor(0xFFFFFFFF);
-            stroke.setStrokeWidth(ring * 0.6f);
-            stroke.setStrokeCap(Paint.Cap.ROUND);
-            final float rr = buttonR - ring / 2f;
-            rect.set(buttonCx - rr, buttonCy - rr, buttonCx + rr, buttonCy + rr);
-            canvas.drawArc(rect, spin, 60f, false, stroke);
-            stroke.setStrokeCap(Paint.Cap.BUTT);
+            stroke.setStrokeWidth(dp(2.6f));
+            rect.set(buttonCx - buttonR, buttonCy - buttonR, buttonCx + buttonR, buttonCy + buttonR);
+            canvas.drawArc(rect, spin, 70f, false, stroke);
+            canvas.drawArc(rect, spin + 180f, 30f, false, stroke);
         }
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+
+        drawPlanet(canvas, buttonCx, buttonCy, buttonR * 0.46f, live, moving);
+    }
+
+    /**
+     * The globe with its orbit, as in the logo: a wireframe sphere tilted
+     * a little, the orbit's far half behind it and its near half in front,
+     * and the sparkle on the orbit. Grey while the tunnel is down, chrome
+     * when it is up; it turns slowly while connected or connecting.
+     */
+    private void drawPlanet(Canvas canvas, float cx, float cy, float r, boolean live, boolean moving) {
+        final float turn = (float) Math.toRadians(live || moving ? spinSlow : 20f);
+        final Shader chrome = new LinearGradient(0, cy - r * 1.25f, 0, cy + r * 1.25f,
+                new int[] { 0xFFFFFFFF, 0xFFDCDEE3, 0xFF7A7D85, 0xFF3A3C42, 0xFFB7BAC1, 0xFFF4F5F7, 0xFF9295A0 },
+                new float[] { 0f, 0.22f, 0.42f, 0.5f, 0.6f, 0.8f, 1f }, Shader.TileMode.CLAMP);
+        final int alpha = live ? 255 : moving ? 200 : 110;
+
+        canvas.save();
+        canvas.rotate(-16f, cx, cy);
+        stroke.setStrokeCap(Paint.Cap.ROUND);
+        if (live || moving) { stroke.setColor(0xFFFFFFFF); stroke.setShader(chrome); }
+        else { stroke.setShader(null); stroke.setColor(0xFF8A8D95); }
+
+        // orbit, far half (behind the globe)
+        final float orx = r * 1.72f, ory = r * 0.46f;
+        rect.set(cx - orx, cy - ory, cx + orx, cy + ory);
+        stroke.setAlpha(alpha * 7 / 10);
+        stroke.setStrokeWidth(r * 0.1f);
+        canvas.drawArc(rect, 180f, 180f, false, stroke);
+
+        // a dark disc so the far half of the orbit hides behind the sphere
+        fill.setShader(null);
+        fill.setColor(0xFF08090B);
+        canvas.drawCircle(cx, cy, r, fill);
+
+        // meridians: the far ones faint, the near ones full
+        stroke.setStrokeWidth(r * 0.035f);
+        for (int i = 0; i < 12; i++) {
+            final double lam = i * Math.PI / 6 + turn;
+            final float rx = (float) Math.abs(Math.sin(lam)) * r;
+            if (rx < 0.5f) continue;
+            stroke.setAlpha(Math.cos(lam) > 0 ? alpha : alpha / 4);
+            rect.set(cx - rx, cy - r, cx + rx, cy + r);
+            canvas.drawArc(rect, Math.sin(lam) > 0 ? -90f : 90f, 180f, false, stroke);
+        }
+        // parallels: near half full, far half faint
+        for (int ph : new int[] { -55, -25, 5, 35 }) {
+            final double a = Math.toRadians(ph);
+            final float y = cy - r * (float) Math.sin(a), rx = r * (float) Math.cos(a), ry = rx * 0.2f;
+            rect.set(cx - rx, y - ry, cx + rx, y + ry);
+            stroke.setAlpha(alpha);
+            canvas.drawArc(rect, 0f, 180f, false, stroke);
+            stroke.setAlpha(alpha / 4);
+            canvas.drawArc(rect, 180f, 180f, false, stroke);
+        }
+        stroke.setAlpha(alpha);
+        stroke.setStrokeWidth(r * 0.07f);
+        canvas.drawCircle(cx, cy, r, stroke);
+
+        // orbit, near half (in front of the globe)
+        rect.set(cx - orx, cy - ory, cx + orx, cy + ory);
+        stroke.setStrokeWidth(r * 0.12f);
+        canvas.drawArc(rect, 0f, 180f, false, stroke);
+        stroke.setShader(null);
+        stroke.setAlpha(255);
+        stroke.setStrokeCap(Paint.Cap.BUTT);
+
+        // the sparkle sits on the orbit's left end, as in the logo
+        final float sx = cx - orx * 0.93f, sy = cy + ory * 0.35f;
+        drawSparkle(canvas, sx, sy, r * (live ? 0.26f : 0.18f), live ? 0xFFFFFFFF : 0x99A0A3AB, live);
+        canvas.restore();
+    }
+
+    /** The four-point star from the logo. */
+    private void drawSparkle(Canvas canvas, float x, float y, float r, int color, boolean glow) {
+        if (glow) {
+            fill.setShader(new RadialGradient(x, y, r * 1.8f, 0x88FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+            canvas.drawCircle(x, y, r * 1.8f, fill);
+            fill.setShader(null);
+        }
+        final float k = r / 12f;
+        path.reset();
+        path.moveTo(x, y - 12 * k);
+        path.cubicTo(x + .8f * k, y - 4 * k, x + 4 * k, y - .8f * k, x + 12 * k, y);
+        path.cubicTo(x + 4 * k, y + .8f * k, x + .8f * k, y + 4 * k, x, y + 12 * k);
+        path.cubicTo(x - .8f * k, y + 4 * k, x - 4 * k, y + .8f * k, x - 12 * k, y);
+        path.cubicTo(x - 4 * k, y - .8f * k, x - .8f * k, y - 4 * k, x, y - 12 * k);
+        path.close();
+        fill.setColor(color);
+        canvas.drawPath(path, fill);
+    }
+
+    /**
+     * The name, top left, lettered like the logo: heavy italic capitals,
+     * black inside a chrome outline.
+     */
+    private void drawTitle(Canvas canvas) {
+        int top = (int) dp(24);
+        android.view.WindowInsets insets = getRootWindowInsets();
+        if (insets != null) top = insets.getSystemWindowInsetTop();
+        final float x = dp(22), base = top + dp(40);
+        final String name = "BESY VPN";
+
+        text.setTypeface(android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD));
+        text.setTextSkewX(-0.22f);
+        text.setTextSize(dp(24));
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setLetterSpacing(0.03f);
+
+        text.setStyle(Paint.Style.STROKE);
+        text.setStrokeJoin(Paint.Join.ROUND);
+        text.setStrokeWidth(dp(3.4f));
+        text.setShader(new LinearGradient(0, base - dp(18), 0, base + dp(2),
+                new int[] { 0xFFFFFFFF, 0xFF8C8F98, 0xFFF2F3F5, 0xFF8A8D95 },
+                new float[] { 0f, 0.45f, 0.55f, 1f }, Shader.TileMode.CLAMP));
+        canvas.drawText(name, x, base, text);
+
+        text.setShader(null);
+        text.setStyle(Paint.Style.FILL);
+        text.setColor(0xFF050506);
+        canvas.drawText(name, x, base, text);
+
+        text.setTypeface(null);
+        text.setTextSkewX(0f);
+        text.setLetterSpacing(0f);
+        text.setStrokeWidth(0f);
     }
 
     /**
