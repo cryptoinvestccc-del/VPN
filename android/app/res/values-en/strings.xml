@@ -6,7 +6,8 @@
   <string name="wait">Please wait</string>
   <string name="idle_title">Not connected</string>
   <string name="idle_sub">tap to connect</string>
-  <string name="busy_title">Connecting</string>
+  <string name="busy_title">Connecting…</string>
+  <string name="leaving_title">Disconnecting…</string>
   <string name="busy_key">creating a key on this device</string>
   <string name="busy_config">fetching the configuration</string>
   <string name="busy_handshake">handshake</string>

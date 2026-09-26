@@ -42,6 +42,8 @@ final class GlassView extends View {
     private android.graphics.Bitmap logo;
 
     private int state = STATE_OFF;
+    /** Until when "disconnecting" is shown after the button turned the tunnel off. */
+    private long leavingUntil;
     private String error;
     private float spin;          // the waiting ring's angle
     private OnPowerTap listener;
@@ -79,7 +81,21 @@ final class GlassView extends View {
 
     private static boolean eq(String a, String b) { return a == null ? b == null : a.equals(b); }
 
+    /**
+     * Shows "disconnecting" for a moment. The tunnel itself goes down at
+     * once, so without this the word would never be seen.
+     */
+    void showLeaving() {
+        leavingUntil = android.os.SystemClock.uptimeMillis() + 1200;
+        invalidate();
+    }
+
+    private boolean leaving() {
+        return state == STATE_OFF && android.os.SystemClock.uptimeMillis() < leavingUntil;
+    }
+
     void setState(int s) {
+        if (s != STATE_OFF) leavingUntil = 0;
         if (state != s) {
             state = s;
             invalidate();
@@ -122,7 +138,7 @@ final class GlassView extends View {
         drawGear(canvas, w);
         drawReadout(canvas, w, h);
 
-        if (state == STATE_BUSY) {
+        if (state == STATE_BUSY || leaving()) {
             spin += 6f;
             if (spin >= 360f) spin -= 360f;
             invalidate();
@@ -175,7 +191,7 @@ final class GlassView extends View {
                 android.graphics.ColorMatrix grey = new android.graphics.ColorMatrix();
                 grey.setSaturation(0f);
                 picture.setColorFilter(new android.graphics.ColorMatrixColorFilter(grey));
-                picture.setAlpha(state == STATE_BUSY ? 190 : 120);
+                picture.setAlpha(state == STATE_BUSY || leaving() ? 190 : 120);
             }
             canvas.save();
             path.reset();
@@ -185,7 +201,7 @@ final class GlassView extends View {
             canvas.restore();
         }
 
-        if (state == STATE_BUSY) {
+        if (state == STATE_BUSY || leaving()) {
             stroke.setShader(null);
             stroke.setColor(0xFFFFFFFF);
             stroke.setStrokeWidth(ring * 0.6f);
@@ -205,13 +221,11 @@ final class GlassView extends View {
         final float cx = buttonCx, cy = buttonCy + buttonR + dp(30), r = dp(7);
         int color;
         float glow = 1f;
-        switch (state) {
-            case STATE_LIVE: color = Palette.LAMP_ON; break;
-            case STATE_BUSY:
-                color = Palette.LAMP_WAIT;
-                glow = 0.55f + 0.45f * (float) Math.abs(Math.sin(Math.toRadians(spin * 2)));
-                break;
-            default: color = Palette.LAMP_OFF; break;
+        if (state == STATE_BUSY || leaving()) {
+            color = Palette.LAMP_WAIT;
+            glow = 0.55f + 0.45f * (float) Math.abs(Math.sin(Math.toRadians(spin * 2)));
+        } else {
+            color = state == STATE_LIVE ? Palette.LAMP_ON : Palette.LAMP_OFF;
         }
         final int halo = ((int) (0x66 * glow) << 24) | (color & 0x00FFFFFF);
         fill.setShader(new RadialGradient(cx, cy, r * 3.2f, halo, color & 0x00FFFFFF, Shader.TileMode.CLAMP));
@@ -224,25 +238,14 @@ final class GlassView extends View {
     }
 
     private void drawReadout(Canvas canvas, float w, float h) {
-        final String title, sub;
-        switch (state) {
-            case STATE_LIVE:
-                title = str(R.string.live_title);
-                sub = handshake != null ? str(R.string.row_handshake) + ": " + handshake : "";
-                break;
-            case STATE_BUSY: title = str(R.string.busy_title); sub = TunnelService.stage; break;
-            default:         title = str(R.string.idle_title); sub = server != null ? server : str(R.string.idle_sub); break;
-        }
-
-        float y = buttonCy + buttonR + dp(72);
+        // Words only while the switch is moving; at rest the lamp says it.
+        final String title = state == STATE_BUSY ? str(R.string.busy_title)
+                : leaving() ? str(R.string.leaving_title) : null;
         text.setTextAlign(Paint.Align.CENTER);
-        text.setColor(Palette.INK);
-        text.setTextSize(dp(20));
-        canvas.drawText(title, w / 2f, y, text);
-        if (sub != null && sub.length() > 0) {
-            text.setColor(Palette.INK_3);
-            text.setTextSize(dp(13));
-            canvas.drawText(sub, w / 2f, y + dp(24), text);
+        if (title != null) {
+            text.setColor(Palette.INK);
+            text.setTextSize(dp(18));
+            canvas.drawText(title, w / 2f, buttonCy + buttonR + dp(72), text);
         }
 
         // The navigation bar is drawn over this view on phones that use

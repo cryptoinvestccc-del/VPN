@@ -149,8 +149,12 @@ public final class MainActivity extends Activity
         }
         Intent i = new Intent(this, TunnelService.class).setAction(action);
         startService(i);
-        view.setState(TunnelService.ACTION_CONNECT.equals(action)
-                ? GlassView.STATE_BUSY : GlassView.STATE_OFF);
+        if (TunnelService.ACTION_CONNECT.equals(action)) {
+            view.setState(GlassView.STATE_BUSY);
+        } else {
+            view.setState(GlassView.STATE_OFF);
+            view.showLeaving();
+        }
     }
 
     @Override protected void onDestroy() {
