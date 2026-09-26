@@ -155,15 +155,17 @@ final class GlassView extends View {
                 new int[] { 0x44DDE6FF, 0x1A8FA3D9, 0x00000000 },
                 new float[] { 0f, 0.6f, 1f }, Shader.TileMode.CLAMP);
 
-        // Two arcs with gaps between them, their ends fading out rather
-        // than stopping: a long one over 230 degrees and a short one over
-        // 60, painted as one gradient around the circle and turned by a
-        // matrix, so a frame costs one circle and no new objects.
+        // Two arcs with wide gaps between them, their ends fading out over
+        // a few degrees rather than stopping: a long one over 150 degrees
+        // and a short one over 70, painted as one gradient around the
+        // circle and turned by a matrix, so a frame costs one circle and
+        // no new objects. (The first cut had 230 and 60 with long fades,
+        // and on a phone it read as one closed ring.)
         final int t = 0x00FFFFFF, o = 0xFFFFFFFF;
         ringArcs = new android.graphics.SweepGradient(buttonCx, buttonCy,
                 new int[] { t, o, o, t, t, o, o, t, t },
-                new float[] { 0f, 28 / 360f, 202 / 360f, 230 / 360f,
-                        262 / 360f, 278 / 360f, 306 / 360f, 322 / 360f, 1f });
+                new float[] { 0f, 12 / 360f, 138 / 360f, 150 / 360f,
+                        215 / 360f, 225 / 360f, 275 / 360f, 285 / 360f, 1f });
 
         chrome = new LinearGradient(0, buttonCy - planetR * 1.25f, 0, buttonCy + planetR * 1.25f,
                 new int[] { 0xFFFFFFFF, 0xFFDCDEE3, 0xFF7A7D85, 0xFF3A3C42, 0xFFB7BAC1, 0xFFF4F5F7, 0xFF9295A0 },
@@ -267,7 +269,7 @@ final class GlassView extends View {
 
         // a hairline for the circle's shape, then the arcs and their glow
         stroke.setShader(null);
-        stroke.setColor(0x14FFFFFF);
+        stroke.setColor(0x0BFFFFFF);
         stroke.setStrokeWidth(dp(1));
         canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
 
