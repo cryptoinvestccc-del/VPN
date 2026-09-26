@@ -77,7 +77,22 @@ final class Ui {
 
         col.addView(header);
         a.setContentView(scroll);
+        lightBars(a, scroll);
         return col;
+    }
+
+    /**
+     * The bars match the light screen: the app's background colour and
+     * dark icons (on Android 15 and later the bars are transparent and the
+     * background shows through them anyway).
+     */
+    static void lightBars(Activity a, View root) {
+        a.getWindow().setStatusBarColor(Palette.VOID_);
+        a.getWindow().setNavigationBarColor(Palette.VOID_);
+        root.setSystemUiVisibility(root.getSystemUiVisibility()
+                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        if (android.os.Build.VERSION.SDK_INT >= 30) NewerApi.lightSystemBars(a.getWindow());
     }
 
     static TextView section(Context c, String name) {
