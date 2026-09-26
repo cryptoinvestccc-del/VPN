@@ -59,7 +59,9 @@ echo "==> running on: $devices"
 gcloud firebase test android run --type robo --app "$apk" \
 	"${args[@]}" --timeout 300s --results-dir "$stamp" 2>&1 | tee "$here/last-run.log" || true
 
+# gcloud prints the bucket either as gs://… or as a console link
 bucket="$(grep -o 'gs://[^/ ]*' "$here/last-run.log" | head -1 || true)"
+[[ -n "$bucket" ]] || bucket="$(grep -o 'storage/browser/[^/ ]*' "$here/last-run.log" | head -1 | sed 's|storage/browser/|gs://|' || true)"
 if [[ -n "$bucket" ]]; then
 	echo "==> downloading results into $out/$stamp"
 	mkdir -p "$out"

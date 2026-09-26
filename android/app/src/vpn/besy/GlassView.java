@@ -632,7 +632,11 @@ final class GlassView extends View {
         text.setTextSize(sp(busy ? 18 : 20) * Math.max(k, 0.85f));
         text.setLetterSpacing(-0.02f);
         text.setColor(blend(INK, LIVE_INK, live));
-        final java.util.List<String> lines = wrap(statusWord(busy), c.width() - dp(38), text, 2);
+        // one line reads better: shrink a little before wrapping (narrow phones, Russian)
+        final String word = statusWord(busy);
+        final float room = c.width() - dp(38), wide = text.measureText(word);
+        if (wide > room && wide * 0.8f <= room) text.setTextSize(text.getTextSize() * room / wide);
+        final java.util.List<String> lines = wrap(word, room, text, 2);
         final float lh = text.getTextSize() * 1.15f;
         final float first = c.bottom - dp(19) - (lines.size() - 1) * lh;
         float y = first;

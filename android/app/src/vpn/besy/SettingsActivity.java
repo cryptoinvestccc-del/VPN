@@ -23,7 +23,7 @@ import android.widget.Switch;
  */
 public final class SettingsActivity extends Activity {
 
-    private static final int DIALOG = android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
+    private static final int DIALOG = R.style.BesyDialog;
 
     @Override protected void attachBaseContext(Context base) {
         super.attachBaseContext(Lang.wrap(base));
@@ -199,7 +199,11 @@ public final class SettingsActivity extends Activity {
      */
     private void delete() {
         @SuppressWarnings("deprecation")
-        final ProgressDialog wait = ProgressDialog.show(this, null, getString(R.string.deleting), true, false);
+        final ProgressDialog wait = new ProgressDialog(this, DIALOG);
+        wait.setMessage(getString(R.string.deleting));
+        wait.setIndeterminate(true);
+        wait.setCancelable(false);
+        wait.show();
         final Context app = getApplicationContext();
         final String endpoint = Provisioning.endpoint(this);
 
