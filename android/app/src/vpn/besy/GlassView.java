@@ -12,7 +12,8 @@ import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * The whole screen, drawn by hand.
+ * The whole screen, drawn by hand: a chrome circle with the logo in it,
+ * a lamp under it that says whether the tunnel is up, and the gear.
  *
  * <p>There is no Compose and no AndroidX here: those live on a Maven
  * host this build cannot reach, so every surface is a shape on a Canvas.
@@ -37,6 +38,8 @@ final class GlassView extends View {
     private final Paint text   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect   = new RectF();
     private final Path  path   = new Path();
+    private final Paint picture = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private android.graphics.Bitmap logo;
 
     private int state = STATE_OFF;
     private String error;
@@ -110,15 +113,13 @@ final class GlassView extends View {
         if (w <= 0 || h <= 0) return;
 
         buttonCx = w / 2f;
-        buttonCy = h * 0.42f;
-        buttonR  = Math.min(w, h) * 0.22f;
+        buttonCy = h * 0.40f;
+        buttonR  = Math.min(w * 0.38f, h * 0.24f);
 
         drawSky(canvas, w, h);
-        drawCore(canvas, w, h);
-        drawDrift(canvas, w, h);
         drawButton(canvas);
+        drawLamp(canvas);
         drawGear(canvas, w);
-        drawRows(canvas, w);
         drawReadout(canvas, w, h);
 
         if (state == STATE_BUSY) {
@@ -128,116 +129,120 @@ final class GlassView extends View {
         }
     }
 
-    /** The night the glass sits in front of. */
+    /** Black, with a faint light behind the circle. */
     private void drawSky(Canvas canvas, float w, float h) {
         fill.setShader(null);
         fill.setColor(Palette.VOID_);
         canvas.drawRect(0, 0, w, h, fill);
 
-        fill.setShader(new RadialGradient(
-                w * 0.52f, h * 0.30f, Math.max(w, h) * 0.62f,
-                new int[] { 0xB878A8CD, 0x5523394D, 0x000A0F15 },
-                new float[] { 0f, 0.55f, 1f }, Shader.TileMode.CLAMP));
+        fill.setShader(new RadialGradient(buttonCx, buttonCy, buttonR * 2.2f,
+                state == STATE_LIVE ? 0x30FFFFFF : 0x18FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
         canvas.drawRect(0, 0, w, h, fill);
-
-        // The warm note, kept small and off-centre.
-        fill.setShader(new RadialGradient(
-                w * 0.72f, h * 0.24f, w * 0.42f,
-                0x66C9A88B, 0x00C9A88B, Shader.TileMode.CLAMP));
-        canvas.drawRect(0, 0, w, h, fill);
-
-        fill.setShader(new LinearGradient(
-                0, h * 0.44f, 0, h,
-                new int[] { 0x00182E42, 0xE8182E42, 0xFF0A0F15 },
-                new float[] { 0f, 0.5f, 1f }, Shader.TileMode.CLAMP));
-        canvas.drawRect(0, h * 0.44f, w, h, fill);
         fill.setShader(null);
     }
 
-    /** The source itself: a small hard centre inside a wide bloom. */
-    private void drawCore(Canvas canvas, float w, float h) {
-        final float cx = w / 2f, cy = h * 0.36f;
-        final int glow = state == STATE_LIVE ? 0x706FE3C0 : 0x70BEDEFF;
-
-        fill.setShader(new RadialGradient(cx, cy, dp(90),
-                glow, glow & 0x00FFFFFF, Shader.TileMode.CLAMP));
-        canvas.drawCircle(cx, cy, dp(90), fill);
-
-        fill.setShader(null);
-        fill.setColor(state == STATE_LIVE ? 0xD9D7FFF3 : 0xD1FFFFFF);
-        canvas.drawCircle(cx, cy, dp(4.5f), fill);
-    }
-
-    /** Label-free glass. Atmosphere, never a control. */
-    private void drawDrift(Canvas canvas, float w, float h) {
-        drawBlob(canvas, w * 0.10f, h * 0.52f, w * 0.21f, 0x0BFFFFFF, 0x17FFFFFF);
-        drawBlob(canvas, w * 0.88f, h * 0.30f, w * 0.23f, 0x0BFFFFFF, 0x17FFFFFF);
-    }
-
-    private void drawBlob(Canvas canvas, float cx, float cy, float r, int body, int rim) {
-        fill.setShader(null);
-        fill.setColor(body);
-        rect.set(cx - r, cy - r * 0.86f, cx + r, cy + r * 0.86f);
-        canvas.drawOval(rect, fill);
-
-        stroke.setColor(rim);
-        stroke.setStrokeWidth(dp(1));
-        canvas.drawOval(rect, stroke);
-    }
-
-    /** The one control. */
+    /**
+     * The one control: a chrome ring with the logo inside.
+     *
+     * <p>The logo's own background is pure black, so the disc under it is
+     * black too and the picture sits in it without a visible edge.
+     */
     private void drawButton(Canvas canvas) {
         final boolean live = state == STATE_LIVE;
+        final float ring = dp(7);
 
-        if (live) {
-            fill.setShader(new RadialGradient(buttonCx, buttonCy, buttonR * 1.9f,
-                    0x446FE3C0, 0x006FE3C0, Shader.TileMode.CLAMP));
-            canvas.drawCircle(buttonCx, buttonCy, buttonR * 1.9f, fill);
-            fill.setShader(null);
+        // chrome ring
+        fill.setShader(new android.graphics.SweepGradient(buttonCx, buttonCy,
+                new int[] { 0xFFFFFFFF, 0xFF6D7078, 0xFFE9EBEF, 0xFF3B3D43, 0xFFFFFFFF, 0xFF8B8E96, 0xFFFFFFFF },
+                null));
+        canvas.drawCircle(buttonCx, buttonCy, buttonR, fill);
+        fill.setShader(null);
+        fill.setColor(0xFF000000);
+        canvas.drawCircle(buttonCx, buttonCy, buttonR - ring, fill);
+
+        // the logo, grey and dim while the tunnel is down
+        if (logo == null) {
+            logo = android.graphics.BitmapFactory.decodeResource(getResources(), R.drawable.logo);
+        }
+        if (logo != null) {
+            final float lw = (buttonR - ring) * 1.78f;
+            final float lh = lw * logo.getHeight() / logo.getWidth();
+            rect.set(buttonCx - lw / 2f, buttonCy - lh / 2f, buttonCx + lw / 2f, buttonCy + lh / 2f);
+            if (live) {
+                picture.setColorFilter(null);
+                picture.setAlpha(255);
+            } else {
+                android.graphics.ColorMatrix grey = new android.graphics.ColorMatrix();
+                grey.setSaturation(0f);
+                picture.setColorFilter(new android.graphics.ColorMatrixColorFilter(grey));
+                picture.setAlpha(state == STATE_BUSY ? 190 : 120);
+            }
+            canvas.save();
+            path.reset();
+            path.addCircle(buttonCx, buttonCy, buttonR - ring, Path.Direction.CW);
+            canvas.clipPath(path);
+            canvas.drawBitmap(logo, null, rect, picture);
+            canvas.restore();
         }
 
-        fill.setColor(live ? 0x226FE3C0 : Palette.GLASS);
-        canvas.drawCircle(buttonCx, buttonCy, buttonR, fill);
-
-        stroke.setColor(live ? 0xAE6FE3C0 : Palette.RIM);
-        stroke.setStrokeWidth(dp(1));
-        canvas.drawCircle(buttonCx, buttonCy, buttonR, stroke);
-
-        drawPowerGlyph(canvas, live);
-
         if (state == STATE_BUSY) {
-            stroke.setColor(Palette.FLARE);
-            stroke.setStrokeWidth(dp(1.4f));
+            stroke.setShader(null);
+            stroke.setColor(0xFFFFFFFF);
+            stroke.setStrokeWidth(ring * 0.6f);
             stroke.setStrokeCap(Paint.Cap.ROUND);
-            final float rr = buttonR + dp(10);
+            final float rr = buttonR - ring / 2f;
             rect.set(buttonCx - rr, buttonCy - rr, buttonCx + rr, buttonCy + rr);
-            canvas.drawArc(rect, spin, 46f, false, stroke);
+            canvas.drawArc(rect, spin, 60f, false, stroke);
             stroke.setStrokeCap(Paint.Cap.BUTT);
         }
     }
 
-    private void drawPowerGlyph(Canvas canvas, boolean live) {
-        final float r = buttonR * 0.30f;
-        stroke.setColor(live ? Palette.LIVE : Palette.INK);
-        stroke.setStrokeWidth(dp(1.6f));
-        stroke.setStrokeCap(Paint.Cap.ROUND);
-
-        rect.set(buttonCx - r, buttonCy - r * 0.8f, buttonCx + r, buttonCy + r * 1.2f);
-        canvas.drawArc(rect, -60f, 300f, false, stroke);
-
-        path.reset();
-        path.moveTo(buttonCx, buttonCy - r * 1.35f);
-        path.lineTo(buttonCx, buttonCy + r * 0.05f);
-        canvas.drawPath(path, stroke);
-        stroke.setStrokeCap(Paint.Cap.BUTT);
+    /**
+     * The small lamp under the circle: green when the tunnel is up, red
+     * when it is down, amber and breathing while it is being set up.
+     */
+    private void drawLamp(Canvas canvas) {
+        final float cx = buttonCx, cy = buttonCy + buttonR + dp(30), r = dp(7);
+        int color;
+        float glow = 1f;
+        switch (state) {
+            case STATE_LIVE: color = Palette.LAMP_ON; break;
+            case STATE_BUSY:
+                color = Palette.LAMP_WAIT;
+                glow = 0.55f + 0.45f * (float) Math.abs(Math.sin(Math.toRadians(spin * 2)));
+                break;
+            default: color = Palette.LAMP_OFF; break;
+        }
+        final int halo = ((int) (0x66 * glow) << 24) | (color & 0x00FFFFFF);
+        fill.setShader(new RadialGradient(cx, cy, r * 3.2f, halo, color & 0x00FFFFFF, Shader.TileMode.CLAMP));
+        canvas.drawCircle(cx, cy, r * 3.2f, fill);
+        fill.setShader(null);
+        fill.setColor(color);
+        canvas.drawCircle(cx, cy, r, fill);
+        fill.setColor(0x66FFFFFF);
+        canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.3f, fill);
     }
 
     private void drawReadout(Canvas canvas, float w, float h) {
         final String title, sub;
         switch (state) {
-            case STATE_LIVE: title = str(R.string.live_title); sub = ""; break;
+            case STATE_LIVE:
+                title = str(R.string.live_title);
+                sub = handshake != null ? str(R.string.row_handshake) + ": " + handshake : "";
+                break;
             case STATE_BUSY: title = str(R.string.busy_title); sub = TunnelService.stage; break;
-            default:         title = str(R.string.idle_title); sub = str(R.string.idle_sub); break;
+            default:         title = str(R.string.idle_title); sub = server != null ? server : str(R.string.idle_sub); break;
+        }
+
+        float y = buttonCy + buttonR + dp(72);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setColor(Palette.INK);
+        text.setTextSize(dp(20));
+        canvas.drawText(title, w / 2f, y, text);
+        if (sub != null && sub.length() > 0) {
+            text.setColor(Palette.INK_3);
+            text.setTextSize(dp(13));
+            canvas.drawText(sub, w / 2f, y + dp(24), text);
         }
 
         // The navigation bar is drawn over this view on phones that use
@@ -245,36 +250,23 @@ final class GlassView extends View {
         // arrow across the last line — so everything anchored to the
         // bottom is measured from above it.
         android.view.WindowInsets insets = getRootWindowInsets();
-        final float bottom = insets != null ? insets.getSystemWindowInsetBottom() : 0;
-        h -= bottom;
-
-        final float x = dp(22);
-        float y = h - (error != null && error.length() > 0 ? dp(118) : dp(92));
-
-        text.setColor(Palette.INK);
-        text.setTextSize(dp(30));
-        canvas.drawText(title, x, y, text);
-
-        if (sub.length() > 0) {
-            y += dp(32);
-            text.setColor(Palette.INK_3);
-            text.setTextSize(dp(26));
-            canvas.drawText(sub, x, y, text);
-        }
+        final float bottom = h - (insets != null ? insets.getSystemWindowInsetBottom() : 0);
 
         if (error != null && error.length() > 0) {
             text.setColor(Palette.EMBER);
             text.setTextSize(dp(12.5f));
-            float ey = h - dp(46);
-            for (String piece : wrap(error, w - dp(44), text)) {
-                canvas.drawText(piece, x, ey, text);
+            java.util.List<String> lines = wrap(error, w - dp(44), text);
+            float ey = bottom - dp(24) - (lines.size() - 1) * dp(16);
+            for (String piece : lines) {
+                canvas.drawText(piece, w / 2f, ey, text);
                 ey += dp(16);
             }
         } else {
             text.setColor(Palette.INK_3);
             text.setTextSize(dp(11.5f));
-            canvas.drawText(str(R.string.key_local), x, h - dp(24), text);
+            canvas.drawText(str(R.string.key_local), w / 2f, bottom - dp(24), text);
         }
+        text.setTextAlign(Paint.Align.LEFT);
     }
 
     /**
@@ -313,37 +305,6 @@ final class GlassView extends View {
         canvas.drawPath(path, stroke);
         canvas.drawCircle(gearCx, gearCy, dp(3.2f), stroke);
         stroke.setStrokeJoin(Paint.Join.MITER);
-    }
-
-    /**
-     * Under the button: the connection's facts while connected, the
-     * server's state while not.
-     */
-    private void drawRows(Canvas canvas, float w) {
-        float y = buttonCy + buttonR + dp(44);
-        final float labelX = w / 2f - dp(120), valueX = w / 2f - dp(10);
-
-        if (state == STATE_LIVE) {
-            String[][] rows = {
-                    { str(R.string.row_protocol), "AmneziaWG" },
-                    { str(R.string.row_handshake), handshake != null ? handshake : str(R.string.handshake_none) },
-                    { str(R.string.row_address), address != null ? address : "—" },
-            };
-            for (String[] row : rows) {
-                text.setTextSize(dp(13));
-                text.setColor(Palette.INK_3);
-                canvas.drawText(row[0], labelX, y, text);
-                text.setColor(Palette.INK_2);
-                canvas.drawText(row[1], valueX, y, text);
-                y += dp(24);
-            }
-        } else if (state == STATE_OFF && server != null) {
-            text.setTextSize(dp(13));
-            text.setColor(Palette.INK_2);
-            text.setTextAlign(Paint.Align.CENTER);
-            canvas.drawText(server, w / 2f, y, text);
-            text.setTextAlign(Paint.Align.LEFT);
-        }
     }
 
     private String str(int id) { return getContext().getString(id); }
