@@ -31,12 +31,12 @@
 ```
 BESY VPN — бесплатный VPN в одну кнопку.
 
-Нажмите на круг — и соединение защищено. Никаких регистраций, почты, телефона и паролей.
+Нажмите «Подключить» — и соединение защищено. Никаких регистраций, почты, телефона и паролей.
 
 • Без аккаунтов. Приложение само создаёт ключ шифрования на телефоне. Закрытый ключ никогда не покидает устройство.
 • Без рекламы и аналитики. Мы не встраиваем трекеры и не записываем, какие сайты вы открываете.
 • Современный протокол AmneziaWG — быстрый и устойчивый вариант WireGuard.
-• Понятный статус: цветной индикатор, время подключения, трафик и скорость.
+• Понятный статус: цветной индикатор, шкала защиты и время подключения.
 • Постоянный VPN: можно включить в настройках Android, чтобы защита запускалась сама.
 • Русский и английский язык.
 
@@ -52,12 +52,12 @@ BESY VPN — бесплатный VPN в одну кнопку.
 ```
 BESY VPN is a free one-tap VPN.
 
-Tap the circle and your connection is protected. No sign-up, no email, no phone number, no passwords.
+Tap Connect and your connection is protected. No sign-up, no email, no phone number, no passwords.
 
 • No accounts. The app creates its encryption key on your phone. The private key never leaves the device.
 • No ads, no analytics. We ship no trackers and do not record which sites you visit.
 • Modern AmneziaWG protocol — a fast, resilient variant of WireGuard.
-• Clear status: colour indicator, time connected, traffic and speed.
+• Clear status: colour indicator, protection gauge and time connected.
 • Always-on VPN: turn it on in Android settings and protection starts by itself.
 • English and Russian.
 

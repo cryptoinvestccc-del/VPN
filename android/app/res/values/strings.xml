@@ -66,7 +66,13 @@
   <string name="tile_time">Время</string>
   <string name="tile_ip">IP</string>
   <string name="tile_traffic">Трафик</string>
-  <string name="tile_speed">Скорость</string>
+  <string name="tile_protection">Защита</string>
+  <string name="protection_on">Включена</string>
+  <string name="protection_off">Выключена</string>
+  <string name="protection_busy">Включается…</string>
+  <string name="protection_leaving">Выключается…</string>
+  <string name="protection_on_note">Трафик шифруется</string>
+  <string name="protection_off_note">Трафик не шифруется</string>
   <string name="tiles_off">VPN выключен, данных о подключении нет</string>
   <string name="unit_b">Б</string>
   <string name="unit_kb">КБ</string>
@@ -78,6 +84,5 @@
   <string name="overview">Обзор</string>
   <string name="session_time">Время сеанса</string>
   <string name="tile_connection">Подключение</string>
-  <string name="mbps">Мбит/с</string>
   <string name="location_name">Стокгольм, Швеция</string>
 </resources>

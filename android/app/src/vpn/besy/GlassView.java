@@ -62,7 +62,6 @@ final class GlassView extends View {
     private static final int CARD_HEAD    = 0xFF747D84;
     private static final int UNIT         = 0xFF818B92;
     private static final int ICON         = 0xFF8C989E;
-    private static final int DIAL_LABEL   = 0xFF8C969B;
     private static final int TRACK        = 0xFFEEF0F4;
     private static final int TRACK_DARK   = 0xFFC9CDD6;
     private static final int GAUGE_FROM   = 0xFFB3A9FF;
@@ -229,17 +228,20 @@ final class GlassView extends View {
     private float press = 1;                // button scale while pressed
     private boolean pressed;
     private float spin, pulse;              // spinner angle, amber dot breathing
-    private float shownMbps, angle = -132f; // the number and the pointer, eased
-    private float scaleMax = 10f;           // the dial's top value
-    private long lowSince;                  // since when the speed sits well under the scale
+    private float angle = -132f;            // the dial's pointer, eased
 
     private static float approach(float v, float target, float rate, float dt) {
         return target + (v - target) * (float) Math.exp(-rate * dt);
     }
 
-    /** Speed through the tunnel, Mbit/s: whichever way is busier, so an upload moves the dial too. */
-    private float mbps() {
-        return state == STATE_LIVE ? (float) (Math.max(TunnelService.rxRate, TunnelService.txRate) * 8 / 1e6) : 0f;
+    /**
+     * Where the dial points, 0..1. The dial shows the state of the
+     * protection, not a measurement: at rest while off, part way up while
+     * connecting, well up while connected. It carries no numbers or units
+     * so that it cannot be read as a speed.
+     */
+    private float dialLevel(boolean busy, boolean on) {
+        return on ? 0.82f : busy ? 0.4f : 0f;
     }
 
     /** Moves everything on to now; says whether the next frame should come at once. */
@@ -260,35 +262,14 @@ final class GlassView extends View {
             pulse = (pulse + 4f * dt) % (float) (2 * Math.PI);
         }
 
-        // The scale grows as soon as the speed needs it and shrinks only
-        // after the speed has stayed well under it for ten seconds, so it
-        // does not hop back and forth on a bursty connection.
-        final float v = mbps();
-        final float want = scaleFor(v);
-        if (want > scaleMax) { scaleMax = want; lowSince = 0; }
-        else if (want < scaleMax) {
-            if (lowSince == 0) lowSince = now;
-            else if (now - lowSince > 10000) { scaleMax = want; lowSince = 0; }
-        } else lowSince = 0;
-        shownMbps = approach(shownMbps, v, 4, dt);
-        // Square-root travel, as on a real speedometer: everyday speeds of
-        // one to a few Mbit/s move the needle a third to two thirds of the
-        // way instead of a sliver of a linear dial.
-        final float target = -132f + (float) Math.sqrt(Math.min(1f, v / scaleMax)) * 264f;
+        final float target = -132f + dialLevel(busy, on) * 264f;
         angle = approach(angle, target, 3.5f, dt);
 
         return busy || pressed
                 || Math.abs(offW - offT) > 0.002f || Math.abs(onW - onT) > 0.002f
                 || Math.abs(busyW - busyT) > 0.002f || Math.abs(live - onT) > 0.002f
                 || Math.abs(press - (pressed ? 0.97f : 1f)) > 0.001f
-                || Math.abs(shownMbps - v) > 0.05f
                 || Math.abs(angle - target) > 0.2f;
-    }
-
-    private static float scaleFor(float mbps) {
-        final float[] steps = { 10, 25, 50, 100, 200, 500, 1000, 2000 };
-        for (float s : steps) if (mbps * 1.15f <= s) return s;
-        return steps[steps.length - 1];
     }
 
     @Override protected void onDraw(Canvas canvas) {
@@ -506,36 +487,31 @@ final class GlassView extends View {
     private void drawSpeed(Canvas canvas) {
         final RectF c = speedCard;
         final float x = c.left + dp(20);
-        // heading, number and unit as one block, centred in the card's height
-        final float numSize = sp(52) * Math.max(k, 0.85f);
-        final float block = sp(13) + dp(15) + numSize * 0.74f + dp(8) + sp(13);
+        final boolean busy = state == STATE_BUSY || leaving(), on = state == STATE_LIVE && !busy;
+        // heading, word and note as one block, centred in the card's height
+        final float wordSize = sp(34) * Math.max(k, 0.85f);
+        final float block = sp(13) + dp(15) + wordSize * 0.74f + dp(8) + sp(13);
         float y = c.centerY() - block / 2f + sp(13) * 0.8f;
-        heading(canvas, str(R.string.tile_speed), x, y, CARD_HEAD);
+        heading(canvas, str(R.string.tile_protection), x, y, CARD_HEAD);
 
+        final float room = dialCx - dialR - dp(12) - x;
         text.setTypeface(semibold);
-        text.setFontFeatureSettings("tnum");
-        text.setLetterSpacing(-0.045f);
-        text.setColor(INK);
-        y += dp(15) + numSize * 0.74f;
-        final String number = number(shownMbps);
-        fit(number, numSize, dialCx - dialR - dp(12) - x);
-        canvas.drawText(number, x, y, text);
+        text.setLetterSpacing(-0.03f);
+        text.setColor(on ? blend(INK, ACCENT, live) : INK);
+        y += dp(15) + wordSize * 0.74f;
+        final String word = str(busy ? (leaving() ? R.string.protection_leaving : R.string.protection_busy)
+                : on ? R.string.protection_on : R.string.protection_off);
+        fit(word, wordSize, room);
+        canvas.drawText(word, x, y, text);
         text.setLetterSpacing(0f);
-        text.setFontFeatureSettings(null);
 
         text.setTypeface(regular);
-        text.setTextSize(sp(13));
+        final String note = str(on ? R.string.protection_on_note : R.string.protection_off_note);
+        fit(note, sp(13), room);
         text.setColor(UNIT);
-        canvas.drawText(str(R.string.mbps), x, y + dp(8) + sp(13), text);
+        canvas.drawText(note, x, y + dp(8) + sp(13), text);
 
         drawDial(canvas);
-    }
-
-    /** One decimal below a hundred, whole numbers from a hundred up. */
-    private String number(float mbps) {
-        final java.util.Locale here = getResources().getConfiguration().locale;
-        if (mbps < 0.05f) mbps = 0f;
-        return mbps >= 100 ? String.format(here, "%d", Math.round(mbps)) : String.format(here, "%.1f", mbps);
     }
 
     /** Sets the text size to at most {@code size}, smaller if the text would not fit. */
@@ -546,10 +522,9 @@ final class GlassView extends View {
     }
 
     /**
-     * The speed gauge: an open arc on the white card, a light track and a
-     * violet band that grows with the speed, ending in a small knob. It is
-     * the handoff's "minimal, decorative" speedometer; it does not dominate
-     * the card, the number does.
+     * The gauge: an open arc on the white card, a light track and a violet
+     * band that rises with the protection's state, ending in a small knob.
+     * Decorative, as the handoff has it: no scale, no numbers.
      */
     private void drawDial(Canvas canvas) {
         final float cx = dialCx, cy = dialCy, R = dialR;
@@ -584,15 +559,6 @@ final class GlassView extends View {
         stroke.setStrokeWidth(dp(2.2f));
         canvas.drawCircle(kx, ky, band * 0.62f, stroke);
 
-        text.setTypeface(regular);
-        text.setTextSize(sp(10));
-        text.setColor(DIAL_LABEL);
-        text.setTextAlign(Paint.Align.CENTER);
-        final double a0 = Math.toRadians(138), a1 = Math.toRadians(402);
-        final float ly = cy + rr * (float) Math.sin(a0) + band + sp(10);
-        canvas.drawText("0", cx + rr * (float) Math.cos(a0), ly, text);
-        canvas.drawText(Integer.toString((int) scaleMax), cx + rr * (float) Math.cos(a1), ly, text);
-        text.setTextAlign(Paint.Align.LEFT);
     }
 
     private void drawTime(Canvas canvas) {
@@ -823,9 +789,11 @@ final class GlassView extends View {
     private String spoken() {
         long sec = state == STATE_LIVE && TunnelService.connectedAt > 0
                 ? (SystemClock.elapsedRealtime() - TunnelService.connectedAt) / 1000 : 0;
-        return str(R.string.tile_speed) + " " + number(mbps()) + " " + str(R.string.mbps) + ". "
+        final boolean busy = state == STATE_BUSY || leaving();
+        return str(R.string.tile_protection) + ": " + str(busy ? (leaving() ? R.string.protection_leaving : R.string.protection_busy)
+                        : state == STATE_LIVE ? R.string.protection_on : R.string.protection_off) + ". "
                 + str(R.string.session_time) + " " + (sec / 60) + ":" + String.format(java.util.Locale.ROOT, "%02d", sec % 60) + ". "
-                + statusWord(state == STATE_BUSY || leaving()) + ". " + str(R.string.location_name) + ".";
+                + statusWord(busy) + ". " + str(R.string.location_name) + ".";
     }
 
     private android.graphics.Rect bounds(int id) {

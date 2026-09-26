@@ -62,7 +62,13 @@
   <string name="tile_time">Time</string>
   <string name="tile_ip">IP</string>
   <string name="tile_traffic">Traffic</string>
-  <string name="tile_speed">Speed</string>
+  <string name="tile_protection">Protection</string>
+  <string name="protection_on">On</string>
+  <string name="protection_off">Off</string>
+  <string name="protection_busy">Turning on…</string>
+  <string name="protection_leaving">Turning off…</string>
+  <string name="protection_on_note">Traffic is encrypted</string>
+  <string name="protection_off_note">Traffic is not encrypted</string>
   <string name="tiles_off">VPN is off, no connection data</string>
   <string name="unit_b">B</string>
   <string name="unit_kb">KB</string>
@@ -74,6 +80,5 @@
   <string name="overview">Overview</string>
   <string name="session_time">Session time</string>
   <string name="tile_connection">Connection</string>
-  <string name="mbps">Mbit/s</string>
   <string name="location_name">Stockholm, Sweden</string>
 </resources>
