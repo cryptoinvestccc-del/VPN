@@ -153,6 +153,12 @@ if [[ -f "$tools/bundletool.jar" ]]; then
 		&& cp "$work/classes.dex" dex/ && { [[ -d "$work/lib" ]] && cp -r "$work/lib" . || true; } \
 		&& zip -qr ../base.zip . )
 	printf '%s' '{"optimizations":{"uncompressNativeLibraries":{"enabled":false}}}' > "$work/aab/config.json"
+	# The key can also come as base64 in BESY_UPLOAD_KEYSTORE_B64, which is
+	# how a cloud environment's secrets hand over a file.
+	if [[ -z "${BESY_UPLOAD_KEYSTORE:-}" && -n "${BESY_UPLOAD_KEYSTORE_B64:-}" ]]; then
+		BESY_UPLOAD_KEYSTORE="$work/upload.jks"
+		printf '%s' "$BESY_UPLOAD_KEYSTORE_B64" | base64 -d > "$BESY_UPLOAD_KEYSTORE"
+	fi
 	if [[ -n "${BESY_UPLOAD_KEYSTORE:-}" && -n "${BESY_UPLOAD_PASSWORD:-}" ]]; then
 		aab="${out%.apk}.aab"
 		ks="$BESY_UPLOAD_KEYSTORE"; kp="$BESY_UPLOAD_PASSWORD"; alias="${BESY_UPLOAD_ALIAS:-besy-upload}"
@@ -166,5 +172,6 @@ if [[ -f "$tools/bundletool.jar" ]]; then
 	jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore "$ks" \
 		-storepass "$kp" -keypass "$kp" "$aab" "$alias" >/dev/null
 	java -jar "$tools/bundletool.jar" validate --bundle="$aab" >/dev/null
+	rm -f "$work/upload.jks"
 	echo "$(basename "$aab")  $(stat -c%s "$aab") bytes, signed with $alias"
 fi
