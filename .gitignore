@@ -14,3 +14,4 @@ android/awg/awg
 test/firebase/results/
 test/firebase/last-run.log
 test/firebase/last-stamp
+deploy/site/besy-site.tar.gz
