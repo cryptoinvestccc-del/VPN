@@ -88,6 +88,7 @@ type Service struct {
 	pool     *Pool
 	settings Settings
 	maxPeers int
+	tally    *Tally
 
 	// Issuing is serialised. Reading the peer list, picking a free
 	// address and adding the peer has to be one indivisible step: two
@@ -178,6 +179,7 @@ func (s *Service) Issue(ctx context.Context, publicKey string) (Config, error) {
 	// the path above that hands back an existing one. Anyone can present
 	// a public key; knowing one must not make its peer ours to remove.
 	cfg := s.configFor(addr)
+	s.tally.addIssued()
 	if s.registry != nil {
 		token, hash, err := newForgetToken()
 		if err == nil {

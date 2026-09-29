@@ -68,6 +68,7 @@ func (s *Service) Forget(ctx context.Context, publicKey, token string) error {
 	if err := s.device.RemovePeer(ctx, publicKey); err != nil {
 		return fmt.Errorf("provision: removing the peer: %w", err)
 	}
+	s.tally.addForgotten()
 	if err := s.registry.Remove(ctx, publicKey); err != nil {
 		// The peer is gone, which is what was asked for; the record
 		// only means a key that no longer exists is remembered.

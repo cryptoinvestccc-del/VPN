@@ -231,7 +231,18 @@ func run(o runOptions) error {
 	}
 
 	reaper := provision.NewReaper(device, registry, o.ttl, o.grace)
+	tally := &provision.Tally{}
+	svc.SetTally(tally)
+	reaper.SetTally(tally)
 	go reaper.Run(ctx, o.sweep)
+
+	// The statistics bot is an extra: a mistake in its settings is
+	// reported and the service carries on issuing without it.
+	if tg, err := tgConfigFromEnv(); err != nil {
+		log.Printf("besy-provision: telegram: off: %v", err)
+	} else if tg != nil {
+		go runTelegram(ctx, tg, device, registry.Owns, tally, o.maxPeers)
+	}
 	go sweepLimiter(ctx, limiter, o.sweep)
 
 	server := &http.Server{

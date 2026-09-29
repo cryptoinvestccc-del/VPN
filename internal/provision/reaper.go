@@ -53,6 +53,7 @@ type Reaper struct {
 	mu        sync.Mutex
 	firstSeen map[string]time.Time
 	registry  Registry
+	tally     *Tally
 
 	nowFn func() time.Time
 }
@@ -123,6 +124,9 @@ func (r *Reaper) Sweep(ctx context.Context) (int, error) {
 			continue
 		}
 		removed++
+		r.mu.Lock()
+		r.tally.addWithdrawn()
+		r.mu.Unlock()
 		if err := r.registry.Remove(ctx, peer.PublicKey); err != nil {
 			// The peer is gone either way; a stale entry only means
 			// a key that no longer exists is remembered.

@@ -1,5 +1,5 @@
 BESY Privacy Policy
-Version of 25 September 2026
+Version of 29 September 2026
 
 Developer of the app and controller of personal data: sole proprietor (IP) Vladislav Vitalievich Zadorozhny, taxpayer number (INN) 380806643503, registration number (OGRNIP) 326385000091769, Irkutsk, Russia.
 
@@ -12,6 +12,7 @@ The app creates an encryption key pair. The private key never leaves the phone. 
 • The device's public key and the internal address assigned to it (like 10.8.1.x).
 • The time of the last connection and the amount of data transferred for that key. The VPN protocol itself keeps these in memory; it cannot work without them. They are not written to logs.
 • A technical secret for deleting the key, stored as a hash from which the secret cannot be recovered.
+• Aggregate statistics: how many devices are connected, how many keys were issued and deleted, total traffic per day. These are totals only — no keys, addresses or anything about which device did what. The operator receives them in Telegram; they are kept for no longer than two months.
 
 3. Your IP address
 While the VPN is on, the server sees the IP address you connect from — replies could not reach your phone otherwise. BESY does not record it. The web server through which the app obtains its key may record the IP address of that request in its technical log.

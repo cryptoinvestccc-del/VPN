@@ -43,6 +43,11 @@ type Peer struct {
 	// is the normal state of a credential that was issued and never
 	// used.
 	LastHandshake time.Time
+
+	// RxBytes and TxBytes are the interface's running totals for this
+	// peer, as the server sees them: received from the device and sent
+	// to it. They restart from zero when the interface does.
+	RxBytes, TxBytes uint64
 }
 
 // Used reports whether the peer has ever completed a handshake.
@@ -140,6 +145,10 @@ func parsePeerLine(fields []string) (Peer, error) {
 	if seconds > 0 {
 		peer.LastHandshake = time.Unix(seconds, 0)
 	}
+	// The byte counts only feed totals; a column that does not read as
+	// a number costs the totals, not the peer.
+	peer.RxBytes, _ = strconv.ParseUint(fields[6], 10, 64)
+	peer.TxBytes, _ = strconv.ParseUint(fields[7], 10, 64)
 	return peer, nil
 }
 
