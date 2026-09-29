@@ -174,3 +174,36 @@ func TestANilTallyIsHarmless(t *testing.T) {
 		t.Error("a nil tally counted something")
 	}
 }
+
+func TestCleanupTakesOnlyOurIdleUsedCredentials(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	dev := &fakeDevice{peers: []Peer{
+		usedPeer("IDLE", 3*24*time.Hour, now),
+		usedPeer("TODAY", 2*time.Hour, now),
+		unusedPeer("FRESH"), // may be connecting for the first time right now
+		usedPeer("AMNEZIA", 3*24*time.Hour, now),
+	}}
+	reg := memRegistry{"IDLE": "h", "TODAY": "h", "FRESH": "h"}
+	reaper := NewReaper(dev, reg, 30*24*time.Hour, 24*time.Hour)
+	reaper.nowFn = func() time.Time { return now }
+	var tally Tally
+	reaper.SetTally(&tally)
+
+	idle, err := reaper.Idle(context.Background(), 24*time.Hour)
+	if err != nil || len(idle) != 1 || idle[0].PublicKey != "IDLE" {
+		t.Fatalf("Idle = %v, %v; want only IDLE", idle, err)
+	}
+	n, err := reaper.Cleanup(context.Background(), 24*time.Hour)
+	if err != nil || n != 1 {
+		t.Fatalf("Cleanup = %d, %v; want 1", n, err)
+	}
+	if hasPeer(dev, "IDLE") || !hasPeer(dev, "TODAY") || !hasPeer(dev, "FRESH") || !hasPeer(dev, "AMNEZIA") {
+		t.Errorf("wrong peers left: %v", dev.peers)
+	}
+	if reg.Owns("IDLE") {
+		t.Error("the withdrawn key is still on record")
+	}
+	if _, _, w := tally.Counts(); w != 1 {
+		t.Errorf("withdrawn = %d, want 1", w)
+	}
+}

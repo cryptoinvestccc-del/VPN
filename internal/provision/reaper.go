@@ -55,6 +55,10 @@ type Reaper struct {
 	registry  Registry
 	tally     *Tally
 
+	// removing serialises the hourly sweep and an operator's cleanup, so
+	// the two never try to withdraw the same peer at once.
+	removing sync.Mutex
+
 	nowFn func() time.Time
 }
 
@@ -111,13 +115,56 @@ func (r *Reaper) Run(ctx context.Context, every time.Duration) {
 
 // Sweep withdraws expired credentials once and reports how many.
 func (r *Reaper) Sweep(ctx context.Context) (int, error) {
+	r.removing.Lock()
+	defer r.removing.Unlock()
+
 	peers, err := r.device.Peers(ctx)
 	if err != nil {
 		return 0, err
 	}
+	return r.withdraw(ctx, r.Expired(peers)), nil
+}
 
+// Idle lists this service's credentials that have been used but not in
+// the last idle: the ones Cleanup would withdraw. Credentials never used
+// at all are left to the sweep — one may belong to a phone that is
+// connecting for the first time this very second.
+func (r *Reaper) Idle(ctx context.Context, idle time.Duration) ([]Peer, error) {
+	peers, err := r.device.Peers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.registry == nil {
+		return nil, nil
+	}
+	now := r.nowFn()
+	var out []Peer
+	for _, p := range peers {
+		if r.registry.Owns(p.PublicKey) && p.Used() && now.Sub(p.LastHandshake) >= idle {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// Cleanup withdraws, now, every credential of ours not used in the last
+// idle, and reports how many went. It is the operator's early sweep:
+// nothing is lost by it, because a device whose credential was withdrawn
+// is issued one again, transparently, the next time it connects.
+func (r *Reaper) Cleanup(ctx context.Context, idle time.Duration) (int, error) {
+	r.removing.Lock()
+	defer r.removing.Unlock()
+
+	peers, err := r.Idle(ctx, idle)
+	if err != nil {
+		return 0, err
+	}
+	return r.withdraw(ctx, peers), nil
+}
+
+func (r *Reaper) withdraw(ctx context.Context, peers []Peer) int {
 	var removed int
-	for _, peer := range r.Expired(peers) {
+	for _, peer := range peers {
 		if err := r.device.RemovePeer(ctx, peer.PublicKey); err != nil {
 			// One stubborn peer must not stop the rest being collected.
 			log.Printf("provision: could not withdraw a credential: %v", err)
@@ -137,7 +184,7 @@ func (r *Reaper) Sweep(ctx context.Context) (int, error) {
 		delete(r.firstSeen, peer.PublicKey)
 		r.mu.Unlock()
 	}
-	return removed, nil
+	return removed
 }
 
 // Expired selects the peers that should be withdrawn, and records the

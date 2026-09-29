@@ -170,7 +170,13 @@ func run(o runOptions) error {
 		Keepalive:       o.keepalive,
 		Params:          params,
 	}
-	svc, err := provision.NewService(persistAfterWrites(device, o.persist), pool, settings)
+	// Every change to the peer list goes through the same writer, so a
+	// withdrawal is saved exactly like an issue. The reaper once wrote to
+	// the bare device: its removals lasted until the next restart, when
+	// the saved configuration brought the peers back — no longer on
+	// record as ours, and so never withdrawn again.
+	writer := persistAfterWrites(device, o.persist)
+	svc, err := provision.NewService(writer, pool, settings)
 	if err != nil {
 		return err
 	}
@@ -230,7 +236,7 @@ func run(o runOptions) error {
 			"or one caller can present a new address per request")
 	}
 
-	reaper := provision.NewReaper(device, registry, o.ttl, o.grace)
+	reaper := provision.NewReaper(writer, registry, o.ttl, o.grace)
 	tally := &provision.Tally{}
 	svc.SetTally(tally)
 	reaper.SetTally(tally)
@@ -241,7 +247,7 @@ func run(o runOptions) error {
 	if tg, err := tgConfigFromEnv(); err != nil {
 		log.Printf("besy-provision: telegram: off: %v", err)
 	} else if tg != nil {
-		go runTelegram(ctx, tg, device, registry.Owns, tally, o.maxPeers)
+		go runTelegram(ctx, tg, device, registry.Owns, tally, reaper, o.maxPeers)
 	}
 	go sweepLimiter(ctx, limiter, o.sweep)
 

@@ -106,11 +106,25 @@ type peerSource interface {
 	Peers(ctx context.Context) ([]provision.Peer, error)
 }
 
+// cleaner withdraws idle credentials on the operator's say-so.
+type cleaner interface {
+	Idle(ctx context.Context, idle time.Duration) ([]provision.Peer, error)
+	Cleanup(ctx context.Context, idle time.Duration) (int, error)
+}
+
+// cleanupIdle is how long a credential must have gone unused for
+// /cleanup to take it. A day keeps anybody who used the VPN today.
+const cleanupIdle = 24 * time.Hour
+
+// confirmWithin is how long a /cleanup waits for its confirmation.
+const confirmWithin = 2 * time.Minute
+
 type statsBot struct {
 	cfg      *tgConfig
 	device   peerSource
 	owns     func(string) bool
 	tally    *provision.Tally
+	cleaner  cleaner
 	capacity int
 	api      string // https://api.telegram.org/bot<token>
 	client   *http.Client
@@ -119,6 +133,9 @@ type statsBot struct {
 	book   *provision.Book
 	meter  provision.TrafficMeter
 	counts [3]int64 // the tally at the previous sample
+
+	// pending holds, per chat, until when a /cleanup may be confirmed.
+	pending map[int64]time.Time
 }
 
 // sampleEvery is how often the totals are brought up to date. Five
@@ -126,14 +143,14 @@ type statsBot struct {
 const sampleEvery = 5 * time.Minute
 
 func runTelegram(ctx context.Context, cfg *tgConfig, device peerSource, owns func(string) bool,
-	tally *provision.Tally, capacity int) {
+	tally *provision.Tally, cl cleaner, capacity int) {
 	book, err := provision.LoadBook(cfg.statePath)
 	if err != nil {
 		log.Printf("besy-provision: telegram: the day totals could not be read, starting afresh: %v", err)
 		book = &provision.Book{}
 	}
 	b := &statsBot{
-		cfg: cfg, device: device, owns: owns, tally: tally, capacity: capacity,
+		cfg: cfg, device: device, owns: owns, tally: tally, cleaner: cl, capacity: capacity,
 		api:    "https://api.telegram.org/bot" + cfg.token,
 		client: &http.Client{Timeout: 70 * time.Second},
 		book:   book,
@@ -295,6 +312,10 @@ func (b *statsBot) handle(ctx context.Context, chat int64, text string) {
 		day := b.book.Get(date)
 		b.mu.Unlock()
 		b.send(ctx, chat, formatDay("📊 Сегодня, "+humanDate(date)+" (с 00:00)", day, b.capacity))
+	case "/cleanup", "/очистка":
+		b.askCleanup(ctx, chat)
+	case "/cleanup_yes":
+		b.doCleanup(ctx, chat)
 	case "/week", "/неделя":
 		b.mu.Lock()
 		days := lastDays(b.book, time.Now().In(b.cfg.loc), 7)
@@ -308,7 +329,8 @@ func (b *statsBot) handle(ctx context.Context, chat int64, text string) {
 const helpText = "BESY VPN — статистика сервера\n\n" +
 	"/now — сколько подключено сейчас\n" +
 	"/today — итоги за сегодня\n" +
-	"/week — последние 7 дней\n\n" +
+	"/week — последние 7 дней\n" +
+	"/cleanup — удалить ключи, не подключавшиеся больше суток\n\n" +
 	"Каждое утро приходят итоги за вчера. Только суммы: бот не знает, кто и что делал."
 
 func (b *statsBot) send(ctx context.Context, chat int64, text string) {
@@ -417,4 +439,51 @@ func bytesRU(n uint64) string {
 		i++
 	}
 	return strings.Replace(fmt.Sprintf("%.1f %s", v, units[i]), ".", ",", 1)
+}
+
+// ---- Cleanup -------------------------------------------------------------
+
+func (b *statsBot) askCleanup(ctx context.Context, chat int64) {
+	if b.cleaner == nil {
+		b.send(ctx, chat, "Очистка недоступна.")
+		return
+	}
+	idle, err := b.cleaner.Idle(ctx, cleanupIdle)
+	if err != nil {
+		b.send(ctx, chat, "Не удалось прочитать данные сервера.")
+		return
+	}
+	if len(idle) == 0 {
+		b.send(ctx, chat, "Удалять нечего: все ключи подключались за последние сутки.\n"+
+			"Ни разу не использованные ключи сервер сам удаляет через сутки после выдачи.")
+		return
+	}
+	b.mu.Lock()
+	if b.pending == nil {
+		b.pending = map[int64]time.Time{}
+	}
+	b.pending[chat] = time.Now().Add(confirmWithin)
+	b.mu.Unlock()
+	b.send(ctx, chat, fmt.Sprintf("Будет удалено ключей: %d — они не подключались больше суток.\n"+
+		"Если такое устройство снова включит VPN, оно само получит новый ключ.\n\n"+
+		"Подтвердите в течение 2 минут: /cleanup_yes", len(idle)))
+}
+
+func (b *statsBot) doCleanup(ctx context.Context, chat int64) {
+	b.mu.Lock()
+	until, ok := b.pending[chat]
+	delete(b.pending, chat)
+	b.mu.Unlock()
+	if !ok || time.Now().After(until) {
+		b.send(ctx, chat, "Нечего подтверждать. Сначала отправьте /cleanup.")
+		return
+	}
+	n, err := b.cleaner.Cleanup(ctx, cleanupIdle)
+	if err != nil {
+		b.send(ctx, chat, "Очистка не удалась, ключи не тронуты. Подробности в журнале сервера.")
+		log.Printf("besy-provision: telegram: cleanup: %v", err)
+		return
+	}
+	snap, _ := b.sample(ctx)
+	b.send(ctx, chat, fmt.Sprintf("🧹 Удалено ключей: %d.\nДействующих ключей: %d из %d", n, snap.Keys, b.capacity))
 }

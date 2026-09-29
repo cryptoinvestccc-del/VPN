@@ -191,3 +191,66 @@ func TestBytesRU(t *testing.T) {
 		}
 	}
 }
+
+type fakeCleaner struct {
+	idle    int
+	cleaned int
+}
+
+func (f *fakeCleaner) Idle(context.Context, time.Duration) ([]provision.Peer, error) {
+	return make([]provision.Peer, f.idle), nil
+}
+
+func (f *fakeCleaner) Cleanup(context.Context, time.Duration) (int, error) {
+	f.cleaned++
+	return f.idle, nil
+}
+
+func TestCleanupNeedsConfirmation(t *testing.T) {
+	tg := &fakeTelegram{}
+	b := testBot(t, tg, nil)
+	fc := &fakeCleaner{idle: 3}
+	b.cleaner = fc
+	ctx := context.Background()
+
+	// Confirming without asking does nothing.
+	b.handle(ctx, 42, "/cleanup_yes")
+	// A stranger can neither ask nor confirm.
+	b.handle(ctx, 7, "/cleanup")
+	b.handle(ctx, 7, "/cleanup_yes")
+	if fc.cleaned != 0 {
+		t.Fatal("cleaned without a confirmed request")
+	}
+
+	b.handle(ctx, 42, "/cleanup")
+	b.handle(ctx, 42, "/cleanup_yes")
+	if fc.cleaned != 1 {
+		t.Fatalf("cleaned %d times, want 1", fc.cleaned)
+	}
+	// The confirmation is used up.
+	b.handle(ctx, 42, "/cleanup_yes")
+	if fc.cleaned != 1 {
+		t.Error("one confirmation cleaned twice")
+	}
+
+	got := tg.texts()
+	if !strings.Contains(got[1], "ключей: 3") || !strings.Contains(got[2], "Удалено ключей: 3") {
+		t.Errorf("messages: %q", got)
+	}
+}
+
+func TestCleanupConfirmationExpires(t *testing.T) {
+	tg := &fakeTelegram{}
+	b := testBot(t, tg, nil)
+	fc := &fakeCleaner{idle: 2}
+	b.cleaner = fc
+
+	b.handle(context.Background(), 42, "/cleanup")
+	b.mu.Lock()
+	b.pending[42] = time.Now().Add(-time.Second)
+	b.mu.Unlock()
+	b.handle(context.Background(), 42, "/cleanup_yes")
+	if fc.cleaned != 0 {
+		t.Error("an expired confirmation was accepted")
+	}
+}
