@@ -41,6 +41,22 @@ jobs:
       - name: Unit and load tests
         run: go test -race -count=1 ./...
 
+      # The studio site is generated from axiomantic/content.py. A page
+      # edited by hand, or content changed without a rebuild, fails here,
+      # and so does anything shaped like a key in what gets published.
+      - name: Axiomantic site matches its sources
+        run: |
+          python3 axiomantic/build.py
+          git diff --exit-code -- axiomantic/site
+          test -z "$(git status --porcelain -- axiomantic/site)"
+          if grep -rEn 'sk-[A-Za-z0-9]{16,}|service_role|PRIVATE KEY|private_key_id|[0-9]{8,10}:AA[A-Za-z0-9_-]{30,}|AKIA[0-9A-Z]{16}' axiomantic/site; then
+            echo "secret-like string in the published site"; exit 1
+          fi
+
+      # The lead server is its own module, so ./... above does not reach it.
+      - name: Axiomantic lead server
+        run: (cd axiomantic/leads && go vet ./... && go test -race -count=1 ./...)
+
       # Runs the real WireGuard protocol at both ends of the tunnel via
       # wireguard-go's userspace stack. -short skips the rekey test, which
       # needs 2.5 minutes of wall clock.

@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /api/
+Disallow: /404/
+
+Sitemap: https://axiomantic.example/sitemap.xml

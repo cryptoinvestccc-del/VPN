@@ -1,0 +1,36 @@
+[Unit]
+Description=Axiomantic site: order forms
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A throwaway user owned by systemd; /var/lib/axiomantic is created for it
+# with mode 0700, so the lead file is readable by this service and root only.
+DynamicUser=yes
+StateDirectory=axiomantic
+StateDirectoryMode=0700
+UMask=0077
+# AXM_TG_TOKEN and AXM_TG_CHAT, if leads should also go to Telegram.
+# systemd reads this file as root: keep it root:root, mode 600.
+EnvironmentFile=-/etc/axiomantic/leads.env
+ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -origins https://axiomantic.example,https://www.axiomantic.example -trust-proxy
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
