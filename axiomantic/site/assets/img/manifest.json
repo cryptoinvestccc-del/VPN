@@ -40,6 +40,375 @@
    ]
   ]
  },
+ "case-arch-bureau": {
+  "w": 2000,
+  "h": 1376,
+  "alpha": true,
+  "avif": [
+   [
+    640,
+    "assets/img/case-arch-bureau-640.avif"
+   ],
+   [
+    960,
+    "assets/img/case-arch-bureau-960.avif"
+   ],
+   [
+    1280,
+    "assets/img/case-arch-bureau-1280.avif"
+   ],
+   [
+    2000,
+    "assets/img/case-arch-bureau-2000.avif"
+   ]
+  ],
+  "webp": [
+   [
+    640,
+    "assets/img/case-arch-bureau-640.webp"
+   ],
+   [
+    960,
+    "assets/img/case-arch-bureau-960.webp"
+   ],
+   [
+    1280,
+    "assets/img/case-arch-bureau-1280.webp"
+   ],
+   [
+    2000,
+    "assets/img/case-arch-bureau-2000.webp"
+   ]
+  ]
+ },
+ "case-ceramics-shop": {
+  "w": 2000,
+  "h": 1376,
+  "alpha": true,
+  "avif": [
+   [
+    640,
+    "assets/img/case-ceramics-shop-640.avif"
+   ],
+   [
+    960,
+    "assets/img/case-ceramics-shop-960.avif"
+   ],
+   [
+    1280,
+    "assets/img/case-ceramics-shop-1280.avif"
+   ],
+   [
+    2000,
+    "assets/img/case-ceramics-shop-2000.avif"
+   ]
+  ],
+  "webp": [
+   [
+    640,
+    "assets/img/case-ceramics-shop-640.webp"
+   ],
+   [
+    960,
+    "assets/img/case-ceramics-shop-960.webp"
+   ],
+   [
+    1280,
+    "assets/img/case-ceramics-shop-1280.webp"
+   ],
+   [
+    2000,
+    "assets/img/case-ceramics-shop-2000.webp"
+   ]
+  ]
+ },
+ "case-dental-clinic": {
+  "w": 2000,
+  "h": 1376,
+  "alpha": true,
+  "avif": [
+   [
+    640,
+    "assets/img/case-dental-clinic-640.avif"
+   ],
+   [
+    960,
+    "assets/img/case-dental-clinic-960.avif"
+   ],
+   [
+    1280,
+    "assets/img/case-dental-clinic-1280.avif"
+   ],
+   [
+    2000,
+    "assets/img/case-dental-clinic-2000.avif"
+   ]
+  ],
+  "webp": [
+   [
+    640,
+    "assets/img/case-dental-clinic-640.webp"
+   ],
+   [
+    960,
+    "assets/img/case-dental-clinic-960.webp"
+   ],
+   [
+    1280,
+    "assets/img/case-dental-clinic-1280.webp"
+   ],
+   [
+    2000,
+    "assets/img/case-dental-clinic-2000.webp"
+   ]
+  ]
+ },
+ "case-english-school": {
+  "w": 2000,
+  "h": 1376,
+  "alpha": true,
+  "avif": [
+   [
+    640,
+    "assets/img/case-english-school-640.avif"
+   ],
+   [
+    960,
+    "assets/img/case-english-school-960.avif"
+   ],
+   [
+    1280,
+    "assets/img/case-english-school-1280.avif"
+   ],
+   [
+    2000,
+    "assets/img/case-english-school-2000.avif"
+   ]
+  ],
+  "webp": [
+   [
+    640,
+    "assets/img/case-english-school-640.webp"
+   ],
+   [
+    960,
+    "assets/img/case-english-school-960.webp"
+   ],
+   [
+    1280,
+    "assets/img/case-english-school-1280.webp"
+   ],
+   [
+    2000,
+    "assets/img/case-english-school-2000.webp"
+   ]
+  ]
+ },
+ "case-run-app": {
+  "w": 2000,
+  "h": 1376,
+  "alpha": true,
+  "avif": [
+   [
+    640,
+    "assets/img/case-run-app-640.avif"
+   ],
+   [
+    960,
+    "assets/img/case-run-app-960.avif"
+   ],
+   [
+    1280,
+    "assets/img/case-run-app-1280.avif"
+   ],
+   [
+    2000,
+    "assets/img/case-run-app-2000.avif"
+   ]
+  ],
+  "webp": [
+   [
+    640,
+    "assets/img/case-run-app-640.webp"
+   ],
+   [
+    960,
+    "assets/img/case-run-app-960.webp"
+   ],
+   [
+    1280,
+    "assets/img/case-run-app-1280.webp"
+   ],
+   [
+    2000,
+    "assets/img/case-run-app-2000.webp"
+   ]
+  ]
+ },
+ "case-sport-nutrition": {
+  "w": 2000,
+  "h": 1376,
+  "alpha": true,
+  "avif": [
+   [
+    640,
+    "assets/img/case-sport-nutrition-640.avif"
+   ],
+   [
+    960,
+    "assets/img/case-sport-nutrition-960.avif"
+   ],
+   [
+    1280,
+    "assets/img/case-sport-nutrition-1280.avif"
+   ],
+   [
+    2000,
+    "assets/img/case-sport-nutrition-2000.avif"
+   ]
+  ],
+  "webp": [
+   [
+    640,
+    "assets/img/case-sport-nutrition-640.webp"
+   ],
+   [
+    960,
+    "assets/img/case-sport-nutrition-960.webp"
+   ],
+   [
+    1280,
+    "assets/img/case-sport-nutrition-1280.webp"
+   ],
+   [
+    2000,
+    "assets/img/case-sport-nutrition-2000.webp"
+   ]
+  ]
+ },
+ "cover-design": {
+  "w": 1600,
+  "h": 1000,
+  "alpha": false,
+  "avif": [
+   [
+    480,
+    "assets/img/cover-design-480.avif"
+   ],
+   [
+    800,
+    "assets/img/cover-design-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/cover-design-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/cover-design-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/cover-design-480.webp"
+   ],
+   [
+    800,
+    "assets/img/cover-design-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/cover-design-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/cover-design-1600.webp"
+   ]
+  ]
+ },
+ "cover-dev": {
+  "w": 1600,
+  "h": 1000,
+  "alpha": false,
+  "avif": [
+   [
+    480,
+    "assets/img/cover-dev-480.avif"
+   ],
+   [
+    800,
+    "assets/img/cover-dev-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/cover-dev-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/cover-dev-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/cover-dev-480.webp"
+   ],
+   [
+    800,
+    "assets/img/cover-dev-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/cover-dev-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/cover-dev-1600.webp"
+   ]
+  ]
+ },
+ "cover-marketing": {
+  "w": 1600,
+  "h": 1000,
+  "alpha": false,
+  "avif": [
+   [
+    480,
+    "assets/img/cover-marketing-480.avif"
+   ],
+   [
+    800,
+    "assets/img/cover-marketing-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/cover-marketing-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/cover-marketing-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/cover-marketing-480.webp"
+   ],
+   [
+    800,
+    "assets/img/cover-marketing-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/cover-marketing-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/cover-marketing-1600.webp"
+   ]
+  ]
+ },
  "hero": {
   "w": 1600,
   "h": 1600,
@@ -78,6 +447,179 @@
    [
     1600,
     "assets/img/hero-1600.webp"
+   ]
+  ]
+ },
+ "svc-landing": {
+  "w": 1600,
+  "h": 1200,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/svc-landing-480.avif"
+   ],
+   [
+    800,
+    "assets/img/svc-landing-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/svc-landing-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/svc-landing-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/svc-landing-480.webp"
+   ],
+   [
+    800,
+    "assets/img/svc-landing-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/svc-landing-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/svc-landing-1600.webp"
+   ]
+  ]
+ },
+ "why-fast": {
+  "w": 1200,
+  "h": 1200,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/why-fast-480.avif"
+   ],
+   [
+    800,
+    "assets/img/why-fast-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/why-fast-1200.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/why-fast-480.webp"
+   ],
+   [
+    800,
+    "assets/img/why-fast-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/why-fast-1200.webp"
+   ]
+  ]
+ },
+ "why-human": {
+  "w": 1200,
+  "h": 1500,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/why-human-480.avif"
+   ],
+   [
+    800,
+    "assets/img/why-human-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/why-human-1200.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/why-human-480.webp"
+   ],
+   [
+    800,
+    "assets/img/why-human-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/why-human-1200.webp"
+   ]
+  ]
+ },
+ "why-seo": {
+  "w": 1200,
+  "h": 1200,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/why-seo-480.avif"
+   ],
+   [
+    800,
+    "assets/img/why-seo-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/why-seo-1200.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/why-seo-480.webp"
+   ],
+   [
+    800,
+    "assets/img/why-seo-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/why-seo-1200.webp"
+   ]
+  ]
+ },
+ "why-team": {
+  "w": 1200,
+  "h": 1200,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/why-team-480.avif"
+   ],
+   [
+    800,
+    "assets/img/why-team-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/why-team-1200.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/why-team-480.webp"
+   ],
+   [
+    800,
+    "assets/img/why-team-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/why-team-1200.webp"
    ]
   ]
  }
