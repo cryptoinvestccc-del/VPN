@@ -286,6 +286,47 @@
    ]
   ]
  },
+ "cover-ai": {
+  "w": 1600,
+  "h": 1000,
+  "alpha": false,
+  "avif": [
+   [
+    480,
+    "assets/img/cover-ai-480.avif"
+   ],
+   [
+    800,
+    "assets/img/cover-ai-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/cover-ai-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/cover-ai-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/cover-ai-480.webp"
+   ],
+   [
+    800,
+    "assets/img/cover-ai-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/cover-ai-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/cover-ai-1600.webp"
+   ]
+  ]
+ },
  "cover-design": {
   "w": 1600,
   "h": 1000,
@@ -447,6 +488,47 @@
    [
     1600,
     "assets/img/hero-1600.webp"
+   ]
+  ]
+ },
+ "svc-custom": {
+  "w": 1600,
+  "h": 1200,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/svc-custom-480.avif"
+   ],
+   [
+    800,
+    "assets/img/svc-custom-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/svc-custom-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/svc-custom-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/svc-custom-480.webp"
+   ],
+   [
+    800,
+    "assets/img/svc-custom-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/svc-custom-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/svc-custom-1600.webp"
    ]
   ]
  },

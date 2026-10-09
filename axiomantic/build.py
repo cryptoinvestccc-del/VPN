@@ -399,25 +399,27 @@ def shead(eyebrow, title, lead='', aside='', tone='', cls='', light=False):
             f'<h2 class="h2{" h2--light" if light else ""}" data-split>{t}</h2>{lead_html}</div>{aside_html}</header>')
 
 
-def case_card(p, c, cls='', sizes='(min-width: 1024px) 50vw, 100vw'):
+def case_card(p, c, cls='', sizes='(min-width: 1024px) 50vw, 100vw', h=3, eager=False):
+    """h: heading level (2 where the cards sit right under the page's H1);
+    eager: the first card of a list is on screen at once, so it is not lazy."""
     result_n, result_t = c['results'][0]
     return f'''<a class="case t-{c["slug"]} {cls}" href="{p.u("projects/" + c["slug"] + "/")}" data-cat="{c["type"]}" data-reveal>
-<div class="case__media">{picture(p, "case-" + c["slug"], sizes=sizes)}</div>
+<div class="case__media">{picture(p, "case-" + c["slug"], sizes=sizes, eager=eager)}</div>
 <div class="case__body">
 <div class="case__meta"><span class="tag">{e(C.CATEGORIES[c["type"]])}</span><span>{e(c["term"])}</span></div>
-<h3 class="case__title">{e(c["title"])}</h3>
+<h{h} class="case__title">{e(c["title"])}</h{h}>
 <p class="case__res"><b>{e(result_n)}</b> {e(result_t)}</p>
 </div>
 <span class="go">{icon("arrow-ur")}</span>
 </a>'''
 
 
-def post_card(p, a, cls='', sizes='(min-width: 1024px) 33vw, 100vw'):
+def post_card(p, a, cls='', sizes='(min-width: 1024px) 33vw, 100vw', h=3, eager=False):
     return f'''<a class="post {cls}" href="{p.u("blog/" + a["slug"] + "/")}" data-cat="{a["cat"]}" data-reveal>
-<div class="post__media">{picture(p, "cover-" + a["cat"], sizes=sizes)}</div>
+<div class="post__media">{picture(p, "cover-" + a["cat"], sizes=sizes, eager=eager)}</div>
 <div class="post__body">
 <div class="post__meta"><span class="tag">{e(C.BLOG_CATEGORIES[a["cat"]])}</span><time datetime="{a["date"]}">{date_ru(a["date"])}</time></div>
-<h3 class="post__title">{e(a["title"])}</h3>
+<h{h} class="post__title">{e(a["title"])}</h{h}>
 <p class="post__desc">{e(a["desc"])}</p>
 <span class="post__read">{icon("clock")}{a["read"]} мин чтения</span>
 </div>
@@ -669,7 +671,8 @@ def projects():
     counts = {}
     for c in C.CASES:
         counts[c['type']] = counts.get(c['type'], 0) + 1
-    grid = ''.join(case_card(p, c, sizes='(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw') for c in C.CASES)
+    grid = ''.join(case_card(p, c, sizes='(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw', h=2, eager=i == 0)
+                   for i, c in enumerate(C.CASES))
     body = (page_hero(p, [('Главная', ''), ('Проекты', 'projects/')], 'Проекты',
                       'Лендинги, сайты компаний и интернет-магазины. В каждом кейсе — задача, решение, технологии и результат.')
             + f'''<div class="sheet">
@@ -739,8 +742,9 @@ def blog():
     for a in C.ARTICLES:
         counts[a['cat']] = counts.get(a['cat'], 0) + 1
     cards = ''.join(post_card(p, a, 'post--wide' if a.get('featured') else '',
-                              sizes='(min-width: 1024px) 50vw, 100vw' if a.get('featured') else '(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw')
-                    for a in C.ARTICLES)
+                              sizes='(min-width: 1024px) 50vw, 100vw' if a.get('featured') else '(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw',
+                              h=2, eager=i == 0)
+                    for i, a in enumerate(C.ARTICLES))
     body = (page_hero(p, [('Главная', ''), ('Блог', 'blog/')], 'Блог',
                       'Пишем о маркетинге, дизайне и разработке — и о том, как AI меняет работу студии.')
             + f'''<div class="sheet">
