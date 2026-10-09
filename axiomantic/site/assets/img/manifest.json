@@ -491,6 +491,47 @@
    ]
   ]
  },
+ "svc-multi": {
+  "w": 1600,
+  "h": 1200,
+  "alpha": true,
+  "avif": [
+   [
+    480,
+    "assets/img/svc-multi-480.avif"
+   ],
+   [
+    800,
+    "assets/img/svc-multi-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/svc-multi-1200.avif"
+   ],
+   [
+    1600,
+    "assets/img/svc-multi-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/svc-multi-480.webp"
+   ],
+   [
+    800,
+    "assets/img/svc-multi-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/svc-multi-1200.webp"
+   ],
+   [
+    1600,
+    "assets/img/svc-multi-1600.webp"
+   ]
+  ]
+ },
  "why-fast": {
   "w": 1200,
   "h": 1200,
