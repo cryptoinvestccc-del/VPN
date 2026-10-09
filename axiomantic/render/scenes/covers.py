@@ -105,7 +105,7 @@ def build_ai(shot):
               mat=lib.chrome('orbit', roughness=0.08))
     lib.sphere('sat', r=0.14, loc=(1.32, -0.55, 0.32),
                mat=lib.lacquer('sat', color='#100C2C', metallic=0.35, roughness=0.2))
-    lib.camera(loc=(0.0, -6.8, 0.8), target=(0.15, 0, 0.0), lens=48)
+    lib.camera(loc=(0.0, -6.8, 0.8), target=(0.15, 0, 0.0), lens=40)
     lib.area_light((-3.5, -3.0, 4.0), size=6.0, energy=800, color='#C8C2FF', shape='RECTANGLE', size_y=1.0)
     lib.area_light((4.0, 2.5, 1.2), size=4.0, energy=900, color='#9C86FF')
     lib.area_light((0.0, -3.0, -4.0), size=6.0, energy=160, color='#6F78FF')
