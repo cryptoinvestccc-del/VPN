@@ -1,0 +1,43 @@
+{
+ "hero": {
+  "w": 1600,
+  "h": 1600,
+  "alpha": false,
+  "avif": [
+   [
+    560,
+    "assets/img/hero-560.avif"
+   ],
+   [
+    800,
+    "assets/img/hero-800.avif"
+   ],
+   [
+    1120,
+    "assets/img/hero-1120.avif"
+   ],
+   [
+    1600,
+    "assets/img/hero-1600.avif"
+   ]
+  ],
+  "webp": [
+   [
+    560,
+    "assets/img/hero-560.webp"
+   ],
+   [
+    800,
+    "assets/img/hero-800.webp"
+   ],
+   [
+    1120,
+    "assets/img/hero-1120.webp"
+   ],
+   [
+    1600,
+    "assets/img/hero-1600.webp"
+   ]
+  ]
+ }
+}

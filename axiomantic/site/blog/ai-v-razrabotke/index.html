@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Где AI ускоряет разработку сайта, а где — нет — Аксиомантик</title>
 <meta name="description" content="Разбираем по этапам: что нейросети делают быстрее людей, а что им пока нельзя доверять.">
 <link rel="canonical" href="https://axiomantic.example/blog/ai-v-razrabotke/">
@@ -13,32 +13,36 @@
 <meta property="og:description" content="Разбираем по этапам: что нейросети делают быстрее людей, а что им пока нельзя доверять.">
 <meta property="og:url" content="https://axiomantic.example/blog/ai-v-razrabotke/">
 <meta property="og:image" content="https://axiomantic.example/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#080B2E">
+<meta name="theme-color" content="#0B0E33">
+<meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
-<link rel="preload" href="../../assets/fonts/unbounded-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="../../assets/fonts/manrope-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../../assets/css/main.css?v=3797d6bae8">
-<link rel="stylesheet" href="../../assets/css/themes.css?v=3797d6bae8">
-<script src="../../assets/js/main.js?v=65f51e6b16" defer></script>
+<link rel="apple-touch-icon" href="../../assets/apple-touch-icon.png">
+<link rel="preload" href="../../assets/fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../../assets/css/main.css?v=d14eb50c56">
+<script src="../../assets/js/boot.js?v=8e63b9a220"></script>
+<script src="../../assets/js/main.js?v=8e63b9a220" defer></script>
+<script src="../../assets/js/motion.js?v=8e63b9a220" defer></script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Главная","item":"https://axiomantic.example/"},{"@type":"ListItem","position":2,"name":"Блог","item":"https://axiomantic.example/blog/"},{"@type":"ListItem","position":3,"name":"Где AI ускоряет разработку сайта, а где — нет","item":"https://axiomantic.example/blog/ai-v-razrabotke/"}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Где AI ускоряет разработку сайта, а где — нет","description":"Разбираем по этапам: что нейросети делают быстрее людей, а что им пока нельзя доверять.","datePublished":"2026-09-24","inLanguage":"ru","mainEntityOfPage":"https://axiomantic.example/blog/ai-v-razrabotke/","author":{"@type":"Organization","name":"Аксиомантик"},"publisher":{"@type":"Organization","name":"Аксиомантик"}}</script>
 </head>
 <body data-endpoint="/api/lead">
 <a class="skip" href="#main">Перейти к содержанию</a>
 <header class="hdr" data-hdr>
-<div class="container hdr__in">
-<a class="logo" href="../../" aria-label="Аксиомантик — на главную"><svg class="logo__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><defs><linearGradient id="lm-h" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4655FF"/><stop offset="1" stop-color="#8B6BFF"/></linearGradient></defs><rect width="32" height="32" rx="10" fill="url(#lm-h)"/><path d="M16 8.5 23.5 22.5h-15z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><circle cx="16" cy="18.2" r="2.2" fill="#fff"/></svg><span>Аксиомантик</span></a>
+<div class="wrap hdr__in">
+<a class="logo " href="../../" aria-label="Аксиомантик — на главную"><svg class="logo__mark" viewBox="40 -1150 1430 1210" aria-hidden="true" focusable="false"><path transform="scale(1 -1)" fill="currentColor" d="M440 -30Q324 -30 243.5 14.5Q163 59 121.5 133.5Q80 208 80 298Q80 373 103.0 435.0Q126 497 177.5 544.5Q229 592 316 624Q376 646 459.0 663.0Q542 680 647.0 695.5Q752 711 878 730L780 676Q780 772 734.0 817.0Q688 862 580 862Q520 862 455.0 833.0Q390 804 364 730L118 808Q159 942 272.0 1026.0Q385 1110 580 1110Q723 1110 834.0 1066.0Q945 1022 1002 914Q1034 854 1040.0 794.0Q1046 734 1046 660V0H808V222L842 176Q763 67 671.5 18.5Q580 -30 440 -30ZM498 184Q573 184 624.5 210.5Q676 237 706.5 271.0Q737 305 748 328Q769 372 772.5 430.5Q776 489 776 528L856 508Q735 488 660.0 474.5Q585 461 539.0 450.0Q493 439 458 426Q418 410 393.5 391.5Q369 373 357.5 351.0Q346 329 346 302Q346 265 364.5 238.5Q383 212 417.0 198.0Q451 184 498 184Z"/><circle class="logo__dot" cx="1300" cy="-122" r="132"/></svg><span class="logo__word">аксиомантик</span></a>
 <nav class="nav" aria-label="Основное меню"><a href="../../">Главная</a><a href="../../projects/">Проекты</a><a href="../../blog/" aria-current=page>Блог</a><a href="../../contacts/">Контакты</a></nav>
 <div class="hdr__act">
-<a class="btn btn--primary btn--sm" href="../../contacts/" data-order>Заказать</a>
+<a class="btn btn--glass hdr__cta" href="../../contacts/" data-order>Заказать</a>
 <button class="burger" type="button" aria-expanded="false" aria-controls="menu" data-burger><span></span><span></span><span class="sr">Меню</span></button>
 </div>
 </div>
 <div class="menu" id="menu" hidden>
 <nav class="menu__nav" aria-label="Мобильное меню"><a href="../../">Главная</a><a href="../../projects/">Проекты</a><a href="../../blog/" aria-current=page>Блог</a><a href="../../contacts/">Контакты</a></nav>
 <div class="menu__foot">
-<a class="btn btn--primary btn--lg btn--block" href="../../contacts/" data-order>Заказать проект</a>
+<a class="btn btn--white btn--lg btn--block" href="../../contacts/" data-order>Обсудить проект</a>
 <a class="menu__contact" href="tel:+70000000000">+7 (000) 000-00-00</a>
 <a class="menu__contact" href="mailto:hello@axiomantic.example">hello@axiomantic.example</a>
 </div>
@@ -46,50 +50,48 @@
 </header>
 <main id="main">
 <section class="phero">
-<div class="phero__glow" aria-hidden="true"></div>
-<div class="phero__orb" aria-hidden="true"></div>
-<div class="container phero__in">
-<nav class="crumbs" aria-label="Навигационная цепочка"><a href="../../">Главная</a><span aria-hidden="true">/</span><a href="../../blog/">Блог</a><span aria-hidden="true">/</span><span aria-current="page">Где AI ускоряет разработку сайта, а где — нет</span></nav>
-<div class="phero__meta"><span class="tag tag--dark">AI в дизайне</span><span><time datetime="2026-09-24">24 сентября 2026</time></span><span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>6 мин чтения</span></div>
-<h1 class="h1">Где AI ускоряет разработку сайта, а где — нет</h1>
-<p class="phero__lead">Разбираем по этапам: что нейросети делают быстрее людей, а что им пока нельзя доверять.</p>
+<div class="wrap phero__in">
+<nav class="crumbs" aria-label="Навигационная цепочка" data-intro="1"><a href="../../">Главная</a><span aria-hidden="true">/</span><a href="../../blog/">Блог</a><span aria-hidden="true">/</span><span aria-current="page">Где AI ускоряет разработку сайта, а где — нет</span></nav>
+<div class="phero__meta" data-intro="1"><span class="tag tag--dark">AI в дизайне</span><span><time datetime="2026-09-24">24 сентября 2026</time></span><span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>6 мин чтения</span></div>
+<h1 class="h1" data-intro-split><span class="w"><span>Где</span></span> <span class="w"><span>AI</span></span> <span class="w"><span>ускоряет</span></span> <span class="w"><span>разработку</span></span> <span class="w"><span>сайта,</span></span> <span class="w"><span>а</span></span> <span class="w"><span>где</span></span> <span class="w"><span>—</span></span> <span class="w"><span>нет</span></span></h1>
+<p class="phero__lead" data-intro="2">Разбираем по этапам: что нейросети делают быстрее людей, а что им пока нельзя доверять.</p>
 </div>
 </section><div class="sheet">
 <section class="section section--first">
-<div class="container">
+<div class="wrap">
 <article class="article">
-<div class="cover cover--ai cover--big" aria-hidden="true"><i class="cv__orb cv__orb--ai"></i><i class="cv__ring cv__ring--ai"></i><i class="cv__star"></i></div>
+<div class="article__cover" data-reveal><div class="ph " data-missing="cover-ai" aria-hidden="true"></div></div>
 <div class="prose"><p>AI в студии — это не кнопка «сделать сайт». Это набор инструментов, которые снимают с людей повторяющуюся работу. Решения по-прежнему принимают маркетолог, дизайнер и разработчик.</p><h2>Где AI экономит время</h2><ul><li>Сбор и первичный разбор конкурентов</li><li>Семантическое ядро и группировка запросов</li><li>Черновики текстов для блоков — как отправная точка для редактора</li><li>Автотесты, поиск ошибок и проверка вёрстки на разных экранах</li><li>Мета-теги, альт-тексты и микроразметка</li></ul><h2>Где AI не справляется</h2><p>Нейросеть не знает вашего клиента, не была на ваших продажах и не несёт ответственности за результат. Стратегия, композиция страницы и визуальный язык бренда остаются работой людей.</p><blockquote><p>AI ускоряет рутину на 30–40%, но не заменяет понимание задачи.</p></blockquote><h2>Что это даёт клиенту</h2><p>Сроки короче, а бюджет уходит на то, что действительно влияет на продажи: исследование, дизайн и проверку гипотез.</p></div>
-<aside class="article__cta">
+<aside class="article__cta" data-reveal>
 <p><b>Нужен сайт, который работает на бизнес?</b> Расскажите о задаче — предложим формат и сроки.</p>
-<a class="btn btn--primary" href="../../contacts/" data-order>Обсудить проект <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+<a class="btn btn--dark" href="../../contacts/" data-order>Обсудить проект <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
 </aside>
 </article>
 </div>
 </section>
 <section class="section section--soft">
-<div class="container">
-<header class="shead "><div class="shead__main"><p class="eyebrow">Блог</p><h2 class="h2">Читайте также</h2></div><div class="shead__aside"><a class="btn btn--ghost" href="../../blog/">Все статьи <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></header>
-<div class="posts"><a class="post " href="../../blog/ai-pomoshchnik-dizajnera/" data-cat="ai">
-<div class="cover cover--ai" aria-hidden="true"><i class="cv__orb cv__orb--ai"></i><i class="cv__ring cv__ring--ai"></i><i class="cv__star"></i></div>
+<div class="wrap">
+<header class="shead "><div class="shead__main"><p class="eyebrow" data-reveal>Блог</p><h2 class="h2" data-split><span class="w"><span>Читайте</span></span> <span class="tone"><span class="w"><span>также</span></span></span></h2></div><div class="shead__aside" data-reveal><a class="btn btn--outline" href="../../blog/">Все статьи <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></header>
+<div class="posts"><a class="post " href="../../blog/ai-pomoshchnik-dizajnera/" data-cat="ai" data-reveal>
+<div class="post__media"><div class="ph " data-missing="cover-ai" aria-hidden="true"></div></div>
 <div class="post__body">
-<div class="post__meta"><span class="tag tag--soft">AI в дизайне</span><time datetime="2026-07-16">16 июля 2026</time></div>
+<div class="post__meta"><span class="tag">AI в дизайне</span><time datetime="2026-07-16">16 июля 2026</time></div>
 <h3 class="post__title">AI в дизайне: помощник, а не автор</h3>
 <p class="post__desc">Какие задачи дизайнера мы отдаём нейросетям и где проходит граница.</p>
 <span class="post__read"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>5 мин чтения</span>
 </div>
-</a><a class="post " href="../../blog/dizajn-ne-nejroset/" data-cat="design">
-<div class="cover cover--design" aria-hidden="true"><i class="cv__sq cv__sq--1"></i><i class="cv__sq cv__sq--2"></i><svg class="cv__curve" viewBox="0 0 200 120"><path d="M10 100C60 100 60 20 110 20S170 70 190 30"/><circle cx="10" cy="100" r="4"/><circle cx="110" cy="20" r="4"/><circle cx="190" cy="30" r="4"/></svg></div>
+</a><a class="post " href="../../blog/dizajn-ne-nejroset/" data-cat="design" data-reveal>
+<div class="post__media"><div class="ph " data-missing="cover-design" aria-hidden="true"></div></div>
 <div class="post__body">
-<div class="post__meta"><span class="tag tag--soft">Дизайн</span><time datetime="2026-09-10">10 сентября 2026</time></div>
+<div class="post__meta"><span class="tag">Дизайн</span><time datetime="2026-09-10">10 сентября 2026</time></div>
 <h3 class="post__title">Почему дизайн сайта не стоит доверять нейросети</h3>
 <p class="post__desc">Сгенерированный макет выглядит эффектно, но редко решает задачу бизнеса. Объясняем почему.</p>
 <span class="post__read"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>5 мин чтения</span>
 </div>
-</a><a class="post " href="../../blog/dizajn-sistema/" data-cat="design">
-<div class="cover cover--design" aria-hidden="true"><i class="cv__sq cv__sq--1"></i><i class="cv__sq cv__sq--2"></i><svg class="cv__curve" viewBox="0 0 200 120"><path d="M10 100C60 100 60 20 110 20S170 70 190 30"/><circle cx="10" cy="100" r="4"/><circle cx="110" cy="20" r="4"/><circle cx="190" cy="30" r="4"/></svg></div>
+</a><a class="post " href="../../blog/dizajn-sistema/" data-cat="design" data-reveal>
+<div class="post__media"><div class="ph " data-missing="cover-design" aria-hidden="true"></div></div>
 <div class="post__body">
-<div class="post__meta"><span class="tag tag--soft">Дизайн</span><time datetime="2026-09-03">3 сентября 2026</time></div>
+<div class="post__meta"><span class="tag">Дизайн</span><time datetime="2026-09-03">3 сентября 2026</time></div>
 <h3 class="post__title">Дизайн-система: зачем она нужна даже небольшому сайту</h3>
 <p class="post__desc">Сетка, отступы и компоненты — не бюрократия, а способ быстро и без ошибок развивать сайт.</p>
 <span class="post__read"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>6 мин чтения</span>
@@ -100,12 +102,12 @@
 </div>
 </main>
 <footer class="ftr">
-<div class="container">
+<div class="wrap">
 <div class="ftr__top">
 <div class="ftr__brand">
-<a class="logo logo--light" href="../../"><svg class="logo__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><defs><linearGradient id="lm-f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4655FF"/><stop offset="1" stop-color="#8B6BFF"/></linearGradient></defs><rect width="32" height="32" rx="10" fill="url(#lm-f)"/><path d="M16 8.5 23.5 22.5h-15z" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><circle cx="16" cy="18.2" r="2.2" fill="#fff"/></svg><span>Аксиомантик</span></a>
-<p>Студия цифровых продуктов. Маркетолог, разработчик и UX/UI-дизайнер в связке с AI — быстро, качественно и технологично.</p>
-<a class="btn btn--light" href="../../contacts/" data-order>Заказать проект <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+<a class="logo logo--footer" href="../../" aria-label="Аксиомантик — на главную"><svg class="logo__mark" viewBox="40 -1150 1430 1210" aria-hidden="true" focusable="false"><path transform="scale(1 -1)" fill="currentColor" d="M440 -30Q324 -30 243.5 14.5Q163 59 121.5 133.5Q80 208 80 298Q80 373 103.0 435.0Q126 497 177.5 544.5Q229 592 316 624Q376 646 459.0 663.0Q542 680 647.0 695.5Q752 711 878 730L780 676Q780 772 734.0 817.0Q688 862 580 862Q520 862 455.0 833.0Q390 804 364 730L118 808Q159 942 272.0 1026.0Q385 1110 580 1110Q723 1110 834.0 1066.0Q945 1022 1002 914Q1034 854 1040.0 794.0Q1046 734 1046 660V0H808V222L842 176Q763 67 671.5 18.5Q580 -30 440 -30ZM498 184Q573 184 624.5 210.5Q676 237 706.5 271.0Q737 305 748 328Q769 372 772.5 430.5Q776 489 776 528L856 508Q735 488 660.0 474.5Q585 461 539.0 450.0Q493 439 458 426Q418 410 393.5 391.5Q369 373 357.5 351.0Q346 329 346 302Q346 265 364.5 238.5Q383 212 417.0 198.0Q451 184 498 184Z"/><circle class="logo__dot" cx="1300" cy="-122" r="132"/></svg><span class="logo__word">аксиомантик</span></a>
+<p>Создано людьми. Ускорено технологиями. Маркетолог, разработчик и UX/UI-дизайнер в связке с AI.</p>
+<a class="btn btn--white" href="../../contacts/" data-order>Обсудить проект <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
 </div>
 <div class="ftr__col"><h2 class="ftr__h">Разделы</h2><ul><li><a href="../../">Главная</a></li><li><a href="../../projects/">Проекты</a></li><li><a href="../../blog/">Блог</a></li><li><a href="../../contacts/">Контакты</a></li><li><a href="../../#tariffs">Тарифы</a></li><li><a href="../../#faq">Вопросы и ответы</a></li></ul></div>
 <div class="ftr__col"><h2 class="ftr__h">Услуги</h2><ul><li><a href="../../#tariffs">Лендинг</a></li><li><a href="../../#tariffs">Многостаночник · Базовый</a></li><li><a href="../../#tariffs">Многостаночник · Под вас</a></li></ul></div>
@@ -115,7 +117,7 @@
 <li class="ftr__muted">Пн–Пт, 10:00–19:00 по Москве</li>
 </ul><ul class="soc soc--dark"><li><a href="#" aria-label="Telegram" title="Telegram">TG</a></li><li><a href="#" aria-label="ВКонтакте" title="ВКонтакте">VK</a></li><li><a href="#" aria-label="Behance" title="Behance">Bē</a></li></ul></div>
 </div>
-<p class="ftr__word" aria-hidden="true">Аксиомантик</p>
+<p class="ftr__word" aria-hidden="true">аксиомантик</p>
 <div class="ftr__bottom">
 <span>© 2026 Аксиомантик</span>
 <a href="../../privacy/">Политика обработки персональных данных</a>
@@ -154,7 +156,7 @@
 <div class="hp" aria-hidden="true"><label>Не заполняйте это поле <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
 <label class="consent"><input type="checkbox" name="consent" required aria-describedby="m-consent-err"><span>Даю <a href="../../consent/" target="_blank">согласие на обработку персональных данных</a> на условиях <a href="../../privacy/" target="_blank">политики</a></span></label><p class="field__err" id="m-consent-err"></p>
 </div>
-<button class="btn btn--primary btn--lg btn--block lead__submit" type="submit" data-submit>
+<button class="btn btn--dark btn--lg btn--block lead__submit" type="submit" data-submit>
 <span data-submit-label>Жду звонка</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
 <p class="lead__status" role="status" aria-live="polite"></p>
 </div>

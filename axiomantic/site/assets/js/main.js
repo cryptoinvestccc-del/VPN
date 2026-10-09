@@ -1,5 +1,7 @@
-/* Аксиомантик: header state, mobile menu, the order dialog, lead forms,
-   filters and the click-to-load map. No dependencies, no trackers.
+/* Аксиомантик: everything the pages do on every device — header, menu,
+   scroll reveals, the hero video, the approach steps, counters, the order
+   dialog, lead forms, filters and the click-to-load map. No dependencies,
+   no trackers. Desktop-only scroll choreography lives in motion.js.
 
    Every order button is a link to the contacts page, so the site still
    takes orders with this script blocked; the script only upgrades that
@@ -7,17 +9,36 @@
 (() => {
   'use strict';
 
-  document.documentElement.classList.add('js');
-
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const root = document.documentElement;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hasIO = 'IntersectionObserver' in window;
 
   /* ---------------------------------------------------------- header */
 
+  // Transparent over the dark hero, a white bar once the page moves; it
+  // slides away while reading down and comes back on the way up.
   const hdr = $('[data-hdr]');
-  const onScroll = () => hdr && hdr.classList.toggle('is-scrolled', window.scrollY > 8);
-  onScroll();
-  window.addEventListener('scroll', onScroll, { passive: true });
+  let lastY = window.scrollY;
+  let ticking = false;
+  const onScroll = () => {
+    ticking = false;
+    const y = window.scrollY;
+    hdr.classList.toggle('is-solid', y > 24);
+    if (!document.body.classList.contains('menu-open')) {
+      if (y > 640 && y > lastY + 6) hdr.classList.add('is-hidden');
+      else if (y < lastY - 6 || y <= 640) hdr.classList.remove('is-hidden');
+    }
+    lastY = y;
+  };
+  if (hdr) {
+    onScroll();
+    window.addEventListener('scroll', () => {
+      if (!ticking) { ticking = true; window.requestAnimationFrame(onScroll); }
+    }, { passive: true });
+    hdr.addEventListener('focusin', () => hdr.classList.remove('is-hidden'));
+  }
 
   const burger = $('[data-burger]');
   const menu = $('#menu');
@@ -33,21 +54,129 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !menu.hidden) { setMenu(false); burger.focus(); }
     });
-    window.matchMedia('(min-width: 960px)').addEventListener('change', (e) => { if (e.matches) setMenu(false); });
+    window.matchMedia('(min-width: 1024px)').addEventListener('change', (e) => { if (e.matches) setMenu(false); });
   }
 
-  /* ---------------------------------------------------------- reveal */
+  /* --------------------------------------------------------- reveals */
 
-  const revealed = $$('.reveal');
-  if ('IntersectionObserver' in window) {
+  // Things fade up once as they enter. They are hidden only from here on
+  // (.motion-ready), so without this script everything is simply visible.
+  if (!reduced && hasIO) {
+    $$('[data-split]').forEach((h) => {
+      $$('.w > span', h).forEach((w, i) => { w.style.transitionDelay = `${Math.min(i * 0.045, 0.4)}s`; });
+    });
+    $$('[data-reveal]').forEach((el) => {
+      const sibs = el.parentElement ? $$(':scope > [data-reveal]', el.parentElement) : [];
+      const i = sibs.indexOf(el);
+      if (i > 0) el.style.transitionDelay = `${Math.min(i * 0.08, 0.32)}s`;
+    });
+    root.classList.add('motion-ready');
     const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
+      entries.forEach((en) => {
+        if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
       });
-    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
-    revealed.forEach((el) => io.observe(el));
-  } else {
-    revealed.forEach((el) => el.classList.add('in'));
+    }, { rootMargin: '0px 0px -12% 0px' });
+    $$('[data-reveal], [data-split]').forEach((el) => io.observe(el));
+    // returning from the back/forward cache: show everything as it was left
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) $$('[data-reveal], [data-split]').forEach((el) => el.classList.add('is-in'));
+    });
+  }
+
+  /* ------------------------------------------------------ hero video */
+
+  // The poster is the picture; the loop is a bonus. It is fetched after the
+  // page has loaded, never for reduced motion or Save-Data, plays only
+  // while on screen and can be paused (WCAG 2.2.2).
+  const media = $('[data-hero-media]');
+  const video = media && $('video', media);
+  const conn = navigator.connection || {};
+  if (video && !reduced && !conn.saveData && !/2g/.test(conn.effectiveType || '') && hasIO) {
+    const toggle = $('[data-video-toggle]');
+    const small = window.innerWidth < 1024;
+    let inView = true;
+    let userPaused = false;
+    const play = () => { if (!userPaused && inView && !document.hidden) video.play().catch(() => {}); };
+    video.addEventListener('playing', () => {
+      media.classList.add('is-playing');
+      if (toggle) toggle.hidden = false;
+    }, { once: true });
+    const start = () => {
+      [['webm', 'video/webm'], ['mp4', 'video/mp4']].forEach(([key, type]) => {
+        const src = video.dataset[small ? `${key}Sm` : key];
+        if (!src) return;
+        const s = document.createElement('source');
+        s.src = src;
+        s.type = type;
+        video.appendChild(s);
+      });
+      video.preload = 'auto';
+      video.load();
+      new IntersectionObserver(([en]) => {
+        inView = en.isIntersecting;
+        if (inView) play(); else video.pause();
+      }).observe(media);
+      play();
+    };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) video.pause(); else play(); });
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        userPaused = !userPaused;
+        toggle.setAttribute('aria-pressed', String(userPaused));
+        toggle.setAttribute('aria-label', userPaused ? 'Запустить анимацию' : 'Остановить анимацию');
+        if (userPaused) video.pause(); else play();
+      });
+    }
+    const later = () => window.setTimeout(start, 400);
+    if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
+  }
+
+  /* ------------------------------------------------- approach steps */
+
+  const steps = $$('[data-step]');
+  const stepNow = $('[data-step-now]');
+  if (steps.length && hasIO) {
+    steps[0].parentElement.classList.add('js-steps');
+    steps[0].classList.add('is-active');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        steps.forEach((s) => s.classList.toggle('is-active', s === en.target));
+        if (stepNow) stepNow.textContent = String(steps.indexOf(en.target) + 1).padStart(2, '0');
+      });
+    }, { rootMargin: '-45% 0px -45% 0px' });
+    steps.forEach((s) => io.observe(s));
+  }
+
+  /* -------------------------------------------------------- counters */
+
+  // "120+", "−40%", "×2,4", "0,9 с": the number counts up, the rest stays.
+  if (!reduced && hasIO) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        io.unobserve(en.target);
+        const el = en.target;
+        const text = el.textContent;
+        const m = text.match(/^(\D*?)(\d+(?:[.,]\d+)?)(.*)$/);
+        if (!m) return;
+        const target = parseFloat(m[2].replace(',', '.'));
+        const decimals = (m[2].split(/[.,]/)[1] || '').length;
+        const comma = m[2].includes(',');
+        const t0 = performance.now();
+        const dur = 1200;
+        const tick = (now) => {
+          const k = Math.min((now - t0) / dur, 1);
+          const eased = 1 - Math.pow(1 - k, 3);
+          let v = (target * eased).toFixed(decimals);
+          if (comma) v = v.replace('.', ',');
+          el.textContent = k < 1 ? m[1] + v + m[3] : text;
+          if (k < 1) window.requestAnimationFrame(tick);
+        };
+        window.requestAnimationFrame(tick);
+      });
+    }, { rootMargin: '0px 0px -15% 0px' });
+    $$('[data-count]').forEach((el) => io.observe(el));
   }
 
   /* ------------------------------------------------------ lead forms */
