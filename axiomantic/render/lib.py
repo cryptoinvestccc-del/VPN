@@ -154,6 +154,10 @@ def world(hdri='studio_small_09', strength=1.0, rotation=0.0, refract=NAVY, refr
         nt.links.new(sky.outputs['Background'], even.inputs[1])
         nt.links.new(result, even.inputs[2])
         result = even.outputs['Shader']
+        # Importance sampling would aim shadow rays at the studio's lamps, which
+        # this shader then answers with the dim even sky: dark speckles on the
+        # shadow catcher. An even sky is sampled cleanly by the surfaces alone.
+        w.cycles.sampling_method = 'NONE'
     nt.links.new(result, out.inputs['Surface'])
     return w
 
@@ -461,11 +465,14 @@ def camera(loc=(0, -6, 2), target=(0, 0, 0), lens=70, dof=None, fstop=4.0):
     return cam
 
 
-def area_light(loc, target=(0, 0, 0), size=3.0, energy=500, color=WHITE, shape='DISK'):
+def area_light(loc, target=(0, 0, 0), size=3.0, energy=500, color=WHITE, shape='DISK', size_y=None):
     data = bpy.data.lights.new('area', 'AREA')
     data.energy = energy
     data.size = size
     data.shape = shape
+    # A rectangle left at Blender's default height (1 m) is a strip light, and
+    # a strip throws shadows stretched along it; rectangles are square unless asked.
+    data.size_y = size if size_y is None else size_y
     data.color = lin(color)[:3]
     o = bpy.data.objects.new('area', data)
     _link(o)
@@ -486,7 +493,7 @@ def light_rig(scale=1.0, key=1100, fill=450, rim=650, rim_color=LILAC, target=(0
     only light that casts a shadow — a short, soft one under the object), a
     large shadowless fill from the camera side and a lilac rim behind."""
     s = scale
-    k = area_light((-1.2 * s, -1.8 * s, 6.5 * s), target=target, size=7.0 * s, energy=key, shape='RECTANGLE')
+    k = area_light((-1.2 * s, -1.8 * s, 6.5 * s), target=target, size=4.0 * s, energy=key, shape='SQUARE')
     f = area_light((3.5 * s, -6.0 * s, 2.5 * s), target=target, size=6.0 * s, energy=fill, color=ICE)
     r = area_light((1.0 * s, 5.5 * s, 3.5 * s), target=target, size=5.0 * s, energy=rim, color=rim_color)
     for light in (f, r):

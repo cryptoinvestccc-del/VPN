@@ -2,8 +2,7 @@
 
 svc-landing   one page, one goal: a frosted lilac glass slab with a single
               glowing bead sunk into it at call-to-action height
-svc-multi     a multi-page site: three page panels receding in depth,
-              linked by one chrome sphere
+svc-multi     a multi-page site: three page panels receding in depth
 svc-custom    a custom product: a dark lacquer core wired to three
               satellites (chrome, ceramic, light) by thin chrome tubes
 approach      people + AI: a luminous core in a glass ring, three spheres
@@ -22,9 +21,9 @@ import mathutils
 import lib
 
 SHOTS = [
-    {'id': 'svc-landing', 'size': (1600, 1200), 'samples': 128, 'widths': [480, 800, 1200, 1600]},
-    {'id': 'svc-multi', 'size': (1600, 1200), 'samples': 128, 'widths': [480, 800, 1200, 1600]},
-    {'id': 'svc-custom', 'size': (1600, 1200), 'samples': 128, 'widths': [480, 800, 1200, 1600]},
+    {'id': 'svc-landing', 'size': (1600, 1200), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200, 1600]},
+    {'id': 'svc-multi', 'size': (1600, 1200), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200, 1600]},
+    {'id': 'svc-custom', 'size': (1600, 1200), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200, 1600]},
     {'id': 'approach', 'size': (1400, 1400), 'samples': 128,
      'post': {'bg': '#0B0E33', 'bloom': 0.5}, 'widths': [480, 800, 1200, 1400]},
 ]
@@ -226,9 +225,8 @@ def build_multi(shot):
     for i, (name, w, h, t, mat, (x, y)) in enumerate(panels):
         slab(name, w, h, t, corner=0.11, edge=0.035, mat=mat, loc=(x, y, h / 2),
              rot=(0, 0, yaw + math.radians(4 * i)))
-    lib.sphere('link', r=0.16, loc=(-1.12, -0.95, 1.66), mat=lib.chrome('link', roughness=0.06))
     floor()
-    lib.camera(loc=(-1.2, -6.8, 2.1), target=(0.08, 0.1, 0.82), lens=60)
+    lib.camera(loc=(-1.2, -6.8, 2.1), target=(-0.26, 0.1, 0.86), lens=60)
     lib.light_rig(target=(0, 0, 0.9))
 
 
@@ -280,7 +278,7 @@ def build_approach(shot):
         p = mathutils.Euler(orbit_rot).to_matrix() @ mathutils.Vector((R * math.cos(a), R * math.sin(a), 0))
         lib.sphere(f'role{i}', r=0.15, loc=tuple(p), mat=mat)
     lib.camera(loc=(0.0, -6.2, 0.9), target=(0, 0, -0.02), lens=58)
-    lib.area_light((-3.5, -3.0, 4.0), size=6.0, energy=700, color='#C8C2FF', shape='RECTANGLE')
+    lib.area_light((-3.5, -3.0, 4.0), size=6.0, energy=700, color='#C8C2FF', shape='RECTANGLE', size_y=1.0)
     lib.area_light((4.0, 2.5, 1.2), size=4.0, energy=900, color='#9C86FF')
     lib.area_light((-4.0, 3.0, 0.5), size=4.0, energy=900, color='#7B5CFF')
     lib.area_light((0.0, -3.0, -4.0), size=6.0, energy=120, color='#6F78FF')

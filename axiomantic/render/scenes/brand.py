@@ -41,8 +41,8 @@ def build(shot, phase=None):
     lib.camera(loc=(0.4, -5.2, 0.5), target=(0.12, 0, -0.12), lens=58)
     # long soft lilac highlights from above-left, a cool rim from the right,
     # a faint blue bounce from below — the reference's lighting
-    lib.area_light((-3.5, -3.0, 4.0), size=7.0, energy=1500, color='#C8C2FF', shape='RECTANGLE')
-    lib.area_light((4.5, 0.5, 1.5), size=5.0, energy=850, color='#C9C4FF', shape='RECTANGLE')
+    lib.area_light((-3.5, -3.0, 4.0), size=7.0, energy=1500, color='#C8C2FF', shape='RECTANGLE', size_y=1.0)
+    lib.area_light((4.5, 0.5, 1.5), size=5.0, energy=850, color='#C9C4FF', shape='RECTANGLE', size_y=1.0)
     lib.area_light((-4.0, 3.0, 0.5), size=4.0, energy=900, color='#9C86FF')
     lib.area_light((0.0, -3.0, -4.0), size=6.0, energy=140, color='#6F78FF')
     objs = (a, dot, shell, mapping)

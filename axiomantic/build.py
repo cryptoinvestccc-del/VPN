@@ -173,7 +173,8 @@ def header(p, active):
 
 def socials(cls='soc'):
     return f'<ul class="{cls}">' + ''.join(
-        f'<li><a href="{e(href)}" aria-label="{e(name)}" title="{e(name)}">{e(short)}</a></li>'
+        # the name starts with the visible letters (WCAG 2.5.3, label in name)
+        f'<li><a href="{e(href)}" aria-label="{e(short)} — {e(name)}" title="{e(name)}">{e(short)}</a></li>'
         for name, short, href in S['socials']) + '</ul>'
 
 
@@ -884,11 +885,14 @@ def not_found():
     # absolute because the page answers at every depth.
     p = Page('404/', absolute=True)
     body = f'''<section class="phero phero--404">
-<div class="wrap phero__in">
+<div class="wrap phero__in p404">
+<div>
 <p class="eyebrow eyebrow--dark" data-intro="1">{icon("diamond")}Ошибка 404</p>
 <h1 class="h1" data-intro-split>{words("Такой страницы нет")}</h1>
 <p class="phero__lead" data-intro="2">Возможно, её переместили. Начните с главной или посмотрите наши проекты.</p>
 <div class="hero__cta" data-intro="3"><a class="btn btn--white btn--lg" href="/">На главную {icon("arrow")}</a><a class="link-under" href="/projects/">Проекты</a></div>
+</div>
+<div class="p404__art" data-intro-art><div class="hero__media">{picture(p, "hero", sizes="(min-width: 1024px) 40vw, 80vw")}</div></div>
 </div>
 </section>'''
     return render(p, title='Страница не найдена', desc='Страница не найдена.', body=body, index=False)

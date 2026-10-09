@@ -40,6 +40,27 @@
           .to('.hero__feats', { opacity: 0, ease: 'none' }, 0);
       }
 
+      // The letter leans a little towards the pointer: depth on a flat video.
+      const media = $('.hero__media');
+      let unbindPointer = null;
+      if (hero && media) {
+        const toX = gsap.quickTo(media, 'x', { duration: 1.2, ease: 'power3.out' });
+        const toY = gsap.quickTo(media, 'y', { duration: 1.2, ease: 'power3.out' });
+        const onMove = (e) => {
+          const r = hero.getBoundingClientRect();
+          toX(((e.clientX - r.left) / r.width - 0.5) * 24);
+          toY(((e.clientY - r.top) / r.height - 0.5) * 16);
+        };
+        const onLeave = () => { toX(0); toY(0); };
+        hero.addEventListener('pointermove', onMove, { passive: true });
+        hero.addEventListener('pointerleave', onLeave);
+        // matchMedia reverts the tweens on leaving the breakpoint; the listeners are ours
+        unbindPointer = () => {
+          hero.removeEventListener('pointermove', onMove);
+          hero.removeEventListener('pointerleave', onLeave);
+        };
+      }
+
       // The second half of the statement lights up word by word.
       const statement = $('[data-statement-section]');
       if (statement) {
@@ -79,7 +100,10 @@
         });
       }
 
-      return () => statement && statement.classList.remove('is-scrub');
+      return () => {
+        if (statement) statement.classList.remove('is-scrub');
+        if (unbindPointer) unbindPointer();
+      };
     });
 
     // Pictures that load late change heights: let triggers re-measure.

@@ -53,7 +53,8 @@ def finished(shot):
     src = os.path.join(OUT, shot['id'] + '.png')
     p = shot.get('post', {})
     return post.process(src, bg=p.get('bg'), bloom=p.get('bloom', 0), threshold=p.get('threshold', 0.7),
-                        radius=p.get('radius', 0.035), vignette=p.get('vignette', 0))
+                        radius=p.get('radius', 0.035), vignette=p.get('vignette', 0),
+                        clean_floor=p.get('clean_floor', False))
 
 
 def encode_still(shot, manifest):

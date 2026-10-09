@@ -22,10 +22,10 @@ import lib
 V = mathutils.Vector
 
 SHOTS = [
-    {'id': 'why-human', 'size': (1200, 1500), 'samples': 128, 'widths': [480, 800, 1200]},
-    {'id': 'why-fast', 'size': (1200, 1200), 'samples': 128, 'widths': [480, 800, 1200]},
-    {'id': 'why-seo', 'size': (1200, 1200), 'samples': 128, 'widths': [480, 800, 1200]},
-    {'id': 'why-team', 'size': (1200, 1200), 'samples': 128, 'widths': [480, 800, 1200]},
+    {'id': 'why-human', 'size': (1200, 1500), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200]},
+    {'id': 'why-fast', 'size': (1200, 1200), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200]},
+    {'id': 'why-seo', 'size': (1200, 1200), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200]},
+    {'id': 'why-team', 'size': (1200, 1200), 'samples': 128, 'post': {'clean_floor': True}, 'widths': [480, 800, 1200]},
 ]
 
 
@@ -211,7 +211,7 @@ def build_human(shot):
     nib = V((0.62, 0.62, th + 0.012))
     stylus(nib, (0.42, -0.42, 0.80))
     lib.shadow_catcher(z=0.0)
-    lib.camera(loc=(0.6, -6.6, 5.0), target=(0.42, 0.3, 0.8), lens=50)
+    lib.camera(loc=(0.6, -6.6, 5.0), target=(0.3, 0.1, 0.05), lens=56)
     rig()
 
 
@@ -318,7 +318,7 @@ def build_team(shot):
         else:
             glow_core('s-glow', loc, r=rs * 0.62, shell=rs, strength=2.6)
     lib.shadow_catcher(z=0.0)
-    lib.camera(loc=(0.0, -6.2, 4.3), target=(0.0, 0.0, 0.38), lens=64)
+    lib.camera(loc=(0.0, -6.2, 4.3), target=(0.0, 0.0, 0.38), lens=56)
     rig()
 
 

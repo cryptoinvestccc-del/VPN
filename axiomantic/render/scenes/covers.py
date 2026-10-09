@@ -19,9 +19,9 @@ import lib
 
 SHOTS = [
     {'id': 'cover-marketing', 'size': (1600, 1000), 'samples': 128,
-     'post': {'bg': '#ECEAFF'}, 'widths': [480, 800, 1200, 1600]},
+     'post': {'bg': '#ECEAFF', 'clean_floor': True}, 'widths': [480, 800, 1200, 1600]},
     {'id': 'cover-design', 'size': (1600, 1000), 'samples': 128,
-     'post': {'bg': '#E6EEFF'}, 'widths': [480, 800, 1200, 1600]},
+     'post': {'bg': '#E6EEFF', 'clean_floor': True}, 'widths': [480, 800, 1200, 1600]},
     {'id': 'cover-dev', 'size': (1600, 1000), 'samples': 128,
      'post': {'bg': '#0E1240', 'bloom': 0.35}, 'widths': [480, 800, 1200, 1600]},
     {'id': 'cover-ai', 'size': (1600, 1000), 'samples': 128,
@@ -42,11 +42,12 @@ def build_marketing(shot):
             lib.frosted('ring-glass', tint='#D4CEFF', roughness=0.2),
             lib.ceramic('ring-white-2', roughness=0.3, coat=0.6)]
     for i, (R, r) in enumerate([(1.85, 0.13), (1.25, 0.12), (0.7, 0.11)]):
-        lib.torus(f'ring{i}', R=R, r=r, loc=(0, 0, 1.0 + 0.08 * i), rot=tilt, mat=mats[i])
-    lib.sphere('core', r=0.28, loc=(0, 0, 1.24), mat=lib.glow('core', inner='#F6F4FF', outer=lib.VIOLET, strength=3.0))
+        lib.torus(f'ring{i}', R=R, r=r, loc=(0, 0, 1.85 + 0.08 * i), rot=tilt, mat=mats[i])
+    # the whole target floats clear of the floor: the outer ring reaches 1.7 below its centre
+    lib.sphere('core', r=0.28, loc=(0, 0, 2.09), mat=lib.glow('core', inner='#F6F4FF', outer=lib.VIOLET, strength=3.0))
     lib.shadow_catcher(z=0.0)
-    lib.camera(loc=(0.4, -8.4, 3.0), target=(0, 0, 1.15), lens=46)
-    lib.light_rig(target=(0, 0, 1.0))
+    lib.camera(loc=(0.4, -8.6, 3.4), target=(0, 0, 1.68), lens=40)
+    lib.light_rig(target=(0, 0, 1.6))
 
 
 def build_design(shot):
@@ -90,7 +91,7 @@ def build_dev(shot):
             lib.rounded_box(f'b{r}{c}', size=(length, depth, h), radius=0.07, loc=(x + length / 2, y, h / 2), mat=mat)
             x += length + gap
     lib.camera(loc=(1.8, -5.6, 3.6), target=(0.2, 0.25, 0.1), lens=50)
-    lib.area_light((-3.0, -2.0, 5.0), size=6.0, energy=520, color='#C8C2FF', shape='RECTANGLE')
+    lib.area_light((-3.0, -2.0, 5.0), size=6.0, energy=520, color='#C8C2FF', shape='RECTANGLE', size_y=1.0)
     lib.area_light((4.0, 3.0, 2.0), size=4.0, energy=480, color='#9C86FF')
     lib.area_light((0.0, -4.0, 1.0), size=5.0, energy=200, color='#6F78FF')
 
@@ -105,7 +106,7 @@ def build_ai(shot):
     lib.sphere('sat', r=0.14, loc=(1.32, -0.55, 0.32),
                mat=lib.lacquer('sat', color='#100C2C', metallic=0.35, roughness=0.2))
     lib.camera(loc=(0.0, -6.8, 0.8), target=(0.15, 0, 0.0), lens=48)
-    lib.area_light((-3.5, -3.0, 4.0), size=6.0, energy=800, color='#C8C2FF', shape='RECTANGLE')
+    lib.area_light((-3.5, -3.0, 4.0), size=6.0, energy=800, color='#C8C2FF', shape='RECTANGLE', size_y=1.0)
     lib.area_light((4.0, 2.5, 1.2), size=4.0, energy=900, color='#9C86FF')
     lib.area_light((0.0, -3.0, -4.0), size=6.0, energy=160, color='#6F78FF')
 

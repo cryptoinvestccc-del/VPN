@@ -37,10 +37,26 @@ def _blur(lin, radius):
     return out
 
 
-def process(src, dst=None, bg=None, bloom=0.0, threshold=0.7, radius=0.035, vignette=0.0, quality=92):
+def despeckle(a, below=0.6, size=5, guard=9):
+    """Cycles denoises colour but not alpha, so a shadow-catcher floor keeps
+    single dark grains. On the floor (alpha below `below`, and more than a
+    few pixels away from any solid object, so silhouettes and thin wires keep
+    their antialiasing) a grain that stands above its neighbourhood is cut
+    down to the local median."""
+    img = Image.fromarray(np.uint8(np.round(a[..., 0] * 255)), 'L')
+    med = np.asarray(img.filter(ImageFilter.MedianFilter(size)), dtype=np.float32)[..., None] / 255.0
+    solid = Image.fromarray(np.uint8(a[..., 0] > 0.9) * 255, 'L').filter(ImageFilter.MaxFilter(guard))
+    near = (np.asarray(solid) > 0)[..., None]
+    return np.where((a < below) & ~near, np.minimum(a, med), a)
+
+
+def process(src, dst=None, bg=None, bloom=0.0, threshold=0.7, radius=0.035, vignette=0.0, quality=92,
+            clean_floor=False):
     im = Image.open(src).convert('RGBA')
     arr = np.asarray(im, dtype=np.float32) / 255.0
     rgb, a = to_linear(arr[..., :3]), arr[..., 3:4]
+    if clean_floor:
+        a = despeckle(a)
     h, w = a.shape[:2]
     if bg is not None:
         base = to_linear(hex_rgb(bg))[None, None, :]

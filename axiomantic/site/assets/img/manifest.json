@@ -1,4 +1,45 @@
 {
+ "approach": {
+  "w": 1400,
+  "h": 1400,
+  "alpha": false,
+  "avif": [
+   [
+    480,
+    "assets/img/approach-480.avif"
+   ],
+   [
+    800,
+    "assets/img/approach-800.avif"
+   ],
+   [
+    1200,
+    "assets/img/approach-1200.avif"
+   ],
+   [
+    1400,
+    "assets/img/approach-1400.avif"
+   ]
+  ],
+  "webp": [
+   [
+    480,
+    "assets/img/approach-480.webp"
+   ],
+   [
+    800,
+    "assets/img/approach-800.webp"
+   ],
+   [
+    1200,
+    "assets/img/approach-1200.webp"
+   ],
+   [
+    1400,
+    "assets/img/approach-1400.webp"
+   ]
+  ]
+ },
  "hero": {
   "w": 1600,
   "h": 1600,

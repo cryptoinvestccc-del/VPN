@@ -12,7 +12,7 @@ import lib
 SCREENS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.cache', 'screens')
 SLUGS = ['english-school', 'run-app', 'arch-bureau', 'dental-clinic', 'ceramics-shop', 'sport-nutrition']
 
-SHOTS = [{'id': f'case-{slug}', 'slug': slug, 'size': (2000, 1376), 'samples': 128,
+SHOTS = [{'id': f'case-{slug}', 'slug': slug, 'size': (2000, 1376), 'samples': 128, 'post': {'clean_floor': True},
           'widths': [640, 960, 1280, 2000]} for slug in SLUGS]
 
 
@@ -64,7 +64,9 @@ def phone(screen_png, loc, rot):
 def build(shot, phase=None):
     slug = shot['slug']
     lib.reset(samples=shot.get('samples', 256), view='Standard')
-    lib.world('studio_small_03', strength=0.75, rotation=-30, refract=lib.PAGE_LIGHT, refract_mix=0.4)
+    # diffuse: the studio's small lamps would throw long hard shadows across the floor
+    lib.world('studio_small_03', strength=0.75, rotation=-30, refract=lib.PAGE_LIGHT, refract_mix=0.4,
+              diffuse='#FFFFFF', diffuse_strength=0.7)
     laptop(os.path.join(SCREENS, f'{slug}-desktop.png'))
     phone(os.path.join(SCREENS, f'{slug}-phone.png'), loc=(2.05, -0.95, 0.86),
           rot=(math.radians(-8), math.radians(4), math.radians(-14)))

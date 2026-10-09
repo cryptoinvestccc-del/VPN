@@ -23,7 +23,7 @@ SITE = {
     'socials': [
         ('Telegram', 'TG', '#'),
         ('ВКонтакте', 'VK', '#'),
-        ('Behance', 'Bē', '#'),
+        ('Behance', 'Be', '#'),
     ],
     # Where the order forms post. Empty string: the forms only pretend to
     # send, for previews with no server behind them.
