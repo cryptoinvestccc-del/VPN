@@ -40,6 +40,7 @@ func main() {
 	origins := flag.String("origins", "", "comma-separated site origins allowed to post, e.g. https://axiomantic.ru; empty means same host only")
 	trustProxy := flag.Bool("trust-proxy", false, "take the client address from X-Real-IP set by a reverse proxy on loopback")
 	adminPath := flag.String("admin", "", "admin.json with workspaces and users (mode 600); turns on the team panel at /admin/")
+	adminUI := flag.String("admin-ui-dir", "", "serve the panel's files from this folder, re-read on every request (for working on the panel)")
 	flag.Parse()
 
 	logger := log.New(os.Stderr, "", log.LstdFlags)
@@ -57,7 +58,8 @@ func main() {
 
 	srv := &Server{
 		store:      fs,
-		limit:      NewLimiter(10*time.Minute, 5, 60),
+		limit:      NewLimiter(10*time.Minute, 5, 1<<30),
+		ceiling:    NewLimiter(10*time.Minute, 60, 1<<30),
 		origins:    map[string]bool{},
 		trustProxy: *trustProxy,
 		static:     *static,
@@ -72,8 +74,9 @@ func main() {
 		if err != nil {
 			logger.Fatal(err)
 		}
-		// Leads stored before workspaces existed belong to the first one.
-		srv.defaultWS = cfg.Get().Workspaces[0].ID
+		// Leads stored before workspaces existed belong to the default one.
+		// It is fixed for the life of the process: a change needs a restart.
+		srv.defaultWS = cfg.Get().DefaultWorkspace
 		idx := NewIndex(srv.defaultWS)
 		skipped, err := fs.Load(idx.AddRecord, idx.AddEvent)
 		if err != nil {
@@ -83,6 +86,7 @@ func main() {
 			logger.Printf("store: %d damaged lines skipped", skipped)
 		}
 		srv.admin = NewAdmin(cfg, idx, fs, time.Now, logger)
+		srv.admin.uiDir = *adminUI
 		logger.Printf("team panel on /admin/ for %d workspaces", len(cfg.Get().Workspaces))
 	}
 	for _, o := range strings.Split(*origins, ",") {

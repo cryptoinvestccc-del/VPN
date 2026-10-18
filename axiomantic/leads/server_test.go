@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -55,7 +56,7 @@ func newHarness(t *testing.T, tgStatus int) *harness {
 	h.srv = &Server{
 		store:   fs,
 		notify:  notifier,
-		limit:   NewLimiter(10*time.Minute, 5, 60),
+		limit:   NewLimiter(10*time.Minute, 5, 1<<30),
 		origins: map[string]bool{},
 		log:     log.New(h.logs, "", 0),
 		now:     time.Now,
@@ -430,7 +431,7 @@ func TestStoreMustBeOutsideTheSite(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(site, "assets"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{filepath.Join(site, "leads.jsonl"), filepath.Join(site, "assets", "x.jsonl")} {
+	for _, p := range []string{filepath.Join(site, "leads.jsonl"), filepath.Join(site, "assets", "x.jsonl"), filepath.Join(site, "..leads.jsonl")} {
 		if err := checkOutside(p, site); err == nil {
 			t.Fatalf("%s inside the site was accepted", p)
 		}
@@ -490,5 +491,61 @@ func TestLeadTextIsPlainAndComplete(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("text lacks %q:\n%s", want, text)
 		}
+	}
+}
+
+// Junk from many addresses must not use up the ceiling meant for stored
+// leads; valid leads past the ceiling are still refused.
+func TestCeilingCountsOnlyStoredLeads(t *testing.T) {
+	h := newHarness(t, http.StatusOK)
+	// as main.go sets them up
+	h.srv.limit = NewLimiter(10*time.Minute, 5, 1<<30)
+	h.srv.ceiling = NewLimiter(10*time.Minute, 60, 1<<30)
+	for ip := 1; ip <= 12; ip++ {
+		for i := 0; i < 5; i++ {
+			h.post("x", func(r *http.Request) { r.RemoteAddr = fmt.Sprintf("203.0.113.%d:1", ip) })
+		}
+	}
+	if rec := h.post(callLead(), func(r *http.Request) { r.RemoteAddr = "198.51.100.20:1" }); rec.Code != http.StatusOK {
+		t.Fatalf("a real lead after a junk flood: %d", rec.Code)
+	}
+	for ip := 0; ip < 59; ip++ {
+		if rec := h.post(callLead(), func(r *http.Request) { r.RemoteAddr = fmt.Sprintf("192.0.2.%d:1", ip) }); rec.Code != http.StatusOK {
+			t.Fatalf("lead %d: %d", ip, rec.Code)
+		}
+	}
+	if rec := h.post(callLead(), func(r *http.Request) { r.RemoteAddr = "198.51.100.99:1" }); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("61st stored lead: %d", rec.Code)
+	}
+}
+
+// Cleaning old leads out of the file while the service runs (sed -i
+// makes a new file) must not send new leads into the deleted one.
+func TestStoreFollowsAReplacedFile(t *testing.T) {
+	h := newHarness(t, http.StatusOK)
+	h.post(with(callLead(), "name", "Старая"), func(r *http.Request) { r.RemoteAddr = "192.0.2.1:1" })
+	tmp := h.store + ".new"
+	if err := os.WriteFile(tmp, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, h.store); err != nil {
+		t.Fatal(err)
+	}
+	h.post(with(callLead(), "name", "Новая"), func(r *http.Request) { r.RemoteAddr = "192.0.2.2:1" })
+	got := h.stored()
+	if len(got) != 1 || got[0].Lead.Name != "Новая" {
+		t.Fatalf("after replacing the file: %+v", got)
+	}
+}
+
+func TestLimiterRefusalsDoNotGrowTheMap(t *testing.T) {
+	l := NewLimiter(time.Minute, 1, 1)
+	t0 := time.Unix(1_700_000_000, 0)
+	l.Allow("first", t0)
+	for i := 0; i < 1000; i++ {
+		l.Allow(fmt.Sprintf("10.0.%d.%d", i/256, i%256), t0)
+	}
+	if n := len(l.byIP); n != 1 {
+		t.Fatalf("%d entries after 1000 refusals", n)
 	}
 }

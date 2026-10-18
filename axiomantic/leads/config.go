@@ -10,7 +10,9 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	_ "time/tzdata" // workspaces name their zone; a bare server may have no zoneinfo
@@ -51,8 +53,12 @@ type User struct {
 // AdminConfig is admin.json: who may sign in, and to which workspace.
 // It holds password hashes, so it lives outside the site with mode 0600.
 type AdminConfig struct {
-	Workspaces []*Workspace `json:"workspaces"`
-	Users      []*User      `json:"users"`
+	// DefaultWorkspace gets the leads stored before workspaces existed and
+	// the ones posted without an Origin. It is named, never implied by
+	// order, so adding a client first cannot hand them the studio's leads.
+	DefaultWorkspace string       `json:"defaultWorkspace"`
+	Workspaces       []*Workspace `json:"workspaces"`
+	Users            []*User      `json:"users"`
 }
 
 const (
@@ -121,7 +127,28 @@ func normOrigin(s string) (string, error) {
 		strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.Fragment != "" {
 		return "", fmt.Errorf("%q is not an origin like https://example.ru", s)
 	}
+	for _, r := range u.Host {
+		if r > 0x7e {
+			// Browsers send IDN hosts as punycode; a Cyrillic origin here
+			// would never match one.
+			return "", fmt.Errorf("%q: write the domain in punycode, e.g. https://xn--80ak6aa92e.xn--p1ai", s)
+		}
+	}
 	return strings.ToLower(u.Scheme + "://" + u.Host), nil
+}
+
+// label is text shown as a name in the panel: no control characters and
+// no invisible formatting such as bidi overrides that could disguise it.
+func label(s string, lo, hi int) bool {
+	if !between(strings.TrimSpace(s), lo, hi) || !plain(s, false) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.Is(unicode.Cf, r) {
+			return false
+		}
+	}
+	return true
 }
 
 // Validate checks the whole file and fills in what is derived from it.
@@ -140,8 +167,8 @@ func (c *AdminConfig) Validate() error {
 			return fmt.Errorf("admin config: workspace %q twice", w.ID)
 		}
 		ids[w.ID] = true
-		if n := utf8.RuneCountInString(w.Name); n < 1 || n > 60 {
-			return fmt.Errorf("admin config: workspace %q needs a name up to 60 characters", w.ID)
+		if !label(w.Name, 1, 60) {
+			return fmt.Errorf("admin config: workspace %q needs a plain name up to 60 characters", w.ID)
 		}
 		if w.TZ == "" {
 			w.TZ = "Europe/Moscow"
@@ -180,9 +207,15 @@ func (c *AdminConfig) Validate() error {
 			r, _ := utf8.DecodeRuneInString(w.Name)
 			w.Brand.Logo = strings.ToUpper(string(r))
 		}
-		if n := utf8.RuneCountInString(w.Brand.Logo); n > 2 || !plain(w.Brand.Logo, false) {
+		if !label(w.Brand.Logo, 1, 2) || strings.ContainsAny(w.Brand.Logo, "<>&\"' ") {
 			return fmt.Errorf("admin config: workspace %q: logo is one or two letters", w.ID)
 		}
+	}
+	if c.DefaultWorkspace == "" && len(c.Workspaces) == 1 {
+		c.DefaultWorkspace = c.Workspaces[0].ID
+	}
+	if !ids[c.DefaultWorkspace] {
+		return errors.New("admin config: defaultWorkspace must name the workspace that gets old and Origin-less leads")
 	}
 	uids := map[string]bool{}
 	logins := map[string]bool{}
@@ -199,7 +232,7 @@ func (c *AdminConfig) Validate() error {
 			return fmt.Errorf("admin config: login %q twice", u.Login)
 		}
 		logins[l] = true
-		if !between(strings.TrimSpace(u.Name), 1, 80) || !plain(u.Name, false) {
+		if !label(u.Name, 1, 80) {
 			return fmt.Errorf("admin config: user %s needs a name up to 80 characters", u.ID)
 		}
 		if roleRank[u.Role] == 0 {
@@ -284,6 +317,16 @@ func writeFileAtomic(path string, data []byte) error {
 	if err := tmp.Chmod(0o600); err != nil {
 		tmp.Close()
 		return err
+	}
+	// Keep the owner of the file being replaced: the service reads it as
+	// its own user, and root running the console must not take it away.
+	if st, err := os.Stat(path); err == nil {
+		if sys, ok := st.Sys().(*syscall.Stat_t); ok && int(sys.Uid) != os.Getuid() {
+			if err := tmp.Chown(int(sys.Uid), int(sys.Gid)); err != nil {
+				tmp.Close()
+				return fmt.Errorf("cannot keep the owner of %s: %w", path, err)
+			}
+		}
 	}
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -73,7 +74,7 @@ var testUsers = []struct{ login, name, role, ws, pw string }{
 
 func testConfig(t *testing.T) (*AdminConfig, map[string]string) {
 	t.Helper()
-	c := &AdminConfig{Workspaces: []*Workspace{
+	c := &AdminConfig{DefaultWorkspace: "alpha", Workspaces: []*Workspace{
 		{ID: "alpha", Name: "Альфа", Origins: []string{"https://alpha.example"}, SiteURL: "https://alpha.example"},
 		{ID: "beta", Name: "Бета", Origins: []string{"https://beta.example"}},
 	}}
@@ -335,24 +336,46 @@ func TestAdminLoginRejectsBadCredentialsUniformly(t *testing.T) {
 
 func TestAdminLoginRateLimits(t *testing.T) {
 	h := newAdminHarness(t)
-	for i := 0; i < 10; i++ {
+	// Five failures for one login from one address stop that pair…
+	for i := 0; i < 5; i++ {
 		h.loginReq("owner@alpha.example", "nope-nope-nope", "198.51.100.20")
 	}
 	rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.20")
 	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
-		t.Fatalf("11th try from one address: %d", rec.Code)
+		t.Fatalf("6th try for one login from one address: %d", rec.Code)
 	}
-	// The same login from elsewhere is now limited too…
-	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.21"); rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("login limit across addresses: %d", rec.Code)
+	// …but the person can still sign in from their own address,
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.21"); rec.Code != http.StatusOK {
+		t.Fatalf("same login from another address: %d", rec.Code)
 	}
-	// …but other people are not.
-	if rec := h.loginReq("manager@alpha.example", "alpha-manager-pass", "198.51.100.22"); rec.Code != http.StatusOK {
-		t.Fatalf("another login: %d", rec.Code)
+	// and the address can still be used for other logins until it has
+	// made ten attempts in all (six so far, the blocked one included).
+	for i := 0; i < 4; i++ {
+		h.loginReq("nobody@alpha.example", "x-x-x-x-x-x", "198.51.100.20")
+	}
+	if rec := h.loginReq("manager@alpha.example", "alpha-manager-pass", "198.51.100.20"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("11th attempt from one address: %d", rec.Code)
 	}
 	h.clock.Add(16 * time.Minute)
 	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.20"); rec.Code != http.StatusOK {
 		t.Fatalf("after the window: %d", rec.Code)
+	}
+}
+
+// Nobody can lock the panel by flooding it: junk sign-ins from many
+// addresses, or failures aimed at one person's login, leave a correct
+// sign-in from elsewhere working.
+func TestAdminLoginFloodCannotLockOthersOut(t *testing.T) {
+	h := newAdminHarness(t)
+	for ip := 0; ip < 20; ip++ {
+		for i := 0; i < 10; i++ {
+			h.loginReq(fmt.Sprintf("junk%d@x.example", i), "junk-junk-junk", fmt.Sprintf("192.0.2.%d", ip))
+		}
+		// a determined guesser spreads failures for the owner's login too
+		h.loginReq("owner@alpha.example", "guess-guess", fmt.Sprintf("203.0.113.%d", ip))
+	}
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.99"); rec.Code != http.StatusOK {
+		t.Fatalf("owner locked out by a flood: %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -832,6 +855,7 @@ func TestAdminListFiltersAndPaging(t *testing.T) {
 func TestAdminExportCSV(t *testing.T) {
 	h := newAdminHarness(t)
 	h.postLead("https://alpha.example", with(callLead(), "name", "=HYPERLINK(\"http://evil\")"))
+	h.postLead("https://alpha.example", with(callLead(), "name", "x;=1+1, y"))
 	h.postLead("https://beta.example", with(callLead(), "name", "Бетослав"))
 	rec := h.login("owner@alpha.example").do("GET", "/api/admin/export.csv", nil)
 	body := rec.Body.String()
@@ -839,8 +863,16 @@ func TestAdminExportCSV(t *testing.T) {
 		!strings.HasPrefix(rec.Header().Get("Content-Disposition"), "attachment;") {
 		t.Fatalf("export: %d %q", rec.Code, rec.Header())
 	}
-	if !strings.Contains(body, `'=HYPERLINK`) || strings.Contains(body, ",=HYPERLINK") || strings.Contains(body, `,"=HYPERLINK`) {
+	if !strings.Contains(body, `"'=HYPERLINK(""http://evil"")"`) {
 		t.Fatalf("formula not neutralised: %s", body)
+	}
+	if !strings.Contains(body, `"x;=1+1, y"`) {
+		t.Fatalf("a field with a separator inside is not one quoted cell: %s", body)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(body), "\r\n") {
+		if !strings.HasPrefix(strings.TrimPrefix(line, "\xEF\xBB\xBF"), `"`) || !strings.HasSuffix(line, `"`) {
+			t.Fatalf("unquoted field in %q", line)
+		}
 	}
 	if strings.Contains(body, "Бетослав") {
 		t.Fatal("export includes another workspace")
@@ -853,7 +885,7 @@ func TestLeadGoesToTheWorkspaceOfItsSite(t *testing.T) {
 	h := newAdminHarness(t)
 	a := h.postLead("https://alpha.example", callLead())
 	b := h.postLead("https://beta.example", callLead())
-	n := h.postLead("", callLead()) // not a browser: the first workspace
+	n := h.postLead("", callLead()) // not a browser: the default workspace
 	if _, ok := h.srv.admin.index.Get("alpha", a); !ok {
 		t.Fatal("alpha's lead not in alpha")
 	}
@@ -861,14 +893,28 @@ func TestLeadGoesToTheWorkspaceOfItsSite(t *testing.T) {
 		t.Fatal("beta's lead not in beta")
 	}
 	if _, ok := h.srv.admin.index.Get("alpha", n); !ok {
-		t.Fatal("origin-less lead not in the first workspace")
+		t.Fatal("origin-less lead not in the default workspace")
 	}
-	raw, _ := json.Marshal(callLead())
-	req := httptest.NewRequest(http.MethodPost, "https://api.example/api/lead", bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", "https://evil.example")
-	if rec := h.serve(req); rec.Code != http.StatusForbidden {
-		t.Fatalf("unknown origin: %d", rec.Code)
+	post := func(origin, host string) int {
+		raw, _ := json.Marshal(callLead())
+		req := httptest.NewRequest(http.MethodPost, "https://"+host+"/api/lead", bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", origin)
+		return h.serve(req).Code
+	}
+	// Unlisted origins are refused — including a variant of a client's
+	// own site, which must not fall back to the studio's workspace.
+	for _, o := range []string{"https://evil.example", "https://www.beta.example", "http://beta.example", "https://beta.example:8443"} {
+		host := strings.TrimPrefix(strings.TrimPrefix(o, "https://"), "http://")
+		if code := post(o, host); code != http.StatusForbidden {
+			t.Fatalf("unlisted origin %s (same host): %d", o, code)
+		}
+	}
+	// An origin given with -origins means the default workspace.
+	h.srv.origins = map[string]bool{"https://old-studio.example": true}
+	before := len(h.srv.admin.index.All("alpha"))
+	if code := post("https://old-studio.example", "old-studio.example"); code != http.StatusOK || len(h.srv.admin.index.All("alpha")) != before+1 {
+		t.Fatalf("-origins entry: %d", code)
 	}
 	// Notifications: alpha uses the default chat with a panel link; beta
 	// has no chat of its own, so its visitors' data stays out of the
@@ -876,7 +922,8 @@ func TestLeadGoesToTheWorkspaceOfItsSite(t *testing.T) {
 	h.tg.mu.Lock()
 	sent := append([]sentMsg(nil), h.tg.sent...)
 	h.tg.mu.Unlock()
-	if len(sent) != 2 || sent[0].chat != "" || sent[1].chat != "" {
+	// a, n and the -origins lead went to alpha; beta's lead to nobody
+	if len(sent) != 3 || sent[0].chat != "" || sent[1].chat != "" || !strings.Contains(sent[1].text, n) {
 		t.Fatalf("sent %+v", sent)
 	}
 	if !strings.Contains(sent[0].text, "https://alpha.example/admin/#/leads/"+a) {
@@ -960,6 +1007,12 @@ func TestAdminConfigRefusesLooseModeAndBadValues(t *testing.T) {
 		t.Fatal("a world-readable config was accepted")
 	}
 	bad := []func(c *AdminConfig){
+		func(c *AdminConfig) { c.DefaultWorkspace = "" },
+		func(c *AdminConfig) { c.DefaultWorkspace = "gamma" },
+		func(c *AdminConfig) { c.Workspaces[1].Origins = []string{"https://клиент.рф"} },
+		func(c *AdminConfig) { c.Workspaces[0].Name = "Альфа\u202eатеБ" },
+		func(c *AdminConfig) { c.Users[0].Name = "Анна\u200f" },
+		func(c *AdminConfig) { c.Workspaces[0].Brand.Logo = "<b" },
 		func(c *AdminConfig) { c.Workspaces[1].Origins = []string{"https://alpha.example"} },
 		func(c *AdminConfig) { c.Workspaces[0].Brand.Accent = "red; background:url(x)" },
 		func(c *AdminConfig) { c.Users[0].Role = "root" },
@@ -1032,5 +1085,97 @@ func TestCheckPasswordRejectsDamagedHashes(t *testing.T) {
 		if CheckPassword(h, "correct horse battery") {
 			t.Fatalf("damaged hash %q accepted", h)
 		}
+	}
+}
+
+// ------------------------------------------------------------- store robustness
+
+// A write cut short by a crash leaves half a line. The next lead must not
+// be glued onto it (and so lost from the panel and out of Erase's reach).
+func TestStoreSurvivesACutWrite(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "leads.jsonl")
+	good, _ := json.Marshal(Record{ID: "20261017-aaaaaaaaaa", Time: time.Now(), WS: "alpha", Lead: Lead{Name: "Первая"}})
+	if err := os.WriteFile(p, append(append(good, '\n'), []byte(`{"id":"20261017-bbbbbbbbbb","lead":{"name":"Обры`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := OpenFileStore(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fs.Close()
+	if err := fs.Append(Record{ID: "20261017-cccccccccc", Time: time.Now(), WS: "alpha", Lead: Lead{Name: "Третья"}}); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	skipped, err := fs.Load(func(r Record) { names = append(names, r.Lead.Name) }, func(Event) {})
+	if err != nil || skipped != 1 || strings.Join(names, ",") != "Первая,Третья" {
+		t.Fatalf("loaded %v, skipped %d, err %v", names, skipped, err)
+	}
+}
+
+// A damaged line longer than any record neither stops the start nor
+// breaks erasing; it is not kept by an erase, since it may hold
+// personal data nobody can address.
+func TestStoreSkipsOverlongDamage(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "leads.jsonl")
+	rec := Record{ID: "20261017-aaaaaaaaaa", Time: time.Now(), WS: "alpha", Lead: Lead{Name: "Стереть"}}
+	good, _ := json.Marshal(rec)
+	junk := bytes.Repeat([]byte("x"), maxLine+10)
+	data := append(append(append(append(good, '\n'), junk...), '\n'), []byte("{\"broken\n")...)
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := OpenFileStore(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fs.Close()
+	n := 0
+	skipped, err := fs.Load(func(Record) { n++ }, func(Event) {})
+	if err != nil || n != 1 || skipped != 2 {
+		t.Fatalf("records %d skipped %d err %v", n, skipped, err)
+	}
+	ev := Event{Ev: evErase, ID: newEventID(), LeadID: rec.ID, WS: "alpha", Time: time.Now(), By: "u_000000000001"}
+	if err := fs.Erase("alpha", "alpha", rec.ID, ev); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(p)
+	if bytes.Contains(after, []byte("Стереть")) || bytes.Contains(after, junk[:1000]) || len(after) > 4096 {
+		t.Fatalf("after erase: %d bytes", len(after))
+	}
+	if !bytes.Contains(after, []byte("{\"broken")) {
+		t.Fatal("a short damaged line was dropped")
+	}
+}
+
+// Without the panel, leads carry no workspace, so turning the panel on
+// later files them under the default workspace instead of orphaning them.
+func TestLeadsWithoutPanelCarryNoWorkspace(t *testing.T) {
+	h := newHarness(t, http.StatusOK)
+	h.post(callLead())
+	if got := h.stored(); len(got) != 1 || got[0].WS != "" {
+		t.Fatalf("stored %+v", got)
+	}
+}
+
+func TestSavingConfigKeepsItsOwner(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("needs root to hand the file to another user")
+	}
+	p := filepath.Join(t.TempDir(), "admin.json")
+	cfg, _ := testConfig(t)
+	if err := SaveAdminConfig(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(p, 65534, 65534); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Users[0].Name = "Новое Имя"
+	if err := SaveAdminConfig(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(p)
+	if sys := st.Sys().(*syscall.Stat_t); sys.Uid != 65534 || sys.Gid != 65534 || st.Mode().Perm() != 0o600 {
+		t.Fatalf("owner %d:%d mode %v", sys.Uid, sys.Gid, st.Mode().Perm())
 	}
 }

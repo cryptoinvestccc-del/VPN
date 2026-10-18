@@ -17,7 +17,7 @@ import (
 const adminUsage = `Team panel setup. admin.json holds password hashes: keep it mode 600, outside the site.
 
   axiomantic-leads admin workspace set -config FILE -id ID -name NAME [-origins URL,URL] [-site URL]
-                                       [-tz Europe/Moscow] [-accent #3D4BF0] [-logo А] [-telegram-chat ID]
+                                       [-tz Europe/Moscow] [-accent #3D4BF0] [-logo А] [-telegram-chat ID] [-default]
   axiomantic-leads admin user add      -config FILE -workspace ID -login LOGIN -name NAME -role owner|manager|viewer [-password-stdin]
   axiomantic-leads admin user passwd   -config FILE -login LOGIN [-password-stdin]
   axiomantic-leads admin user disable  -config FILE -login LOGIN
@@ -30,6 +30,11 @@ Without -password-stdin a strong password is generated and printed once.
 Passwords are never taken from flags: other users of the host can read
 command lines in the process list.
 `
+
+// appliesNote says exactly when a change reaches the panel: the server
+// rereads the file it was started with when that file changes.
+const appliesNote = "A panel started with -admin pointing at this file applies it within a few seconds and ends\n" +
+	"the user's open sessions. A panel reading another copy of the file needs a restart.\n"
 
 // adminCLI runs "axiomantic-leads admin …" and returns the exit code.
 func adminCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -83,6 +88,7 @@ func cliWorkspaceSet(args []string, out io.Writer) error {
 	accent := fs.String("accent", "", "brand colour like #3D4BF0")
 	logo := fs.String("logo", "", "one or two letters for the logo tile")
 	chat := fs.String("telegram-chat", "", "Telegram chat id for this workspace's leads")
+	def := fs.Bool("default", false, "make this the default workspace (old and Origin-less leads go there)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -109,6 +115,9 @@ func cliWorkspaceSet(args []string, out io.Writer) error {
 	set(&w.Brand.Accent, *accent)
 	set(&w.Brand.Logo, *logo)
 	set(&w.TelegramChat, *chat)
+	if *def || c.DefaultWorkspace == "" {
+		c.DefaultWorkspace = w.ID
+	}
 	if *origins != "" {
 		w.Origins = nil
 		for _, o := range strings.Split(*origins, ",") {
@@ -120,7 +129,7 @@ func cliWorkspaceSet(args []string, out io.Writer) error {
 	if err := SaveAdminConfig(*path, c); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "workspace %s saved\n", w.ID)
+	fmt.Fprintf(out, "workspace %s saved (default workspace: %s)\n", w.ID, c.DefaultWorkspace)
 	return nil
 }
 
@@ -214,7 +223,7 @@ func cliUser(cmd string, args []string, stdin io.Reader, out io.Writer) error {
 		if err := SaveAdminConfig(*path, c); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "password of %s changed; their open sessions end\n", u.Login)
+		fmt.Fprintf(out, "password of %s changed\n%s", u.Login, appliesNote)
 		if gen {
 			fmt.Fprintf(out, "password (shown once, pass it on privately): %s\n", pw)
 		}
@@ -227,7 +236,7 @@ func cliUser(cmd string, args []string, stdin io.Reader, out io.Writer) error {
 		if err := SaveAdminConfig(*path, c); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "user %s %sd\n", u.Login, cmd)
+		fmt.Fprintf(out, "user %s %sd\n%s", u.Login, cmd, appliesNote)
 		return nil
 	case "remove":
 		if u == nil {
@@ -243,7 +252,7 @@ func cliUser(cmd string, args []string, stdin io.Reader, out io.Writer) error {
 		if err := SaveAdminConfig(*path, c); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "user %s removed\n", u.Login)
+		fmt.Fprintf(out, "user %s removed\n%s", u.Login, appliesNote)
 		return nil
 	}
 	return fmt.Errorf("unknown command «user %s»", cmd)

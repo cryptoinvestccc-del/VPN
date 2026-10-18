@@ -38,7 +38,8 @@ type Sender interface {
 type Server struct {
 	store      *FileStore
 	notify     Sender
-	limit      *Limiter
+	limit      *Limiter // attempts per address
+	ceiling    *Limiter // stored leads for everyone together (key "all"); nil means none
 	origins    map[string]bool
 	trustProxy bool
 	static     string
@@ -65,19 +66,19 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) workspaceID() string {
-	if s.defaultWS == "" {
-		return "main"
-	}
-	return s.defaultWS
-}
+// workspaceID is the default workspace: leads stored before workspaces
+// existed and leads posted without an Origin belong to it.
+func (s *Server) workspaceID() string { return s.defaultWS }
 
 // chatFor picks the Telegram chat for a workspace's leads: its own chat,
-// or the default chat for the first workspace only — a client's leads
+// or the default chat for the default workspace only — a client's leads
 // never land in the studio's chat by accident. "-" means none.
 func (s *Server) chatFor(w *Workspace) string {
 	if w == nil {
-		return ""
+		if s.admin == nil {
+			return ""
+		}
+		return "-"
 	}
 	if w.TelegramChat != "" {
 		return w.TelegramChat
@@ -88,25 +89,29 @@ func (s *Server) chatFor(w *Workspace) string {
 	return "-"
 }
 
-// leadWorkspace decides whose site a lead came from. A browser's Origin
-// picks the workspace that lists it; otherwise the old rules apply (the
-// -origins list, or the same host) and the lead goes to the first one.
+// leadWorkspace decides whose site a lead came from. With the panel on,
+// a browser's Origin must be listed by a workspace (or in -origins, which
+// means the default one) — there is no same-host guess, so a client's
+// site reached under an unlisted name is refused rather than filed under
+// the studio. A request without Origin is not a browser form and goes to
+// the default workspace. Without the panel the old rules stand and leads
+// carry no workspace at all.
 func (s *Server) leadWorkspace(r *http.Request) (*Workspace, string, bool) {
-	if s.admin != nil {
-		if o := r.Header.Get("Origin"); o != "" {
-			if w := s.admin.cfg.Get().WorkspaceForOrigin(o); w != nil {
-				return w, w.ID, true
-			}
-		}
+	if s.admin == nil {
+		return nil, "", s.originAllowed(r)
 	}
-	if !s.originAllowed(r) {
-		return nil, "", false
+	cfg := s.admin.cfg.Get()
+	o := r.Header.Get("Origin")
+	if o == "" {
+		return cfg.Workspace(s.workspaceID()), s.workspaceID(), true
 	}
-	var w *Workspace
-	if s.admin != nil {
-		w = s.admin.cfg.Get().Workspace(s.workspaceID())
+	if w := cfg.WorkspaceForOrigin(o); w != nil {
+		return w, w.ID, true
 	}
-	return w, s.workspaceID(), true
+	if s.origins[o] {
+		return cfg.Workspace(s.workspaceID()), s.workspaceID(), true
+	}
+	return nil, "", false
 }
 
 // Wait blocks until notifications already in flight have finished.
@@ -177,6 +182,18 @@ func (s *Server) handleLead(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, reply{Field: field, Error: "invalid"})
 		return
 	}
+	// The ceiling for everyone together counts only leads about to be
+	// stored: junk from many addresses cannot use it up and shut the form
+	// for real visitors, while a flood of valid-looking leads still stops
+	// before it fills the chat.
+	if s.ceiling != nil {
+		if over, retry := s.ceiling.Over("all", s.now()); over {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+			writeJSON(w, http.StatusTooManyRequests, reply{Error: "rate"})
+			return
+		}
+		s.ceiling.Hit("all", s.now())
+	}
 
 	rec := Record{ID: s.newID(), Time: s.now().UTC(), IP: ip, WS: wsID, Lead: l}
 	if err := s.store.Append(rec); err != nil {
@@ -187,8 +204,10 @@ func (s *Server) handleLead(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.admin != nil {
 		s.admin.index.AddRecord(rec)
+		s.log.Printf("lead %s stored (%s/%s/%s)", rec.ID, wsID, l.Source, l.Mode)
+	} else {
+		s.log.Printf("lead %s stored (%s/%s)", rec.ID, l.Source, l.Mode)
 	}
-	s.log.Printf("lead %s stored (%s/%s/%s)", rec.ID, wsID, l.Source, l.Mode)
 
 	chat := s.chatFor(ws)
 	if s.notify != nil && chat != "-" {

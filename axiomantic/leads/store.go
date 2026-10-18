@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -54,11 +54,10 @@ const (
 type FileStore struct {
 	mu   sync.Mutex
 	path string
-	f    *os.File
 }
 
-// OpenFileStore opens (or creates) the file with mode 0600 and tightens
-// the mode of a file that already existed with looser permissions.
+// OpenFileStore creates the file with mode 0600 (or tightens the mode of
+// one that existed with looser permissions) and checks it can be written.
 func OpenFileStore(path string) (*FileStore, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("store: %w", err)
@@ -67,9 +66,17 @@ func OpenFileStore(path string) (*FileStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FileStore{path: path, f: f}, nil
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+	return &FileStore{path: path}, nil
 }
 
+// openAppend opens the file for one append. The file is opened anew for
+// every record rather than kept open: if someone replaces it (cleaning out
+// old leads with sed -i, say), new leads go into the file that is there
+// now, never into a deleted one. A last line cut short by a crash is
+// finished first, so the fragment cannot swallow the next record.
 func openAppend(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 	if err != nil {
@@ -79,7 +86,33 @@ func openAppend(path string) (*os.File, error) {
 		f.Close()
 		return nil, fmt.Errorf("store: %w", err)
 	}
+	if err := endLine(path, f); err != nil {
+		f.Close()
+		return nil, err
+	}
 	return f, nil
+}
+
+func endLine(path string, f *os.File) error {
+	r, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+	defer r.Close()
+	st, err := r.Stat()
+	if err != nil || st.Size() == 0 {
+		return err
+	}
+	last := make([]byte, 1)
+	if _, err := r.ReadAt(last, st.Size()-1); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+	if last[0] != '\n' {
+		if _, err := f.Write([]byte{'\n'}); err != nil {
+			return fmt.Errorf("store: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *FileStore) Append(r Record) error { return s.appendLine(r) }
@@ -94,17 +127,29 @@ func (s *FileStore) appendLine(v any) error {
 	line = append(line, '\n')
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := s.f.Write(line); err != nil {
+	f, err := openAppend(s.path)
+	if err != nil {
 		return err
 	}
-	return s.f.Sync()
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(line); err != nil {
+		// A short write (a full disk) must not leave half a line behind
+		// for the next record to be glued to.
+		_ = f.Truncate(st.Size())
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
-func (s *FileStore) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.f.Close()
-}
+// Close is kept for callers; the store holds no open file between writes.
+func (s *FileStore) Close() error { return nil }
 
 // storeLine tells a lead from an event: only events have "ev".
 type storeLine struct {
@@ -124,10 +169,20 @@ func (s *FileStore) Load(onRecord func(Record), onEvent func(Event)) (skipped in
 		return 0, fmt.Errorf("store: %w", err)
 	}
 	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), maxLine)
-	for sc.Scan() {
-		raw := bytes.TrimSpace(sc.Bytes())
+	br := bufio.NewReaderSize(f, 64<<10)
+	for {
+		line, long, err := readLine(br)
+		if err != nil {
+			return skipped, fmt.Errorf("store: %w", err)
+		}
+		if line == nil && !long {
+			break
+		}
+		raw := bytes.TrimSpace(line)
+		if long {
+			skipped++
+			continue
+		}
 		if len(raw) == 0 {
 			continue
 		}
@@ -152,10 +207,43 @@ func (s *FileStore) Load(onRecord func(Record), onEvent func(Event)) (skipped in
 			onEvent(e)
 		}
 	}
-	if err := sc.Err(); err != nil {
-		return skipped, fmt.Errorf("store: %w", err)
-	}
 	return skipped, nil
+}
+
+// readLine returns the next line without its newline. A line longer than
+// maxLine is never held in memory: it is read through and reported as
+// long (no valid record comes close; only damage makes one). At the end
+// of the file it returns nil, false, nil.
+func readLine(br *bufio.Reader) (line []byte, long bool, err error) {
+	for {
+		frag, err := br.ReadSlice('\n')
+		if !long {
+			if len(line)+len(frag) > maxLine {
+				long, line = true, nil
+			} else {
+				line = append(line, frag...)
+			}
+		}
+		switch {
+		case err == nil:
+			if long {
+				return nil, true, nil
+			}
+			return bytes.TrimSuffix(line, []byte{'\n'}), false, nil
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case errors.Is(err, io.EOF):
+			if long {
+				return nil, true, nil
+			}
+			if len(line) == 0 {
+				return nil, false, nil
+			}
+			return line, false, nil
+		default:
+			return nil, false, err
+		}
+	}
 }
 
 // Erase wipes one lead's personal data from the file itself — the name,
@@ -182,8 +270,7 @@ func (s *FileStore) Erase(ws, defaultWS, leadID string, ev Event) error {
 		return fmt.Errorf("store: %w", err)
 	}
 	w := bufio.NewWriter(tmp)
-	sc := bufio.NewScanner(in)
-	sc.Buffer(make([]byte, 64<<10), maxLine)
+	br := bufio.NewReaderSize(in, 64<<10)
 	found := false
 	inWS := func(lineWS string) bool {
 		if lineWS == "" {
@@ -191,8 +278,18 @@ func (s *FileStore) Erase(ws, defaultWS, leadID string, ev Event) error {
 		}
 		return lineWS == ws
 	}
-	for sc.Scan() {
-		line := sc.Bytes()
+	for {
+		line, long, err := readLine(br)
+		if err != nil {
+			tmp.Close()
+			return fmt.Errorf("store: %w", err)
+		}
+		if long {
+			continue // damage, not a record; it may hold personal data, so it goes
+		}
+		if line == nil {
+			break
+		}
 		out := line
 		var kind storeLine
 		if json.Unmarshal(line, &kind) == nil {
@@ -221,10 +318,6 @@ func (s *FileStore) Erase(ws, defaultWS, leadID string, ev Event) error {
 		}
 		w.Write(out)
 		w.WriteByte('\n')
-	}
-	if err := sc.Err(); err != nil {
-		tmp.Close()
-		return fmt.Errorf("store: %w", err)
 	}
 	if !found {
 		tmp.Close()
@@ -255,13 +348,6 @@ func (s *FileStore) Erase(ws, defaultWS, leadID string, ev Event) error {
 		_ = d.Sync()
 		d.Close()
 	}
-	// The old handle points at the replaced file; appends must go to the new one.
-	nf, err := openAppend(s.path)
-	if err != nil {
-		return err
-	}
-	s.f.Close()
-	s.f = nf
 	return nil
 }
 
@@ -304,7 +390,10 @@ func checkOutside(store, static string) error {
 	if err != nil {
 		return err
 	}
-	if rel == "." || !strings.HasPrefix(rel, "..") {
+	// IsLocal is true for "x" and for "..leads.jsonl" — a file in the
+	// folder whose name merely starts with two dots — and false for
+	// "../x"; a prefix test would let the second one through.
+	if rel == "." || filepath.IsLocal(rel) {
 		return errors.New("the lead store must be outside the published folder")
 	}
 	return nil

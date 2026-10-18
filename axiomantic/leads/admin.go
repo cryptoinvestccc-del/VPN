@@ -13,6 +13,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"sort"
@@ -47,11 +48,12 @@ type Admin struct {
 	sessions  *Sessions
 	index     *Index
 	store     *FileStore
-	loginIP   *Limiter
-	loginName *Limiter
+	loginIP   *Limiter // every sign-in attempt, per address
+	loginFail *Limiter // failed sign-ins, per login and address
 	hashSlots chan struct{}
 	clientIP  func(*http.Request) string
 	hasNotify func(*Workspace) bool
+	uiDir     string // serve the panel from this folder instead of the binary (development)
 	now       func() time.Time
 	log       *log.Logger
 
@@ -67,8 +69,8 @@ func NewAdmin(cfg *ConfigSource, idx *Index, store *FileStore, now func() time.T
 		sessions:  NewSessions(sessionIdle, sessionMaxAge),
 		index:     idx,
 		store:     store,
-		loginIP:   NewLimiter(15*time.Minute, 10, 200),
-		loginName: NewLimiter(15*time.Minute, 10, 1<<30),
+		loginIP:   NewLimiter(15*time.Minute, 10, 1<<30),
+		loginFail: NewLimiter(15*time.Minute, 5, 1<<30),
 		hashSlots: make(chan struct{}, 2),
 		now:       now,
 		log:       logger,
@@ -238,14 +240,29 @@ func (a *Admin) handleLogin(w http.ResponseWriter, r *http.Request) {
 		adminJSON(w, http.StatusBadRequest, apiError{Error: "invalid", Field: "password"})
 		return
 	}
-	if ok, retry := a.loginName.Allow(login, now); !ok {
+	// Failures count per login *and* address: guessing one person's
+	// password from one place stops after five tries, while nobody can
+	// lock that person out from somewhere else. There is no ceiling for
+	// everyone together — that would let anyone lock the whole panel —
+	// the two hashing slots below are what bounds the load.
+	failKey := login + "\x00" + ip
+	if over, retry := a.loginFail.Over(failKey, now); over {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
 		adminJSON(w, http.StatusTooManyRequests, apiError{Error: "rate"})
 		return
 	}
 	// Key derivation is deliberately slow; two at a time keeps a burst of
-	// sign-ins from eating every core.
-	a.hashSlots <- struct{}{}
+	// sign-ins from eating every core, and a caller waits at most a few
+	// seconds for a slot.
+	select {
+	case a.hashSlots <- struct{}{}:
+	case <-time.After(5 * time.Second):
+		w.Header().Set("Retry-After", "5")
+		adminJSON(w, http.StatusServiceUnavailable, apiError{Error: "busy"})
+		return
+	case <-r.Context().Done():
+		return
+	}
 	u := a.cfg.Get().UserByLogin(login)
 	var good bool
 	if u == nil || u.Disabled {
@@ -255,6 +272,7 @@ func (a *Admin) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	<-a.hashSlots
 	if !good {
+		a.loginFail.Hit(failKey, now)
 		// No login in the log: a password typed into the login field
 		// would otherwise end up there.
 		a.log.Printf("admin: failed sign-in from %s", ip)
@@ -969,31 +987,40 @@ type uiFile struct {
 // uiHandler serves the embedded panel. Files are revalidated by ETag on
 // every load, so a new binary is picked up at once without stale scripts.
 func (a *Admin) uiHandler() http.Handler {
-	files := map[string]uiFile{}
-	sub, err := fs.Sub(adminFiles, "admin")
-	if err == nil {
-		_ = fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+	load := func(src fs.FS) map[string]uiFile {
+		files := map[string]uiFile{}
+		_ = fs.WalkDir(src, ".", func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
-				return nil
-			}
-			data, err := fs.ReadFile(sub, p)
-			if err != nil {
 				return nil
 			}
 			ct := extTypes[path.Ext(p)]
 			if ct == "" {
 				return nil // only known kinds of file are published
 			}
+			data, err := fs.ReadFile(src, p)
+			if err != nil {
+				return nil
+			}
 			sum := sha256.Sum256(data)
 			files[p] = uiFile{data: data, ctype: ct, etag: `"` + hex.EncodeToString(sum[:12]) + `"`}
 			return nil
 		})
+		return files
+	}
+	var embedded map[string]uiFile
+	if sub, err := fs.Sub(adminFiles, "admin"); err == nil {
+		embedded = load(sub)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setAdminPageHeaders(w)
 		p := strings.TrimPrefix(r.URL.Path, "/admin/")
 		if p == "" {
 			p = "index.html"
+		}
+		files := embedded
+		if a.uiDir != "" {
+			// Working on the panel: read the files as they are now.
+			files = load(os.DirFS(a.uiDir))
 		}
 		f, ok := files[p]
 		if !ok {
