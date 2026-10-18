@@ -1,0 +1,360 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	_ "time/tzdata" // workspaces name their zone; a bare server may have no zoneinfo
+)
+
+// Brand is what makes a client's copy of the panel look like theirs.
+type Brand struct {
+	Accent string `json:"accent"`
+	Logo   string `json:"logo"`
+}
+
+// Workspace is one site whose leads one team works on: the studio itself,
+// or a client the studio hosted a site for. Leads, users and every admin
+// request belong to exactly one workspace.
+type Workspace struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	TZ           string   `json:"tz"`
+	Origins      []string `json:"origins"`
+	SiteURL      string   `json:"siteURL,omitempty"`
+	TelegramChat string   `json:"telegramChat,omitempty"`
+	Brand        Brand    `json:"brand"`
+
+	loc *time.Location
+}
+
+// User is a person allowed into one workspace's panel.
+type User struct {
+	ID        string `json:"id"`
+	Login     string `json:"login"`
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	Workspace string `json:"workspace"`
+	Hash      string `json:"hash"`
+	Disabled  bool   `json:"disabled,omitempty"`
+}
+
+// AdminConfig is admin.json: who may sign in, and to which workspace.
+// It holds password hashes, so it lives outside the site with mode 0600.
+type AdminConfig struct {
+	Workspaces []*Workspace `json:"workspaces"`
+	Users      []*User      `json:"users"`
+}
+
+const (
+	roleOwner   = "owner"
+	roleManager = "manager"
+	roleViewer  = "viewer"
+)
+
+var roleRank = map[string]int{roleViewer: 1, roleManager: 2, roleOwner: 3}
+
+var (
+	reWorkspaceID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+	reUserID      = regexp.MustCompile(`^u_[0-9a-f]{12}$`)
+	reAccent      = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+	reChat        = regexp.MustCompile(`^-?[0-9]{1,20}$|^@[A-Za-z0-9_]{5,32}$`)
+)
+
+func (c *AdminConfig) Workspace(id string) *Workspace {
+	for _, w := range c.Workspaces {
+		if w.ID == id {
+			return w
+		}
+	}
+	return nil
+}
+
+func (c *AdminConfig) User(id string) *User {
+	for _, u := range c.Users {
+		if u.ID == id {
+			return u
+		}
+	}
+	return nil
+}
+
+// UserByLogin matches logins without regard to case: people type their
+// e-mail as they like.
+func (c *AdminConfig) UserByLogin(login string) *User {
+	login = normLogin(login)
+	for _, u := range c.Users {
+		if normLogin(u.Login) == login {
+			return u
+		}
+	}
+	return nil
+}
+
+func normLogin(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
+// Members lists the users of one workspace, never anyone else's.
+func (c *AdminConfig) Members(ws string) []*User {
+	var out []*User
+	for _, u := range c.Users {
+		if u.Workspace == ws {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// normOrigin reduces a URL to scheme://host[:port], the form browsers send
+// in the Origin header.
+func normOrigin(s string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(s))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil ||
+		strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("%q is not an origin like https://example.ru", s)
+	}
+	return strings.ToLower(u.Scheme + "://" + u.Host), nil
+}
+
+// Validate checks the whole file and fills in what is derived from it.
+// A config that fails here is never used: the previous one stays.
+func (c *AdminConfig) Validate() error {
+	if len(c.Workspaces) == 0 {
+		return errors.New("admin config: no workspaces")
+	}
+	ids := map[string]bool{}
+	origins := map[string]string{}
+	for _, w := range c.Workspaces {
+		if !reWorkspaceID.MatchString(w.ID) {
+			return fmt.Errorf("admin config: workspace id %q: use a-z, 0-9 and dashes", w.ID)
+		}
+		if ids[w.ID] {
+			return fmt.Errorf("admin config: workspace %q twice", w.ID)
+		}
+		ids[w.ID] = true
+		if n := utf8.RuneCountInString(w.Name); n < 1 || n > 60 {
+			return fmt.Errorf("admin config: workspace %q needs a name up to 60 characters", w.ID)
+		}
+		if w.TZ == "" {
+			w.TZ = "Europe/Moscow"
+		}
+		loc, err := time.LoadLocation(w.TZ)
+		if err != nil {
+			return fmt.Errorf("admin config: workspace %q: time zone %q unknown", w.ID, w.TZ)
+		}
+		w.loc = loc
+		for i, o := range w.Origins {
+			n, err := normOrigin(o)
+			if err != nil {
+				return fmt.Errorf("admin config: workspace %q: %v", w.ID, err)
+			}
+			if other, dup := origins[n]; dup {
+				return fmt.Errorf("admin config: origin %s belongs to %q and %q", n, other, w.ID)
+			}
+			origins[n] = w.ID
+			w.Origins[i] = n
+		}
+		if w.SiteURL != "" {
+			if u, err := url.Parse(w.SiteURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+				return fmt.Errorf("admin config: workspace %q: siteURL must be an http(s) address", w.ID)
+			}
+		}
+		if w.TelegramChat != "" && !reChat.MatchString(w.TelegramChat) {
+			return fmt.Errorf("admin config: workspace %q: telegramChat is a chat id or @channel", w.ID)
+		}
+		if w.Brand.Accent == "" {
+			w.Brand.Accent = "#3D4BF0"
+		}
+		if !reAccent.MatchString(w.Brand.Accent) {
+			return fmt.Errorf("admin config: workspace %q: accent must look like #3D4BF0", w.ID)
+		}
+		if w.Brand.Logo == "" {
+			r, _ := utf8.DecodeRuneInString(w.Name)
+			w.Brand.Logo = strings.ToUpper(string(r))
+		}
+		if n := utf8.RuneCountInString(w.Brand.Logo); n > 2 || !plain(w.Brand.Logo, false) {
+			return fmt.Errorf("admin config: workspace %q: logo is one or two letters", w.ID)
+		}
+	}
+	uids := map[string]bool{}
+	logins := map[string]bool{}
+	for _, u := range c.Users {
+		if !reUserID.MatchString(u.ID) || uids[u.ID] {
+			return fmt.Errorf("admin config: bad or repeated user id %q", u.ID)
+		}
+		uids[u.ID] = true
+		l := normLogin(u.Login)
+		if !between(l, 3, 120) || strings.ContainsAny(l, " \t\r\n") || !plain(l, false) {
+			return fmt.Errorf("admin config: user %s: login must be 3–120 characters without spaces", u.ID)
+		}
+		if logins[l] {
+			return fmt.Errorf("admin config: login %q twice", u.Login)
+		}
+		logins[l] = true
+		if !between(strings.TrimSpace(u.Name), 1, 80) || !plain(u.Name, false) {
+			return fmt.Errorf("admin config: user %s needs a name up to 80 characters", u.ID)
+		}
+		if roleRank[u.Role] == 0 {
+			return fmt.Errorf("admin config: user %s: role is owner, manager or viewer", u.ID)
+		}
+		if !ids[u.Workspace] {
+			return fmt.Errorf("admin config: user %s: workspace %q does not exist", u.ID, u.Workspace)
+		}
+		if _, err := parseHash(u.Hash); err != nil {
+			return fmt.Errorf("admin config: user %s: %v", u.ID, err)
+		}
+	}
+	return nil
+}
+
+// WorkspaceForOrigin finds whose site a browser posted from.
+func (c *AdminConfig) WorkspaceForOrigin(origin string) *Workspace {
+	n, err := normOrigin(origin)
+	if err != nil {
+		return nil
+	}
+	for _, w := range c.Workspaces {
+		for _, o := range w.Origins {
+			if o == n {
+				return w
+			}
+		}
+	}
+	return nil
+}
+
+// LoadAdminConfig reads and validates admin.json. A file that others on
+// the host could read is refused: it holds password hashes.
+func LoadAdminConfig(path string) (*AdminConfig, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("admin config: %w", err)
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("admin config: %w", err)
+	}
+	if st.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("admin config %s is readable by others (mode %v): chmod 600 it", path, st.Mode().Perm())
+	}
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
+	var c AdminConfig
+	if err := dec.Decode(&c); err != nil {
+		return nil, fmt.Errorf("admin config: %v", err)
+	}
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// SaveAdminConfig replaces the file in one step, so the server never reads
+// half of it.
+func SaveAdminConfig(path string, c *AdminConfig) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(path, append(raw, '\n'))
+}
+
+func writeFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
+}
+
+// ConfigSource re-reads admin.json when the file changes, so a user added,
+// disabled or given a new password from the console takes effect without
+// a restart. A broken edit keeps the last good config.
+type ConfigSource struct {
+	path    string
+	mu      sync.Mutex
+	cur     *AdminConfig
+	mod     time.Time
+	size    int64
+	checked time.Time
+	now     func() time.Time
+	logf    func(string, ...any)
+	failed  string
+}
+
+func NewConfigSource(path string, now func() time.Time, logf func(string, ...any)) (*ConfigSource, error) {
+	c, err := LoadAdminConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	return &ConfigSource{path: path, cur: c, mod: st.ModTime(), size: st.Size(), checked: now(), now: now, logf: logf}, nil
+}
+
+// Get returns the current config, looking at the file at most once a second.
+func (s *ConfigSource) Get() *AdminConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	if now.Sub(s.checked) < time.Second && !now.Before(s.checked) {
+		return s.cur
+	}
+	s.checked = now
+	st, err := os.Stat(s.path)
+	if err != nil || (st.ModTime().Equal(s.mod) && st.Size() == s.size) {
+		return s.cur
+	}
+	c, err := LoadAdminConfig(s.path)
+	if err != nil {
+		if msg := err.Error(); msg != s.failed {
+			s.logf("admin config not reloaded, keeping the previous one: %v", err)
+			s.failed = msg
+		}
+		return s.cur
+	}
+	s.cur, s.mod, s.size, s.failed = c, st.ModTime(), st.Size(), ""
+	s.logf("admin config reloaded: %d workspaces, %d users", len(c.Workspaces), len(c.Users))
+	return c
+}

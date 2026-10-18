@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Telegram forwards a copy of each lead to one chat. It only ever sends:
+// Telegram forwards a copy of each lead to a chat. It only ever sends:
 // the bot does not read updates, so nobody can ask it for anything.
 //
 // The bot token is part of every request URL, and Go's HTTP errors quote
@@ -38,9 +38,12 @@ func (t *Telegram) redact(s string) string {
 	return strings.ReplaceAll(s, url.PathEscape(t.token), "<token>")
 }
 
-func (t *Telegram) Send(ctx context.Context, text string) error {
+func (t *Telegram) Send(ctx context.Context, chat, text string) error {
+	if chat == "" {
+		chat = t.chat
+	}
 	body, err := json.Marshal(map[string]any{
-		"chat_id":                  t.chat,
+		"chat_id":                  chat,
 		"text":                     text,
 		"disable_web_page_preview": true,
 	})

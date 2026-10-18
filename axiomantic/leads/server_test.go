@@ -287,8 +287,9 @@ func TestOnlyPostIsAccepted(t *testing.T) {
 	}
 }
 
-// The service has no route that takes a lead id: nothing reads, changes
-// or deletes a lead over HTTP, so another visitor's id leads nowhere.
+// The public side has no route that takes a lead id: nothing reads,
+// changes or deletes a lead without a panel session, so another visitor's
+// id leads nowhere. (The panel's own routes are tested in admin_test.go.)
 func TestNoRouteByID(t *testing.T) {
 	h := newHarness(t, http.StatusOK)
 	h.post(callLead())
@@ -408,7 +409,7 @@ func TestTelegramFailureKeepsLeadAndToken(t *testing.T) {
 func TestTelegramErrorsNeverQuoteTheToken(t *testing.T) {
 	tg := NewTelegram(testToken, "1")
 	tg.base = "http://[::1]:namedport" // makes request building fail
-	if err := tg.Send(context.Background(), "x"); err == nil || strings.Contains(err.Error(), "test-token") {
+	if err := tg.Send(context.Background(), "", "x"); err == nil || strings.Contains(err.Error(), "test-token") {
 		t.Fatalf("bad URL error: %v", err)
 	}
 	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -418,7 +419,7 @@ func TestTelegramErrorsNeverQuoteTheToken(t *testing.T) {
 	}))
 	defer echo.Close()
 	tg.base = echo.URL
-	err := tg.Send(context.Background(), "x")
+	err := tg.Send(context.Background(), "", "x")
 	if err == nil || strings.Contains(err.Error(), "0000000000:") || !strings.Contains(err.Error(), "<token>") {
 		t.Fatalf("echoed error: %v", err)
 	}

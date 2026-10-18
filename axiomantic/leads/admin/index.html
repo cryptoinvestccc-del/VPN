@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F4FA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070A26" media="(prefers-color-scheme: dark)">
+<title>Заявки · админка</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%234348DB'/%3E%3Cpath d='M16 7l7 18h-3.4l-1.5-4h-4.2l-1.5 4H9z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preload" href="assets/fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/admin.css">
+<script src="assets/admin.js"></script>
+</head>
+<body>
+<a class="skip" id="skip" href="#main">Перейти к содержимому</a>
+<div id="app" class="app" aria-busy="true">
+  <div class="boot" id="boot" role="status">
+    <span class="boot__tile" aria-hidden="true"></span>
+    <span class="sr">Загрузка…</span>
+  </div>
+</div>
+<div id="layers" class="layers"></div>
+<div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+<noscript><p class="noscript">Для работы админки нужен JavaScript.</p></noscript>
+</body>
+</html>

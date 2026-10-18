@@ -1,16 +1,20 @@
-// Command axiomantic-leads takes the order forms of the Axiomantic site.
+// Command axiomantic-leads takes the order forms of the Axiomantic site
+// and, with -admin, runs the team panel where those leads are worked on.
 //
 // It accepts POST /api/lead, checks the form the same way the page does,
 // appends it to a local file readable only by the service user and, when
-// a bot is configured, forwards a copy to a Telegram chat. It never
-// returns a lead over HTTP.
+// a bot is configured, forwards a copy to a Telegram chat. The public
+// endpoint never returns a lead; the panel at /admin/ does, only to a
+// signed-in member of the workspace the lead belongs to.
 //
 //	axiomantic-leads -store /var/lib/axiomantic/leads.jsonl
+//	axiomantic-leads -store /var/lib/axiomantic/leads.jsonl -admin /etc/axiomantic/admin.json
 //	axiomantic-leads -store /tmp/leads.jsonl -static axiomantic/site   # local preview
+//	axiomantic-leads admin …                                           # users and workspaces
 //
 // The bot token and chat come from the environment (AXM_TG_TOKEN,
 // AXM_TG_CHAT), never from flags, which any user on the host can read in
-// the process list.
+// the process list. Passwords are never flags either.
 package main
 
 import (
@@ -27,11 +31,15 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "admin" {
+		os.Exit(adminCLI(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	addr := flag.String("addr", "127.0.0.1:8090", "listen address; keep it on loopback behind nginx")
 	store := flag.String("store", "", "file the leads are appended to (required, outside the site folder)")
 	static := flag.String("static", "", "serve this folder as the site too (for previews; nginx does it in production)")
 	origins := flag.String("origins", "", "comma-separated site origins allowed to post, e.g. https://axiomantic.ru; empty means same host only")
 	trustProxy := flag.Bool("trust-proxy", false, "take the client address from X-Real-IP set by a reverse proxy on loopback")
+	adminPath := flag.String("admin", "", "admin.json with workspaces and users (mode 600); turns on the team panel at /admin/")
 	flag.Parse()
 
 	logger := log.New(os.Stderr, "", log.LstdFlags)
@@ -55,6 +63,27 @@ func main() {
 		static:     *static,
 		log:        logger,
 		now:        time.Now,
+	}
+	if *adminPath != "" {
+		if err := checkOutside(*adminPath, *static); err != nil {
+			logger.Fatal("-admin: the config must be outside the published folder")
+		}
+		cfg, err := NewConfigSource(*adminPath, time.Now, logger.Printf)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		// Leads stored before workspaces existed belong to the first one.
+		srv.defaultWS = cfg.Get().Workspaces[0].ID
+		idx := NewIndex(srv.defaultWS)
+		skipped, err := fs.Load(idx.AddRecord, idx.AddEvent)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		if skipped > 0 {
+			logger.Printf("store: %d damaged lines skipped", skipped)
+		}
+		srv.admin = NewAdmin(cfg, idx, fs, time.Now, logger)
+		logger.Printf("team panel on /admin/ for %d workspaces", len(cfg.Get().Workspaces))
 	}
 	for _, o := range strings.Split(*origins, ",") {
 		if o = strings.TrimSpace(o); o != "" {

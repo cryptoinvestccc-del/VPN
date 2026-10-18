@@ -14,7 +14,12 @@ UMask=0077
 # AXM_TG_TOKEN and AXM_TG_CHAT, if leads should also go to Telegram.
 # systemd reads this file as root: keep it root:root, mode 600.
 EnvironmentFile=-/etc/axiomantic/leads.env
-ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -origins https://axiomantic.example,https://www.axiomantic.example -trust-proxy
+# The team panel: workspaces and users with password hashes. systemd
+# hands the service a private read-only copy (%d is that folder), so the
+# root-owned original stays mode 600. After «axiomantic-leads admin …»
+# changes it, restart the service.
+LoadCredential=admin.json:/etc/axiomantic/admin.json
+ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -admin %d/admin.json -origins https://axiomantic.example,https://www.axiomantic.example -trust-proxy
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ProtectSystem=strict

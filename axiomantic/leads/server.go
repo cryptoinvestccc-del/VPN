@@ -16,22 +16,25 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 const maxBody = 16 << 10
 
-// Sender delivers a notification about a stored lead.
+// Sender delivers a notification about a stored lead to a chat; an empty
+// chat means the default one.
 type Sender interface {
-	Send(ctx context.Context, text string) error
+	Send(ctx context.Context, chat, text string) error
 }
 
 // Server takes leads at POST /api/lead and, optionally, serves the site.
 //
-// There is no route that reads, changes or deletes a lead: the endpoint is
-// write-only, so no visitor can reach someone else's lead by guessing an
-// id. Leads are read on the server or in the Telegram chat.
+// The public endpoint is write-only: no visitor can read anything back
+// from it. Leads are read in the team panel (/admin/, only with a session
+// and only within the user's own workspace), on the server or in the
+// Telegram chat.
 type Server struct {
 	store      *FileStore
 	notify     Sender
@@ -42,15 +45,68 @@ type Server struct {
 	log        *log.Logger
 	now        func() time.Time
 	wg         sync.WaitGroup
+
+	// admin is nil unless the server was started with -admin.
+	admin     *Admin
+	defaultWS string
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/lead", s.handleLead)
+	if s.admin != nil {
+		s.admin.clientIP = s.clientIP
+		s.admin.hasNotify = func(w *Workspace) bool { return s.notify != nil && s.chatFor(w) != "-" }
+		s.admin.routes(mux)
+	}
 	if s.static != "" {
 		mux.Handle("/", s.staticHandler())
 	}
 	return mux
+}
+
+func (s *Server) workspaceID() string {
+	if s.defaultWS == "" {
+		return "main"
+	}
+	return s.defaultWS
+}
+
+// chatFor picks the Telegram chat for a workspace's leads: its own chat,
+// or the default chat for the first workspace only — a client's leads
+// never land in the studio's chat by accident. "-" means none.
+func (s *Server) chatFor(w *Workspace) string {
+	if w == nil {
+		return ""
+	}
+	if w.TelegramChat != "" {
+		return w.TelegramChat
+	}
+	if w.ID == s.workspaceID() {
+		return ""
+	}
+	return "-"
+}
+
+// leadWorkspace decides whose site a lead came from. A browser's Origin
+// picks the workspace that lists it; otherwise the old rules apply (the
+// -origins list, or the same host) and the lead goes to the first one.
+func (s *Server) leadWorkspace(r *http.Request) (*Workspace, string, bool) {
+	if s.admin != nil {
+		if o := r.Header.Get("Origin"); o != "" {
+			if w := s.admin.cfg.Get().WorkspaceForOrigin(o); w != nil {
+				return w, w.ID, true
+			}
+		}
+	}
+	if !s.originAllowed(r) {
+		return nil, "", false
+	}
+	var w *Workspace
+	if s.admin != nil {
+		w = s.admin.cfg.Get().Workspace(s.workspaceID())
+	}
+	return w, s.workspaceID(), true
 }
 
 // Wait blocks until notifications already in flight have finished.
@@ -76,7 +132,8 @@ func (s *Server) handleLead(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, reply{Error: "method"})
 		return
 	}
-	if !s.originAllowed(r) {
+	ws, wsID, ok := s.leadWorkspace(r)
+	if !ok {
 		writeJSON(w, http.StatusForbidden, reply{Error: "origin"})
 		return
 	}
@@ -121,22 +178,30 @@ func (s *Server) handleLead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rec := Record{ID: s.newID(), Time: s.now().UTC(), IP: ip, Lead: l}
+	rec := Record{ID: s.newID(), Time: s.now().UTC(), IP: ip, WS: wsID, Lead: l}
 	if err := s.store.Append(rec); err != nil {
 		// The error is about the file, never about the visitor's data.
 		s.log.Printf("lead %s: store: %v", rec.ID, err)
 		writeJSON(w, http.StatusInternalServerError, reply{Error: "store"})
 		return
 	}
-	s.log.Printf("lead %s stored (%s/%s)", rec.ID, l.Source, l.Mode)
+	if s.admin != nil {
+		s.admin.index.AddRecord(rec)
+	}
+	s.log.Printf("lead %s stored (%s/%s/%s)", rec.ID, wsID, l.Source, l.Mode)
 
-	if s.notify != nil {
+	chat := s.chatFor(ws)
+	if s.notify != nil && chat != "-" {
+		text := l.Text(rec.ID)
+		if s.admin != nil && ws != nil && ws.SiteURL != "" {
+			text += "\nОткрыть: " + strings.TrimRight(ws.SiteURL, "/") + "/admin/#/leads/" + rec.ID
+		}
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			if err := s.notify.Send(ctx, l.Text(rec.ID)); err != nil {
+			if err := s.notify.Send(ctx, chat, text); err != nil {
 				s.log.Printf("lead %s: notify: %v", rec.ID, err)
 			}
 		}()
