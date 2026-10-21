@@ -22,10 +22,11 @@
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <link rel="preload" href="../assets/fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../assets/css/main.css?v=6e5fe38429">
-<script src="../assets/js/boot.js?v=f78f60c699"></script>
-<script src="../assets/js/main.js?v=f78f60c699" defer></script>
-<script src="../assets/js/motion.js?v=f78f60c699" defer></script>
+<link rel="preload" href="../assets/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/main.css?v=b2ee83113b">
+<script src="../assets/js/boot.js?v=077ce9d414"></script>
+<script src="../assets/js/main.js?v=077ce9d414" defer></script>
+<script src="../assets/js/motion.js?v=077ce9d414" defer></script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Главная","item":"https://axiomantic.example/"},{"@type":"ListItem","position":2,"name":"Контакты","item":"https://axiomantic.example/contacts/"}]}</script>
 </head>
 <body data-endpoint="/api/lead">
@@ -33,14 +34,14 @@
 <header class="hdr" data-hdr>
 <div class="wrap hdr__in">
 <a class="logo " href="../" aria-label="Аксиомантик — на главную"><svg class="logo__mark" viewBox="40 -1150 1430 1210" aria-hidden="true" focusable="false"><path transform="scale(1 -1)" fill="currentColor" d="M440 -30Q324 -30 243.5 14.5Q163 59 121.5 133.5Q80 208 80 298Q80 373 103.0 435.0Q126 497 177.5 544.5Q229 592 316 624Q376 646 459.0 663.0Q542 680 647.0 695.5Q752 711 878 730L780 676Q780 772 734.0 817.0Q688 862 580 862Q520 862 455.0 833.0Q390 804 364 730L118 808Q159 942 272.0 1026.0Q385 1110 580 1110Q723 1110 834.0 1066.0Q945 1022 1002 914Q1034 854 1040.0 794.0Q1046 734 1046 660V0H808V222L842 176Q763 67 671.5 18.5Q580 -30 440 -30ZM498 184Q573 184 624.5 210.5Q676 237 706.5 271.0Q737 305 748 328Q769 372 772.5 430.5Q776 489 776 528L856 508Q735 488 660.0 474.5Q585 461 539.0 450.0Q493 439 458 426Q418 410 393.5 391.5Q369 373 357.5 351.0Q346 329 346 302Q346 265 364.5 238.5Q383 212 417.0 198.0Q451 184 498 184Z"/><circle class="logo__dot" cx="1300" cy="-122" r="132"/></svg><span class="logo__word">аксиомантик</span></a>
-<nav class="nav" aria-label="Основное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/">Блог</a><a href="../contacts/" aria-current=page>Контакты</a></nav>
+<nav class="nav" aria-label="Основное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/">Блог</a><a href="../contacts/" aria-current="page">Контакты</a></nav>
 <div class="hdr__act">
 <a class="btn btn--glass hdr__cta" href="../contacts/" data-order>Заказать</a>
 <button class="burger" type="button" aria-expanded="false" aria-controls="menu" data-burger><span></span><span></span><span class="sr">Меню</span></button>
 </div>
 </div>
 <div class="menu" id="menu" hidden>
-<nav class="menu__nav" aria-label="Мобильное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/">Блог</a><a href="../contacts/" aria-current=page>Контакты</a></nav>
+<nav class="menu__nav" aria-label="Мобильное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/">Блог</a><a href="../contacts/" aria-current="page">Контакты</a></nav>
 <div class="menu__foot">
 <a class="btn btn--white btn--lg btn--block" href="../contacts/" data-order>Обсудить проект</a>
 <a class="menu__contact" href="tel:+70000000000">+7 (000) 000-00-00</a>
@@ -62,7 +63,7 @@
 <div class="card card--form" data-reveal>
 <h2 class="card__title">Заявка на проект</h2>
 <p class="card__sub">Заполните форму — маркетолог изучит задачу и свяжется с вами.</p>
-<form class="lead" method="post" data-lead data-source="contacts" novalidate>
+<form class="lead" method="dialog" data-lead data-source="contacts" novalidate>
 <input type="hidden" name="mode" value="form">
 <div class="lead__form">
 <div class="fields fields--2">
@@ -77,6 +78,7 @@
 </div>
 <button class="btn btn--dark btn--lg lead__submit" type="submit" data-submit><span data-submit-label>Отправить заявку</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.5 3.5 3.5 10.6l6.6 2.6 2.6 6.6z"/><path d="m10.1 13.2 4.6-4.6"/></svg></button>
 <p class="lead__status" role="status" aria-live="polite"></p>
+<noscript><p class="lead__status">Чтобы отправить форму, включите JavaScript — или напишите на <a href="mailto:hello@axiomantic.example">hello@axiomantic.example</a>, позвоните <a href="tel:+70000000000">+7 (000) 000-00-00</a>.</p></noscript>
 </div>
 <div class="lead__done" hidden tabindex="-1"><span class="lead__done-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><h3 class="lead__done-title">Заявка отправлена</h3><p class="lead__done-text" data-done-text></p><button type="button" class="btn btn--ghost" data-again>Отправить ещё одну</button></div>
 </form>
@@ -97,7 +99,7 @@
 <button type="button" class="btn btn--dark btn--sm" data-map-load>Показать карту</button>
 <a class="map__ext" href="https://yandex.ru/maps/?ll=37.6176,55.7558&amp;z=11&amp;pt=37.6176,55.7558" target="_blank" rel="noopener">Открыть в Яндекс Картах <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 17 17 7M8.5 7H17v8.5"/></svg></a>
 </div>
-<p class="map__note">Карта загружается с серверов Яндекса только после нажатия.</p>
+<p class="map__note">Карта загружается с серверов Яндекса только после нажатия. Тогда Яндекс может установить свои cookie, в том числе Яндекс Метрики.</p>
 </div>
 </div>
 </div>
@@ -131,7 +133,7 @@
 <dialog class="modal" id="order" aria-labelledby="order-title">
 <button class="modal__close" type="button" data-close aria-label="Закрыть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
 <div class="modal__box">
-<form class="lead" method="post" data-lead data-source="modal" novalidate>
+<form class="lead" method="dialog" data-lead data-source="modal" novalidate>
 <div class="lead__form">
 <div class="modal__head">
 <h2 class="modal__title" id="order-title">Обсудим проект</h2>

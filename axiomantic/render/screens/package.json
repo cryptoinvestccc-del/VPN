@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Screenshots the case screens into textures for the 3D renders",
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

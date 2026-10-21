@@ -30,6 +30,7 @@ var (
 	reEmail    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`)
 	reTelegram = regexp.MustCompile(`^@?[A-Za-z0-9_]{5,32}$`)
 	rePhone    = regexp.MustCompile(`^[+\d\s()-]+$`)
+	reRussian  = regexp.MustCompile(`^\s*(\+\s*7|[78])`)
 )
 
 var (
@@ -39,17 +40,18 @@ var (
 	budgetLabels   = map[string]string{"lt100": "до 100 000 ₽", "100-300": "100–300 000 ₽", "gt300": "от 300 000 ₽", "unknown": "пока не знает"}
 )
 
+// isPhone accepts 10–15 digits, except that a Russian number (written
+// from +7, 7 or 8) must have exactly 11: one digit short is a number
+// nobody can call back. The same rule as main.js.
 func isPhone(s string) bool {
 	if !rePhone.MatchString(s) {
 		return false
 	}
-	n := 0
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			n++
-		}
+	d := digitsOf(s)
+	if reRussian.MatchString(s) {
+		return len(d) == 11
 	}
-	return n >= 10 && n <= 15
+	return len(d) >= 10 && len(d) <= 15
 }
 
 // plain reports whether s has no control characters; multiline also lets

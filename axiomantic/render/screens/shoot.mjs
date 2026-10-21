@@ -1,5 +1,5 @@
 // Screenshots the case screens made by make.py into PNG textures.
-//   node axiomantic/render/screens/shoot.mjs   (needs the playwright package)
+//   (cd axiomantic/render/screens && npm ci) && node axiomantic/render/screens/shoot.mjs
 import { chromium } from 'playwright';
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

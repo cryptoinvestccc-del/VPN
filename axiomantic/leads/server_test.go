@@ -199,6 +199,9 @@ func TestInvalidLeadsAreRejected(t *testing.T) {
 		{"one-letter name", with(callLead(), "name", "М"), "name"},
 		{"name with control char", with(callLead(), "name", "Ma\x07rina"), "name"},
 		{"short phone", with(callLead(), "phone", "12345"), "phone"},
+		{"Russian number a digit short", with(callLead(), "phone", "+7 (900) 123-45-6"), "phone"},
+		{"8-number a digit short", with(callLead(), "phone", "8 900 123 45 6"), "phone"},
+		{"Russian number a digit long", with(callLead(), "phone", "+7 (900) 123-45-678"), "phone"},
 		{"phone with letters", with(callLead(), "phone", "+7 900 CALL ME"), "phone"},
 		{"unknown call time", with(callLead(), "when", "never"), "when"},
 		{"unknown mode", with(callLead(), "mode", "fax"), "mode"},
@@ -262,6 +265,18 @@ func TestMalformedRequests(t *testing.T) {
 	}
 	if n := len(h.stored()); n != 0 {
 		t.Fatalf("%d malformed requests were stored", n)
+	}
+}
+
+func TestPhoneRules(t *testing.T) {
+	for in, want := range map[string]bool{
+		"+7 (900) 123-45-67": true, "89001234567": true, "79001234567": true, "9001234567": true,
+		"+44 20 7946 0958": true, "+86 138 1234 5678": true, "+7 (900) 123-45-6": false, "8900123456": false,
+		"+ 7 900 123 45 6": false, "12345": false, "+7 900 CALL": false,
+	} {
+		if got := isPhone(in); got != want {
+			t.Errorf("isPhone(%q) = %v, want %v", in, got, want)
+		}
 	}
 }
 

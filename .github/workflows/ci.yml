@@ -49,7 +49,7 @@ jobs:
           python3 axiomantic/build.py
           git diff --exit-code -- axiomantic/site
           test -z "$(git status --porcelain -- axiomantic/site)"
-          if grep -rEn 'sk-[A-Za-z0-9]{16,}|service_role|PRIVATE KEY|private_key_id|[0-9]{8,10}:AA[A-Za-z0-9_-]{30,}|AKIA[0-9A-Z]{16}' axiomantic/site; then
+          if grep -rEn '\bsk-[A-Za-z0-9_-]{16,}|service_role|PRIVATE KEY|private_key_id|[0-9]{8,10}:AA[A-Za-z0-9_-]{30,}|AKIA[0-9A-Z]{16}' axiomantic/site axiomantic/leads/admin; then
             echo "secret-like string in the published site"; exit 1
           fi
 

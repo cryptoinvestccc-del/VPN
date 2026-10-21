@@ -22,10 +22,11 @@
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <link rel="preload" href="../assets/fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../assets/css/main.css?v=6e5fe38429">
-<script src="../assets/js/boot.js?v=f78f60c699"></script>
-<script src="../assets/js/main.js?v=f78f60c699" defer></script>
-<script src="../assets/js/motion.js?v=f78f60c699" defer></script>
+<link rel="preload" href="../assets/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/main.css?v=b2ee83113b">
+<script src="../assets/js/boot.js?v=077ce9d414"></script>
+<script src="../assets/js/main.js?v=077ce9d414" defer></script>
+<script src="../assets/js/motion.js?v=077ce9d414" defer></script>
 
 </head>
 <body data-endpoint="/api/lead">
@@ -87,7 +88,7 @@
 <dialog class="modal" id="order" aria-labelledby="order-title">
 <button class="modal__close" type="button" data-close aria-label="Закрыть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
 <div class="modal__box">
-<form class="lead" method="post" data-lead data-source="modal" novalidate>
+<form class="lead" method="dialog" data-lead data-source="modal" novalidate>
 <div class="lead__form">
 <div class="modal__head">
 <h2 class="modal__title" id="order-title">Обсудим проект</h2>

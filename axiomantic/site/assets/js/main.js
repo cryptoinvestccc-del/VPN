@@ -47,6 +47,8 @@
     burger.setAttribute('aria-expanded', String(open));
     menu.hidden = !open;
     document.body.classList.toggle('menu-open', open);
+    // the menu covers the page: keep Tab and screen readers inside it
+    $$('main, footer, [data-demo]').forEach((el) => { el.inert = open; });
   };
   if (burger && menu) {
     burger.addEventListener('click', () => setMenu(menu.hidden));
@@ -81,6 +83,23 @@
     window.addEventListener('pageshow', (e) => {
       if (e.persisted) $$('[data-reveal], [data-split]').forEach((el) => el.classList.add('is-in'));
     });
+    // a focused control is never left invisible, even where the observer's
+    // bottom margin would not reveal it yet
+    document.addEventListener('focusin', (e) => {
+      for (let el = e.target.closest && e.target.closest('[data-reveal], [data-split]'); el;
+        el = el.parentElement && el.parentElement.closest('[data-reveal], [data-split]')) {
+        el.classList.add('is-in');
+        io.unobserve(el);
+      }
+    });
+    // printing or saving as PDF shows the whole page, at once
+    // (the stagger delays go too: a delay alone still holds the old value)
+    window.addEventListener('beforeprint', () => {
+      root.classList.remove('motion-ready');
+      $$('[data-reveal], [data-split] .w > span').forEach((el) => { el.style.transitionDelay = ''; });
+      $$('[data-reveal], [data-split]').forEach((el) => { el.classList.add('is-in'); io.unobserve(el); });
+    });
+    window.addEventListener('afterprint', () => root.classList.add('motion-ready'));
   }
 
   /* ------------------------------------------------------ hero video */
@@ -122,8 +141,8 @@
     if (toggle) {
       toggle.addEventListener('click', () => {
         userPaused = !userPaused;
+        // the name stays put; aria-pressed alone says whether it is stopped
         toggle.setAttribute('aria-pressed', String(userPaused));
-        toggle.setAttribute('aria-label', userPaused ? 'Запустить анимацию' : 'Остановить анимацию');
         if (userPaused) video.pause(); else play();
       });
     }
@@ -151,6 +170,8 @@
   /* -------------------------------------------------------- counters */
 
   // "120+", "−40%", "×2,4", "0,9 с": the number counts up, the rest stays.
+  // "5 недель", "12 дней" stay as they are: the noun must agree with the
+  // number, so the in-between values would read "1 недель", "2 дней".
   if (!reduced && hasIO) {
     const io = new IntersectionObserver((entries) => {
       entries.forEach((en) => {
@@ -159,7 +180,7 @@
         const el = en.target;
         const text = el.textContent;
         const m = text.match(/^(\D*?)(\d+(?:[.,]\d+)?)(.*)$/);
-        if (!m) return;
+        if (!m || /[А-Яа-яЁё]{2,}/.test(m[3])) return;
         const target = parseFloat(m[2].replace(',', '.'));
         const decimals = (m[2].split(/[.,]/)[1] || '').length;
         const comma = m[2].includes(',');
@@ -188,14 +209,22 @@
     tg: /^@?[A-Za-z0-9_]{5,32}$/,
   };
   const digits = (v) => v.replace(/\D/g, '');
-  const isPhone = (v) => /^[+\d\s()-]+$/.test(v) && digits(v).length >= 10 && digits(v).length <= 15;
+  const isPhone = (v) => {
+    if (!/^[+\d\s()-]+$/.test(v)) return false;
+    const n = digits(v).length;
+    // +7 / 8 / 7…: a Russian number, which is always 11 digits
+    if (/^\s*(\+\s*7|[78])/.test(v)) return n === 11;
+    return n >= 10 && n <= 15;
+  };
 
   const WHEN = { hour: 'в течение часа', today: 'сегодня', tomorrow: 'завтра' };
   const WHERE = { telegram: 'в Telegram', whatsapp: 'в WhatsApp', email: 'на почту' };
 
+  const plusFirst = (v) => /^\s*\+/.test(v);
   const formatPhone = (value) => {
     let d = digits(value);
-    if (!d) return '';
+    if (!d) return plusFirst(value) ? '+' : '';
+    if (plusFirst(value) && d[0] !== '7') return value; // +86, +44…: international, leave as typed
     if (d[0] === '8') d = '7' + d.slice(1);
     if (d[0] !== '7') return value; // not a Russian number: leave as typed
     d = d.slice(0, 11);
@@ -330,6 +359,8 @@
   };
 
   const submit = async (form) => {
+    // Enter in a field or Space on the button while a request is out
+    if (form.dataset.busy) return;
     const bad = validate(form);
     if (bad) { bad.focus(); return; }
     const payload = { source: form.dataset.source };
@@ -338,6 +369,7 @@
 
     const btn = $('[data-submit]', form);
     const status = $('.lead__status', form);
+    form.dataset.busy = '1';
     btn.setAttribute('aria-busy', 'true');
     status.textContent = '';
     const endpoint = document.body.dataset.endpoint || '';
@@ -369,6 +401,7 @@
       const mail = contactEmail();
       status.textContent = 'Не получилось отправить заявку. Попробуйте ещё раз' + (mail ? ` или напишите на ${mail}.` : '.');
     } finally {
+      delete form.dataset.busy;
       btn.removeAttribute('aria-busy');
     }
   };
@@ -380,13 +413,41 @@
       if (e.target.name === 'channel') syncChannel(form);
       if (e.target.name === 'consent' && e.target.checked) setError(e.target, '');
     });
+    // A complete Russian number takes no more digits: the mask would cut
+    // one off the end without a word.
+    form.addEventListener('beforeinput', (e) => {
+      const t = e.target;
+      if (!t.hasAttribute('data-phone') || !e.data || !/\d/.test(e.data)) return;
+      const d = digits(t.value);
+      const ru = /^[78]/.test(d) && (!plusFirst(t.value) || d[0] === '7');
+      if (ru && d.length >= 11 && t.selectionStart === t.selectionEnd) e.preventDefault();
+    });
     form.addEventListener('input', (e) => {
       const t = e.target;
-      if (t.hasAttribute('data-phone') && e.inputType !== 'deleteContentBackward') t.value = formatPhone(t.value);
+      if (t.hasAttribute('data-phone') && e.inputType !== 'deleteContentBackward') {
+        // keep the caret after the same digit it followed before the mask
+        const caret = t.selectionStart;
+        const atEnd = caret === null || caret === t.value.length;
+        const before = atEnd ? 0 : digits(t.value.slice(0, caret)).length;
+        const out = formatPhone(t.value);
+        if (out !== t.value) {
+          t.value = out;
+          if (!atEnd) {
+            let pos = 0;
+            for (let seen = 0; pos < out.length && seen < before; pos += 1) if (/\d/.test(out[pos])) seen += 1;
+            t.setSelectionRange(pos, pos);
+          }
+        }
+      }
       if (t.getAttribute('aria-invalid') === 'true') setError(t, '');
     });
     form.addEventListener('click', (e) => {
-      if (e.target.closest('[data-again]')) resetForm(form);
+      if (!e.target.closest('[data-again]')) return;
+      resetForm(form);
+      // the button that had focus is gone: start the form again. On touch
+      // screens the mode choice comes first, without throwing up the keyboard.
+      const coarse = !window.matchMedia('(pointer: fine)').matches;
+      ((coarse && $('input[name="mode"]:checked', form)) || $('input[name="name"]', form)).focus();
     });
     syncMode(form);
     syncChannel(form);
@@ -403,19 +464,26 @@
     setMenu(false);
     const form = $('form', dialog);
     resetForm(form);
-    if (trigger.dataset.mode) setRadio(form, 'mode', trigger.dataset.mode);
-    if (trigger.dataset.interest) setRadio(form, 'interest', trigger.dataset.interest);
+    // a button without its own choice opens the form on the defaults,
+    // not on whatever the last button picked
+    ['mode', 'interest'].forEach((name) => {
+      const def = $$(`input[name="${name}"]`, form).find((i) => i.defaultChecked);
+      setRadio(form, name, trigger.dataset[name] || (def && def.value));
+    });
     syncMode(form);
     dialog.showModal();
     document.body.classList.add('modal-open');
     // Keyboard and mouse users land in the first field; on touch screens
     // that would throw the keyboard over the choice they have to make first.
     if (window.matchMedia('(pointer: fine)').matches) $('input[name="name"]', form).focus();
-    opener = trigger;
+    // setMenu(false) has just hidden a menu link: return focus to the burger
+    opener = menu && menu.contains(trigger) ? burger : trigger;
     return true;
   };
 
   document.addEventListener('click', (e) => {
+    // Ctrl/Cmd/Shift-click still opens the contacts page in a new tab or window
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const t = e.target.closest('[data-order]');
     if (t && openOrder(t)) e.preventDefault();
   });
@@ -466,7 +534,12 @@
 
   const demo = $('[data-demo]');
   if (demo) {
-    try { if (sessionStorage.getItem('demo-hidden')) demo.hidden = true; } catch (_) { /* storage off */ }
+    const applyStored = () => {
+      try { if (sessionStorage.getItem('demo-hidden')) demo.hidden = true; } catch (_) { /* storage off */ }
+    };
+    applyStored();
+    // Back/Forward restores the old page as it was: closed elsewhere since?
+    window.addEventListener('pageshow', (e) => { if (e.persisted) applyStored(); });
     $('[data-demo-close]', demo).addEventListener('click', () => {
       demo.hidden = true;
       try { sessionStorage.setItem('demo-hidden', '1'); } catch (_) { /* storage off */ }
@@ -488,6 +561,7 @@
       frame.allowFullscreen = true;
       box.prepend(frame);
       box.classList.add('is-loaded');
+      frame.focus(); // the button is gone; focus goes to the map that replaced it
     });
   });
 })();

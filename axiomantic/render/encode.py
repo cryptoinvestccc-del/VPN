@@ -7,7 +7,11 @@
 Stills become AVIF and WebP at several widths, recorded in
 site/assets/img/manifest.json so that build.py can write <picture> tags
 with exact width/height (no layout shift). Looping shots become an H.264
-MP4 and a VP9 WebM, each in a desktop and a phone size.
+MP4 and a VP9 WebM, each in a desktop and a phone size. A loop is encoded
+only from exactly frames 0000..N-1 of out/<shot>/; when it cannot be
+encoded (frames missing or extra, no ffmpeg), its poster (the shot's
+'poster' entry) is left as it is too, so the page never gets a new poster
+over an old video, and the script exits with status 1.
 
 Post-processing per shot (page colour, bloom) is taken from the shot's
 'post' entry in its scene module, so the poster and every video frame
@@ -80,11 +84,26 @@ def encode_still(shot, manifest):
     print('still', shot['id'], widths)
 
 
-def encode_loop(shot):
-    frames = sorted(glob.glob(os.path.join(OUT, shot['id'], '*.png')))
-    if len(frames) < shot['frames']:
-        print('loop', shot['id'], f'only {len(frames)}/{shot["frames"]} frames, skipped')
-        return
+def loop_frames(shot):
+    """The loop's frames in order, or the reason it cannot be encoded."""
+    if not shutil.which('ffmpeg'):
+        return None, 'ffmpeg not found'
+    folder = os.path.join(OUT, shot['id'])
+    expected = [f'{i:04d}.png' for i in range(shot['frames'])]
+    found = {os.path.basename(f) for f in glob.glob(os.path.join(folder, '*.png'))}
+    missing = [n for n in expected if n not in found]
+    extra = sorted(found - set(expected))
+    if missing or extra:
+        why = f'{len(found)} frames in {folder}, need exactly 0000..{shot["frames"] - 1:04d}'
+        if missing:
+            why += f'; missing {len(missing)} ({", ".join(missing[:4])}…)'
+        if extra:
+            why += f'; extra {len(extra)} ({", ".join(extra[:4])}…)'
+        return None, why
+    return [os.path.join(folder, n) for n in expected], None
+
+
+def encode_loop(shot, frames):
     p = shot.get('post', {})
     os.makedirs(VIDEO, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
@@ -109,23 +128,35 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--only')
     args = ap.parse_args()
-    if not shutil.which('ffmpeg'):
-        print('ffmpeg not found: loops will be skipped')
+    selected = [s for s in shots() if not args.only or s['id'] == args.only]
+    loops, blocked, failed = {}, set(), []
+    for shot in selected:
+        if shot.get('frames'):
+            frames, why = loop_frames(shot)
+            if why:
+                print('loop', shot['id'], 'NOT encoded:', why, file=sys.stderr)
+                failed.append(shot['id'])
+                if shot.get('poster'):
+                    blocked.add(shot['poster'])
+            else:
+                loops[shot['id']] = frames
     manifest = {}
     if os.path.exists(MANIFEST):
         with open(MANIFEST) as f:
             manifest = json.load(f)
-    for shot in shots():
-        if args.only and shot['id'] != args.only:
-            continue
+    for shot in selected:
         if shot.get('frames'):
-            if shutil.which('ffmpeg'):
-                encode_loop(shot)
+            if shot['id'] in loops:
+                encode_loop(shot, loops[shot['id']])
+        elif shot['id'] in blocked:
+            print('still', shot['id'], 'NOT encoded: its loop was not encoded', file=sys.stderr)
         elif os.path.exists(os.path.join(OUT, shot['id'] + '.png')):
             encode_still(shot, manifest)
     with open(MANIFEST, 'w') as f:
         json.dump(dict(sorted(manifest.items())), f, indent=1)
         f.write('\n')
+    if failed:
+        sys.exit(f'loops not encoded: {", ".join(failed)} (posters kept: {", ".join(sorted(blocked)) or "none"})')
 
 
 if __name__ == '__main__':

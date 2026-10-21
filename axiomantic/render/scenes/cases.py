@@ -6,11 +6,17 @@ case cards; the background is transparent with a soft contact shadow, and
 the card behind supplies the case colour."""
 import math
 import os
+import sys
 
 import lib
 
-SCREENS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.cache', 'screens')
-SLUGS = ['english-school', 'run-app', 'arch-bureau', 'dental-clinic', 'ceramics-shop', 'sport-nutrition']
+RENDER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCREENS = os.path.join(RENDER, '.cache', 'screens')
+# One shot per case in content.py, so a new case needs no edit here.
+sys.path.insert(0, os.path.dirname(RENDER))
+from content import CASES  # noqa: E402
+
+SLUGS = [c['slug'] for c in CASES]
 
 SHOTS = [{'id': f'case-{slug}', 'slug': slug, 'size': (2000, 1376), 'samples': 128, 'post': {'clean_floor': True},
           'widths': [640, 960, 1280, 2000]} for slug in SLUGS]

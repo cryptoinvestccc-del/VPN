@@ -845,6 +845,12 @@ func TestAdminListFiltersAndPaging(t *testing.T) {
 	if !first.Time.After(oldest.Time) {
 		t.Fatal("sort order")
 	}
+	// «В работе» is contacted + proposal and never includes «Новая»
+	c.do("PATCH", "/api/admin/leads/"+first.ID, map[string]string{"status": "contacted"})
+	if l := decode[listResp](t, c.do("GET", "/api/admin/leads?status=progress", nil)); l.Total != 1 || l.Counts["progress"] != 1 ||
+		l.Counts["new"] != 25 || l.Items[0].ID != first.ID {
+		t.Fatalf("progress tab %+v", l.Counts)
+	}
 	for _, q := range []string{"status=done", "limit=0", "limit=101", "offset=-1", "sort=name", "mode=fax", "budget=lots"} {
 		if rec := c.do("GET", "/api/admin/leads?"+q, nil); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s: %d", q, rec.Code)

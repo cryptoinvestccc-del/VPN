@@ -121,6 +121,10 @@ def world(hdri='studio_small_09', strength=1.0, rotation=0.0, refract=NAVY, refr
     env = nt.nodes.new('ShaderNodeTexEnvironment')
     path = os.path.join(HDRI_DIR, hdri + '.hdr')
     env.image = bpy.data.images.load(path, check_existing=True)
+    # a damaged file loads as an empty image without raising, and every
+    # shot would then render without its studio light
+    if tuple(env.image.size) == (0, 0) or not env.image.has_data:
+        raise RuntimeError(f'HDRI {path} is unreadable; delete it and re-run render.py')
     nt.links.new(coord.outputs['Generated'], mapping.inputs['Vector'])
     nt.links.new(mapping.outputs['Vector'], env.inputs['Vector'])
     bg_hdri = nt.nodes.new('ShaderNodeBackground')

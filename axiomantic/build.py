@@ -144,9 +144,14 @@ def logo(p, cls=''):
 
 
 def nav_links(p, active):
-    return ''.join(
-        f'<a href="{p.u(href)}"{" aria-current=page" if key == active else ""}>{e(label)}</a>'
-        for key, label, href in C.NAV)
+    """The section of the page is marked: "page" on the page itself, "true"
+    on its parent section (a case or an article), so a screen reader hears
+    one current page — the breadcrumb's."""
+    def cur(key, href):
+        if key != active:
+            return ''
+        return ' aria-current="page"' if href == p.path else ' aria-current="true"'
+    return ''.join(f'<a href="{p.u(href)}"{cur(key, href)}>{e(label)}</a>' for key, label, href in C.NAV)
 
 
 def header(p, active):
@@ -249,6 +254,16 @@ def consent(p, uid):
             f'<p class="field__err" id="{uid}-consent-err"></p>')
 
 
+# The lead forms are sent by main.js (fetch to SITE["endpoint"]). Their
+# method is "dialog", so without the script a submit sends nothing: a POST to
+# the static page would answer 405/501 and drop what the visitor typed. The
+# <noscript> note says how to reach us instead.
+def nojs_note():
+    return (f'<noscript><p class="lead__status">Чтобы отправить форму, включите JavaScript — или напишите на '
+            f'<a href="mailto:{e(S["email"])}">{e(S["email"])}</a>, позвоните '
+            f'<a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a>.</p></noscript>')
+
+
 HONEYPOT = ('<div class="hp" aria-hidden="true"><label>Не заполняйте это поле '
             '<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>')
 
@@ -271,7 +286,7 @@ def modal(p):
     return f'''<dialog class="modal" id="order" aria-labelledby="order-title">
 <button class="modal__close" type="button" data-close aria-label="Закрыть">{icon("close")}</button>
 <div class="modal__box">
-<form class="lead" method="post" data-lead data-source="modal" novalidate>
+<form class="lead" method="dialog" data-lead data-source="modal" novalidate>
 <div class="lead__form">
 <div class="modal__head">
 <h2 class="modal__title" id="order-title">Обсудим проект</h2>
@@ -330,6 +345,7 @@ def breadcrumbs_ld(items):
 
 
 VERSIONS = {}
+WRITTEN = set()  # index.html files this run wrote; anything else is stale
 
 
 def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', index=True, preload=''):
@@ -361,6 +377,7 @@ def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', i
 <link rel="icon" href="{p.u("assets/favicon.svg")}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{p.u("assets/apple-touch-icon.png")}">
 <link rel="preload" href="{p.u("assets/fonts/inter-cyrillic-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{p.u("assets/fonts/inter-latin-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
 {preload}<link rel="stylesheet" href="{p.u("assets/css/main.css")}?v={VERSIONS["css"]}">
 <script src="{p.u("assets/js/boot.js")}?v={VERSIONS["js"]}"></script>
 {js("main.js")}
@@ -381,8 +398,10 @@ def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', i
 '''
     out_dir = os.path.join(OUT, p.path)
     os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, 'index.html'), 'w', encoding='utf-8') as f:
+    out_file = os.path.join(out_dir, 'index.html')
+    with open(out_file, 'w', encoding='utf-8') as f:
         f.write(doc)
+    WRITTEN.add(os.path.normpath(out_file))
     return url
 
 
@@ -399,7 +418,14 @@ def shead(eyebrow, title, lead='', aside='', tone='', cls='', light=False):
             f'<h2 class="h2{" h2--light" if light else ""}" data-split>{t}</h2>{lead_html}</div>{aside_html}</header>')
 
 
-def case_card(p, c, cls='', sizes='(min-width: 1024px) 50vw, 100vw', h=3, eager=False):
+# `sizes` follow main.css. The content box of .wrap is 100vw minus a 5.6vw
+# gutter each side (88.8vw) until it reaches 1600px at 1824px; in
+# .section--soft it is 91.2vw and 1640px. Grids: 2 columns from 768px,
+# 3 (or the 4-column bento) from 1024px (1280px for the bento); gap 24px.
+# A size a little over the box only costs bytes; one under it gets a
+# picture smaller than the box, so they round up.
+
+def case_card(p, c, cls='', sizes='(min-width: 1824px) 788px, (min-width: 768px) 44.4vw, 88.8vw', h=3, eager=False):
     """h: heading level (2 where the cards sit right under the page's H1);
     eager: the first card of a list is on screen at once, so it is not lazy."""
     result_n, result_t = c['results'][0]
@@ -414,7 +440,9 @@ def case_card(p, c, cls='', sizes='(min-width: 1024px) 50vw, 100vw', h=3, eager=
 </a>'''
 
 
-def post_card(p, a, cls='', sizes='(min-width: 1024px) 33vw, 100vw', h=3, eager=False):
+def post_card(p, a, cls='', sizes='(min-width: 1824px) 531px, (min-width: 1024px) 30.4vw, (min-width: 768px) 45.6vw, 92vw',
+              h=3, eager=False):
+    """The default sizes are for "Читайте также" under an article (.section--soft)."""
     return f'''<a class="post {cls}" href="{p.u("blog/" + a["slug"] + "/")}" data-cat="{a["cat"]}" data-reveal>
 <div class="post__media">{picture(p, "cover-" + a["cat"], sizes=sizes, eager=eager)}</div>
 <div class="post__body">
@@ -438,7 +466,7 @@ def cta_scene(p):
 <a class="btn btn--glass btn--lg" href="{p.u("contacts/")}" data-order data-mode="write">{icon("chat")}Написать</a>
 </div>
 </div>
-<div class="cta__art" data-parallax>{picture(p, "hero", sizes="(min-width: 1024px) 40vw, 80vw")}</div>
+<div class="cta__art" data-parallax>{picture(p, "hero", sizes="(min-width: 1280px) 460px, (min-width: 1024px) 40vw, (min-width: 508px) 360px, 72vw")}</div>
 </div>
 </section>'''
 
@@ -531,7 +559,7 @@ def home():
 <h2 class="h2 h2--light" id="approach-title" data-split>{words("AI ускоряет рутину.")} <span class="tone">{words("Люди делают продукт.")}</span></h2>
 <ul class="formula" aria-label="Команда проекта" data-reveal>{roles}</ul>
 <p class="approach__count" aria-hidden="true">Этап <b data-step-now>01</b> из {len(C.STEPS):02d}</p>
-<div class="approach__art" data-parallax>{picture(p, "approach", sizes="(min-width: 1024px) 40vw, 90vw")}</div>
+<div class="approach__art" data-parallax>{picture(p, "approach", sizes="(min-width: 1200px) 500px, (min-width: 1024px) 42vw, (min-width: 473px) 420px, 88.8vw")}</div>
 </div>
 </div>
 <ol class="approach__steps">{steps}</ol>
@@ -541,7 +569,7 @@ def home():
 
     svc_img = {'landing': 'svc-landing', 'multi-base': 'svc-multi', 'multi-custom': 'svc-custom'}
     services = ''.join(f'''<article class="svc" data-reveal>
-<div class="svc__media">{picture(p, svc_img[sid], sizes="(min-width: 1024px) 33vw, 100vw")}</div>
+<div class="svc__media">{picture(p, svc_img[sid], sizes="(min-width: 1824px) 517px, (min-width: 1024px) 29.6vw, (min-width: 768px) 44.4vw, 88.8vw")}</div>
 <div class="svc__body">
 <span class="badge">{icon("search")}Базовое SEO включено</span>
 <h3 class="svc__title">{e(name)}</h3>
@@ -557,27 +585,28 @@ def home():
 </div>
 </section>'''
 
+    BENTO_SIZES = '(min-width: 1824px) 404px, (min-width: 1280px) 22.8vw, (min-width: 768px) 45.6vw, 92vw'
     seo_list = ''.join(f'<li>{icon("check")}{e(s)}</li>' for s in C.SEO_ITEMS)
     why = f'''<section class="section section--soft" id="why">
 <div class="wrap">
 {shead("Почему мы", "Быстро и качественно —", tone="потому что дизайн делает человек, а рутину берёт AI")}
 <div class="bento">
 <article class="bc bc--human" data-reveal>
-<div class="bc__media">{picture(p, "why-human", sizes="(min-width: 1024px) 40vw, 100vw")}</div>
+<div class="bc__media">{picture(p, "why-human", sizes="(min-width: 1824px) 808px, (min-width: 768px) 45.6vw, 92vw")}</div>
 <div class="bc__body"><h3 class="bc__title">Дизайн рисует человек, а не нейросеть</h3>
 <p class="bc__text">AI не генерирует макеты. Каждый экран проектирует UX/UI-дизайнер под вашу задачу и аудиторию — поэтому сайт не похож на шаблон и ведёт к заявке.</p></div>
 </article>
 <article class="bc bc--fast" data-reveal>
-<div class="bc__media">{picture(p, "why-fast", sizes="(min-width: 1024px) 25vw, 100vw")}</div>
+<div class="bc__media">{picture(p, "why-fast", sizes=BENTO_SIZES)}</div>
 <div class="bc__body"><h3 class="bc__title">Быстро</h3>
 <p class="bc__text">AI снимает рутину на каждом этапе — лендинг от 10 рабочих дней вместо 4–6 недель.</p></div>
 </article>
 <article class="bc bc--seo" data-reveal>
-<div class="bc__media">{picture(p, "why-seo", sizes="(min-width: 1024px) 25vw, 100vw")}</div>
+<div class="bc__media">{picture(p, "why-seo", sizes=BENTO_SIZES)}</div>
 <div class="bc__body"><h3 class="bc__title">SEO уже в цене</h3><ul class="ticks">{seo_list}</ul></div>
 </article>
 <article class="bc bc--team" data-reveal>
-<div class="bc__media">{picture(p, "why-team", sizes="(min-width: 1024px) 25vw, 100vw")}</div>
+<div class="bc__media">{picture(p, "why-team", sizes=BENTO_SIZES)}</div>
 <div class="bc__body"><h3 class="bc__title">Одно окно</h3>
 <p class="bc__text">Маркетолог, дизайнер, разработчик и менеджер проекта — в одном чате с вами. Ревью дизайна и кода людьми, автотесты форм и вёрстки.</p></div>
 </article>
@@ -614,11 +643,11 @@ def home():
 </div>
 </section>'''
 
-    reviews = ''.join(f'''<figure class="review" data-reveal>
+    reviews = ''.join(f'''<div class="review" data-reveal>
 <blockquote class="review__text">«{e(text)}»</blockquote>
-<figcaption class="review__who"><span class="avatar">{e(name[0])}</span><span><b>{e(name)}</b><small>{e(role)}</small></span></figcaption>
+<p class="review__who"><span class="avatar" aria-hidden="true">{e(name[0])}</span><span><b>{e(name)}</b><small>{e(role)}</small></span></p>
 <a class="link-arrow" href="{p.u("projects/" + slug + "/")}">Смотреть кейс {icon("arrow")}</a>
-</figure>''' for name, role, slug, text in C.REVIEWS)
+</div>''' for name, role, slug, text in C.REVIEWS)
     reviews_sec = f'''<section class="section section--soft" id="reviews">
 <div class="wrap">
 {shead("Отзывы", "Что говорят", tone="клиенты")}
@@ -700,9 +729,9 @@ def case_page(i, c):
     results = ''.join(f'<div class="kpi" data-reveal><b data-count>{e(n)}</b><span>{e(t)}</span></div>' for n, t in c['results'])
     body = (page_hero(p, [('Главная', ''), ('Проекты', 'projects/'), (c['title'], '')], c['title'], c['lead'], meta)
             + f'''<div class="sheet">
-<section class="section section--first">
+<div class="section section--first">
 <div class="wrap">
-<div class="case-hero t-{c["slug"]}" data-reveal>{picture(p, "case-" + c["slug"], alt="Макет сайта на ноутбуке и телефоне", sizes="(min-width: 1280px) 1200px, 100vw", eager=True)}</div>
+<div class="case-hero t-{c["slug"]}" data-reveal>{picture(p, "case-" + c["slug"], alt="Макет сайта на ноутбуке и телефоне", sizes="(min-width: 1824px) 1600px, 88.8vw", eager=True)}</div>
 <div class="case-grid">
 <aside class="case-facts" data-reveal>
 <dl>
@@ -716,11 +745,11 @@ def case_page(i, c):
 <a class="btn btn--dark btn--block" href="{p.u("contacts/")}" data-order>Хочу так же {icon("arrow")}</a>
 </aside>
 <div class="case-body">
-<section class="case-part" data-reveal><p class="eyebrow">Задача</p><p class="case-part__lead">{e(c["task"])}</p></section>
-<section class="case-part" data-reveal><p class="eyebrow">Решение</p><ol class="numlist">{solution}</ol></section>
-<section class="case-part case-part--ai" data-reveal><p class="eyebrow">Где помог AI</p><ul class="ailist">{ai}</ul>
+<section class="case-part" data-reveal><h2 class="eyebrow">Задача</h2><p class="case-part__lead">{e(c["task"])}</p></section>
+<section class="case-part" data-reveal><h2 class="eyebrow">Решение</h2><ol class="numlist">{solution}</ol></section>
+<section class="case-part case-part--ai" data-reveal><h2 class="eyebrow">Где помог AI</h2><ul class="ailist">{ai}</ul>
 <p class="case-part__note">{icon("user")}Дизайн и решения — за людьми. AI взял на себя рутину.</p></section>
-<section class="case-part"><p class="eyebrow" data-reveal>Результат</p><div class="kpis">{results}</div></section>
+<section class="case-part"><h2 class="eyebrow" data-reveal>Результат</h2><div class="kpis">{results}</div></section>
 </div>
 </div>
 <a class="next t-{nxt["slug"]}" href="{p.u("projects/" + nxt["slug"] + "/")}" data-reveal>
@@ -729,7 +758,7 @@ def case_page(i, c):
 <span class="go">{icon("arrow-ur")}</span>
 </a>
 </div>
-</section>
+</div>
 {cta_scene(p)}
 </div>''')
     return render(p, title=c['title'], desc=c['lead'], body=body, active='projects', og_type='article',
@@ -822,7 +851,7 @@ def contacts():
 <div class="card card--form" data-reveal>
 <h2 class="card__title">Заявка на проект</h2>
 <p class="card__sub">Заполните форму — маркетолог изучит задачу и свяжется с вами.</p>
-<form class="lead" method="post" data-lead data-source="contacts" novalidate>
+<form class="lead" method="dialog" data-lead data-source="contacts" novalidate>
 <input type="hidden" name="mode" value="form">
 <div class="lead__form">
 <div class="fields fields--2">
@@ -837,6 +866,7 @@ def contacts():
 </div>
 <button class="btn btn--dark btn--lg lead__submit" type="submit" data-submit><span data-submit-label>Отправить заявку</span>{icon("send")}</button>
 <p class="lead__status" role="status" aria-live="polite"></p>
+{nojs_note()}
 </div>
 {done_block()}
 </form>
@@ -857,7 +887,7 @@ def contacts():
 <button type="button" class="btn btn--dark btn--sm" data-map-load>Показать карту</button>
 <a class="map__ext" href="{e(map_link)}" target="_blank" rel="noopener">Открыть в Яндекс Картах {icon("arrow-ur")}</a>
 </div>
-<p class="map__note">Карта загружается с серверов Яндекса только после нажатия.</p>
+<p class="map__note">Карта загружается с серверов Яндекса только после нажатия. Тогда Яндекс может установить свои cookie, в том числе Яндекс Метрики.</p>
 </div>
 </div>
 </div>
@@ -922,6 +952,29 @@ def write_themes():
         f.write('/* Generated by build.py from content.py: colours of each case. */\n' + '\n'.join(rules) + '\n')
 
 
+def remove_stale():
+    """Deletes pages this run did not write: a case or an article removed
+    from content.py, or one whose slug changed. Without this the old page
+    would stay in git and keep being deployed, and CI's check that site/ is
+    exactly what the sources give would pass. The deletion shows in
+    `git status`, so CI fails until it is committed."""
+    stale = []
+    for root, dirs, files in os.walk(OUT, topdown=True):
+        if root == OUT:
+            dirs[:] = [d for d in dirs if d != 'assets']
+        for name in files:
+            path = os.path.normpath(os.path.join(root, name))
+            if name.endswith('.html') and path not in WRITTEN:
+                stale.append(path)
+    for path in sorted(stale):
+        os.remove(path)
+        print('removed stale page', os.path.relpath(path, OUT))
+    # folders left empty by the deletions (deepest first)
+    for root, dirs, files in os.walk(OUT, topdown=False):
+        if root != OUT and not os.listdir(root) and os.path.relpath(root, OUT).split(os.sep)[0] != 'assets':
+            os.rmdir(root)
+
+
 def main():
     global MANIFEST
     path = os.path.join(OUT, 'assets', 'img', 'manifest.json')
@@ -953,6 +1006,7 @@ def main():
     urls.append(legal_page('consent/', 'Согласие на обработку персональных данных',
                            'Текст согласия, которое вы даёте, отправляя форму на сайте.', legal.CONSENT))
     not_found()
+    remove_stale()
     with open(os.path.join(OUT, 'sitemap.xml'), 'w', encoding='utf-8') as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
         for u in urls:

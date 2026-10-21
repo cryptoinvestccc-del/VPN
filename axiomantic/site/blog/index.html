@@ -22,10 +22,11 @@
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <link rel="preload" href="../assets/fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../assets/css/main.css?v=6e5fe38429">
-<script src="../assets/js/boot.js?v=f78f60c699"></script>
-<script src="../assets/js/main.js?v=f78f60c699" defer></script>
-<script src="../assets/js/motion.js?v=f78f60c699" defer></script>
+<link rel="preload" href="../assets/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/main.css?v=b2ee83113b">
+<script src="../assets/js/boot.js?v=077ce9d414"></script>
+<script src="../assets/js/main.js?v=077ce9d414" defer></script>
+<script src="../assets/js/motion.js?v=077ce9d414" defer></script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Главная","item":"https://axiomantic.example/"},{"@type":"ListItem","position":2,"name":"Блог","item":"https://axiomantic.example/blog/"}]}</script>
 </head>
 <body data-endpoint="/api/lead">
@@ -33,14 +34,14 @@
 <header class="hdr" data-hdr>
 <div class="wrap hdr__in">
 <a class="logo " href="../" aria-label="Аксиомантик — на главную"><svg class="logo__mark" viewBox="40 -1150 1430 1210" aria-hidden="true" focusable="false"><path transform="scale(1 -1)" fill="currentColor" d="M440 -30Q324 -30 243.5 14.5Q163 59 121.5 133.5Q80 208 80 298Q80 373 103.0 435.0Q126 497 177.5 544.5Q229 592 316 624Q376 646 459.0 663.0Q542 680 647.0 695.5Q752 711 878 730L780 676Q780 772 734.0 817.0Q688 862 580 862Q520 862 455.0 833.0Q390 804 364 730L118 808Q159 942 272.0 1026.0Q385 1110 580 1110Q723 1110 834.0 1066.0Q945 1022 1002 914Q1034 854 1040.0 794.0Q1046 734 1046 660V0H808V222L842 176Q763 67 671.5 18.5Q580 -30 440 -30ZM498 184Q573 184 624.5 210.5Q676 237 706.5 271.0Q737 305 748 328Q769 372 772.5 430.5Q776 489 776 528L856 508Q735 488 660.0 474.5Q585 461 539.0 450.0Q493 439 458 426Q418 410 393.5 391.5Q369 373 357.5 351.0Q346 329 346 302Q346 265 364.5 238.5Q383 212 417.0 198.0Q451 184 498 184Z"/><circle class="logo__dot" cx="1300" cy="-122" r="132"/></svg><span class="logo__word">аксиомантик</span></a>
-<nav class="nav" aria-label="Основное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/" aria-current=page>Блог</a><a href="../contacts/">Контакты</a></nav>
+<nav class="nav" aria-label="Основное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/" aria-current="page">Блог</a><a href="../contacts/">Контакты</a></nav>
 <div class="hdr__act">
 <a class="btn btn--glass hdr__cta" href="../contacts/" data-order>Заказать</a>
 <button class="burger" type="button" aria-expanded="false" aria-controls="menu" data-burger><span></span><span></span><span class="sr">Меню</span></button>
 </div>
 </div>
 <div class="menu" id="menu" hidden>
-<nav class="menu__nav" aria-label="Мобильное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/" aria-current=page>Блог</a><a href="../contacts/">Контакты</a></nav>
+<nav class="menu__nav" aria-label="Мобильное меню"><a href="../">Главная</a><a href="../projects/">Проекты</a><a href="../blog/" aria-current="page">Блог</a><a href="../contacts/">Контакты</a></nav>
 <div class="menu__foot">
 <a class="btn btn--white btn--lg btn--block" href="../contacts/" data-order>Обсудить проект</a>
 <a class="menu__contact" href="tel:+70000000000">+7 (000) 000-00-00</a>
@@ -131,7 +132,7 @@
 <a class="btn btn--glass btn--lg" href="../contacts/" data-order data-mode="write"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-8.5L6 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M8 10h8M8 13h5"/></svg>Написать</a>
 </div>
 </div>
-<div class="cta__art" data-parallax><picture class=""><source type="image/avif" srcset="../assets/img/hero-560.avif 560w, ../assets/img/hero-800.avif 800w, ../assets/img/hero-1120.avif 1120w, ../assets/img/hero-1600.avif 1600w" sizes="(min-width: 1024px) 40vw, 80vw"><source type="image/webp" srcset="../assets/img/hero-560.webp 560w, ../assets/img/hero-800.webp 800w, ../assets/img/hero-1120.webp 1120w, ../assets/img/hero-1600.webp 1600w" sizes="(min-width: 1024px) 40vw, 80vw"><img src="../assets/img/hero-1600.webp" width="1600" height="1600" alt="" aria-hidden="true" loading="lazy" decoding="async"></picture></div>
+<div class="cta__art" data-parallax><picture class=""><source type="image/avif" srcset="../assets/img/hero-560.avif 560w, ../assets/img/hero-800.avif 800w, ../assets/img/hero-1120.avif 1120w, ../assets/img/hero-1600.avif 1600w" sizes="(min-width: 1280px) 460px, (min-width: 1024px) 40vw, (min-width: 508px) 360px, 72vw"><source type="image/webp" srcset="../assets/img/hero-560.webp 560w, ../assets/img/hero-800.webp 800w, ../assets/img/hero-1120.webp 1120w, ../assets/img/hero-1600.webp 1600w" sizes="(min-width: 1280px) 460px, (min-width: 1024px) 40vw, (min-width: 508px) 360px, 72vw"><img src="../assets/img/hero-1600.webp" width="1600" height="1600" alt="" aria-hidden="true" loading="lazy" decoding="async"></picture></div>
 </div>
 </section>
 </div>
@@ -163,7 +164,7 @@
 <dialog class="modal" id="order" aria-labelledby="order-title">
 <button class="modal__close" type="button" data-close aria-label="Закрыть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
 <div class="modal__box">
-<form class="lead" method="post" data-lead data-source="modal" novalidate>
+<form class="lead" method="dialog" data-lead data-source="modal" novalidate>
 <div class="lead__form">
 <div class="modal__head">
 <h2 class="modal__title" id="order-title">Обсудим проект</h2>

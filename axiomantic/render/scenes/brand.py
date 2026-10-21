@@ -11,7 +11,8 @@ SHOTS = [
     {'id': 'hero', 'size': (1600, 1600), 'samples': 512,
      'post': {'bg': '#0E1240', 'bloom': 0.45}, 'widths': [560, 800, 1120, 1600]},
     # 6 s at 24 fps; 960 px is enough because the video sits in a ~640 px box
-    {'id': 'hero-loop', 'size': (960, 960), 'samples': 96, 'frames': 144, 'fps': 24,
+    # 'poster': encode.py leaves that still alone when this loop cannot be encoded
+    {'id': 'hero-loop', 'size': (960, 960), 'samples': 96, 'frames': 144, 'fps': 24, 'poster': 'hero',
      'post': {'bg': '#0E1240', 'bloom': 0.45}, 'video_sizes': [960, 640]},
 ]
 
@@ -33,7 +34,9 @@ def build(shot, phase=None):
     lib.reset(samples=shot.get('samples', 256))
     world = lib.world('studio_small_09', strength=0.25, rotation=25, refract='#0B0E33', refract_mix=0.8)
     mapping = next(n for n in world.node_tree.nodes if n.bl_idname == 'ShaderNodeMapping')
-    a = lib.letter('a', char='а', size=3.6, depth=0.44,
+    # Manrope 700: a touch lighter than the 800 logo mark, so the bevel
+    # and the lacquer highlights have room on the strokes
+    a = lib.letter('a', char='а', weight=700, size=3.6, depth=0.44,
                    mat=lib.lacquer('a-lacquer', color='#100C2C', metallic=0.35, roughness=0.22, coat_roughness=0.035))
     dot = lib.sphere('dot', r=0.1, mat=lib.glow('dot', inner='#F4F2FF', outer=lib.LILAC, strength=2.2))
     shell = lib.sphere('dot-shell', r=0.16, mat=lib.glass('dot-glass', roughness=0.05, ior=1.33))

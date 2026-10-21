@@ -24,6 +24,14 @@
     const { gsap, ScrollTrigger } = window;
     if (!gsap || !ScrollTrigger) return;
     gsap.registerPlugin(ScrollTrigger);
+    // A refresh scrolls to the top to measure and restores the position only
+    // while some trigger is alive; leaving the breakpoint kills them all, so
+    // without this the reader is thrown back to the hero.
+    let keepY = 0;
+    ScrollTrigger.addEventListener('refreshInit', () => { keepY = window.scrollY; });
+    ScrollTrigger.addEventListener('refresh', () => {
+      if (Math.abs(window.scrollY - keepY) > 1) window.scrollTo(0, keepY);
+    });
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => Array.from(document.querySelectorAll(sel));
     const mm = gsap.matchMedia();
@@ -69,7 +77,7 @@
           opacity: 1,
           ease: 'none',
           stagger: 0.08,
-          scrollTrigger: { trigger: statement.querySelector('.statement__text'), start: 'top 78%', end: 'bottom 45%', scrub: 0.5 },
+          scrollTrigger: { trigger: statement.querySelector('.statement__text'), start: 'top 78%', end: 'bottom 65%', scrub: 0.5 },
         });
       }
 
@@ -81,9 +89,11 @@
           scrollTrigger: { trigger: el, start: 'top bottom', end: 'bottom top', scrub: true },
         });
       });
+      // Through --py (the CSS `translate` property), not transform: the CSS
+      // reveal and hover zoom own these pictures' transform.
       $$('.svc__media img, .bc__media img').forEach((img) => {
-        gsap.fromTo(img, { yPercent: -3 }, {
-          yPercent: 3,
+        gsap.fromTo(img, { '--py': '-3%' }, {
+          '--py': '3%',
           ease: 'none',
           scrollTrigger: { trigger: img.parentElement, start: 'top bottom', end: 'bottom top', scrub: true },
         });

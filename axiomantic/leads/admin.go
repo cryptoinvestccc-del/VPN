@@ -493,7 +493,7 @@ func parseFilter(q url.Values) (leadFilter, string) {
 	if f.status == "" {
 		f.status = "all"
 	}
-	if f.status != "all" && f.status != "open" && f.status != "closed" && statusLabels[f.status] == "" {
+	if f.status != "all" && f.status != "open" && f.status != "closed" && f.status != "progress" && statusLabels[f.status] == "" {
 		return f, "status"
 	}
 	if f.mode != "" && f.mode != "call" && f.mode != "write" && f.mode != "form" {
@@ -519,6 +519,8 @@ func statusMatches(want, got string) bool {
 		return isOpen(got)
 	case "closed":
 		return !isOpen(got)
+	case "progress": // being worked on: open, but past «Новая»
+		return got == "contacted" || got == "proposal"
 	}
 	return want == got
 }
@@ -551,7 +553,7 @@ func isStale(v *LeadView, now time.Time) bool {
 // first, plus the per-status counts the tabs show.
 func (a *Admin) filtered(ws string, f leadFilter, sortBy string) ([]LeadView, map[string]int) {
 	now := a.now()
-	counts := map[string]int{"all": 0, "open": 0, "closed": 0}
+	counts := map[string]int{"all": 0, "open": 0, "closed": 0, "progress": 0}
 	for _, s := range statusOrder {
 		counts[s] = 0
 	}
@@ -564,6 +566,9 @@ func (a *Admin) filtered(ws string, f leadFilter, sortBy string) ([]LeadView, ma
 		counts[v.Status]++
 		if isOpen(v.Status) {
 			counts["open"]++
+			if v.Status != "new" {
+				counts["progress"]++
+			}
 		} else {
 			counts["closed"]++
 		}
@@ -1027,7 +1032,11 @@ func (a *Admin) uiHandler() http.Handler {
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Cache-Control", "no-cache")
+		if p == "index.html" {
+			w.Header().Set("Cache-Control", "no-store")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		w.Header().Set("ETag", f.etag)
 		if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, f.etag) {
 			w.WriteHeader(http.StatusNotModified)
