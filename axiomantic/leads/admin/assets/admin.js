@@ -44,7 +44,6 @@
   var INTEREST = { landing: 'Лендинг', 'multi-base': 'Многостаночник · Базовый', 'multi-custom': 'Многостаночник · Под вас', unknown: 'пока не знает' };
   var BUDGET = { lt100: 'до 100 000 ₽', '100-300': '100–300 000 ₽', gt300: 'от 300 000 ₽', unknown: 'пока не знает' };
   var MODE = { call: 'Звонок', write: 'Сообщение', form: 'Форма' };
-  var MODE_LC = { call: 'звонок', write: 'сообщение', form: 'форма' };
   var MODE_ICON = { call: 'phone', write: 'message', form: 'form' };
   var SOURCE = { modal: 'Окно заявки', contacts: 'Страница контактов' };
   var ROLE = { owner: 'Владелец', manager: 'Менеджер', viewer: 'Наблюдатель' };
@@ -1050,11 +1049,17 @@
     var leadsDelta = deltaInfo(t.leads || 0, t.prevLeads || 0);
     var waitChip = null, waitCap;
     if (nowNew) {
+      // the verb agrees with the number that waits, not with all the new ones
+      var waitVerb = plural(waitN, ['ждёт', 'ждут', 'ждут']) + ' дольше часа';
+      var waitAll = waitN >= nowNew;
+      var waitSr = (waitAll ? (nowNew === 1 ? '' : 'все ') : 'из них ' + num(waitN) + ' ') + waitVerb;
+      var waitTitle = waitAll ? (nowNew === 1 ? 'Ждёт' : 'Все ждут') + ' дольше часа'
+        : num(waitN) + NB + 'из' + NB + num(nowNew) + ' ' + waitVerb;
       waitChip = waitN > 0
-        ? h('span', { class: 'delta delta--warn', title: nowNew === 1 ? 'Ждёт дольше часа' : 'Ждут дольше часа' }, icon('alert'),
+        ? h('span', { class: 'delta delta--warn', title: waitTitle }, icon('alert'),
             // one waiting lead: just «> 1 ч»; several: «все > 1 ч» or «2 > 1 ч»
             h('span', { 'aria-hidden': 'true', text: (nowNew === 1 ? '' : (waitN >= nowNew ? 'все' : num(waitN)) + NB) + '>' + NB + '1' + NB + 'ч' }),
-            h('span', { class: 'sr', text: nowNew === 1 ? 'ждёт дольше часа' : (waitN >= nowNew ? 'все' : 'из них ' + num(waitN)) + ' ждут дольше часа' }))
+            h('span', { class: 'sr', text: waitSr }))
         : h('span', { class: 'delta delta--flat' }, icon('check'), 'в срок');
       var oldT = oldestNew ? toDate(oldestNew.time) : null;
       waitCap = oldT ? 'старейшая ждёт ' + durationText((Date.now() - oldT.getTime()) / 60000) : 'новые, без ответа';
@@ -1066,7 +1071,7 @@
         t.prevLeads ? deltaChip(deltaInfo(t.conversion || 0, t.prevConversion || 0, true)) : null,
         t.prevLeads ? 'к прошлому периоду' : 'за прошлый период данных нет'));
 
-    function rankCard(cls, title, items, link, keyName) {
+    function rankCard(cls, title, items, link, keyName, ofAll) {
       var total = items.reduce(function (s, x) { return s + (x.count || 0); }, 0);
       var list = h('ol', { class: 'rank__list' });
       items.slice(0, 3).forEach(function (x, k) {
@@ -1085,13 +1090,17 @@
           h('h3', { class: 'label', text: title }),
           h('a', { class: 'round-go ' + (cls === 'rank--accent' ? 'round-go--glass' : 'icon-btn--tile'), href: link, 'aria-label': title + ': все заявки' }, icon('arrow-up-right', 'ico--sm'))),
         list,
-        total ? h('span', { class: 'sr', text: 'Всего: ' + total }) : null);
+        // the rows stay together at the top; the total closes the card at the bottom
+        // byMode adds up to the period total; byInterest only counts leads that named an interest
+        !total ? null : keyName === 'interest'
+          ? h('p', { class: 'rank__total' }, 'Указали интерес: ', h('b', { text: ofAll > total ? num(total) + NB + 'из' + NB + num(ofAll) : (total > 1 ? 'все' + NB : '') + num(total) }))
+          : h('p', { class: 'rank__total' }, 'Всего за период: ', h('b', { text: num(total) + NB + leadsWord(total) })));
     }
     var perf = card('perf', [
       head('Заявки за период', rangeChip(), 'h-perf'),
       kpis,
       h('div', { class: 'ranks' },
-        rankCard('rank--accent', 'Что интересует', st.byInterest || [], '#/leads', 'interest'),
+        rankCard('rank--accent', 'Что интересует', st.byInterest || [], '#/leads', 'interest', t.leads || 0),
         rankCard('rank--plain', 'Как связываются', st.byMode || [], '#/leads', 'mode'))
     ]);
     perf.setAttribute('aria-labelledby', 'h-perf');
@@ -1251,7 +1260,8 @@
     var ref = gen ? b(gen) : name ? [ '«', b(name), '»' ] : null;
     switch (ev.kind) {
       case 'created':
-        return name ? ['Новая заявка: ', b(name), has(MODE_LC, lead.mode) ? ', ' + MODE_LC[lead.mode] : ''] : ['Новая заявка'];
+        var how = lead && { call: 'звонок', write: 'сообщение', form: 'форма' }[lead.mode];
+        return name ? ['Новая заявка: ', b(name), how ? ', ' + how : ''] : ['Новая заявка' + (how ? ': ' + how : '')];
       case 'status':
         return [b(who), ' ' + verb(who, 'перевёл', 'перевела') + ' заявку ', ref ? [ref, ' '] : '', 'в «' + lab(STATUS, ev.to) + '»'];
       case 'note':
@@ -1983,13 +1993,15 @@
     // only the fields this lead has; the empty ones are named once at the end
     function item(k, v, cls) { return h('div', { class: 'details__item' + (cls ? ' ' + cls : '') }, h('dt', { class: 'details__k', text: k }), h('dd', { class: 'details__v', text: v })); }
     var missing = [];
-    function opt(k, map, v) { if (has(map, v)) return item(k, map[v]); missing.push(k.toLowerCase()); return null; }
+    // a value is shown whenever it is there; a gap is named only for a field this form asks
+    // (the server drops budget for call/write and interest for form leads)
+    function opt(k, miss, asked, map, v) { if (has(map, v)) return item(k, map[v]); if (asked) missing.push(miss); return null; }
     var detailItems = [
       item('Тип обращения', lab(MODE, L.mode)),
       item('Источник', lab(SOURCE, L.source)),
-      L.mode === 'call' ? opt('Когда позвонить', WHEN, L.when) : null,
-      opt('Интересует', INTEREST, L.interest),
-      opt('Бюджет', BUDGET, L.budget),
+      opt('Когда позвонить', 'время звонка', L.mode === 'call', WHEN, L.when),
+      opt('Интересует', 'интерес', L.mode !== 'form', INTEREST, L.interest),
+      opt('Бюджет', 'бюджет', L.mode === 'form', BUDGET, L.budget),
       item('Согласие на обработку данных', L.consent ? 'дано' : 'не дано')
     ].filter(Boolean);
     if (missing.length) detailItems.push(item('Не указано', missing.join(', '), 'details__item--muted'));

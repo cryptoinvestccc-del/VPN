@@ -438,6 +438,7 @@ type leadRef struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	Mode   string `json:"mode"`
 }
 
 func viewEvent(cfg *AdminConfig, ws string, e *Event, v LeadView) eventView {
@@ -920,7 +921,7 @@ func (a *Admin) handleActivity(w http.ResponseWriter, r *http.Request, ac *actor
 	items := []eventView{}
 	for _, f := range a.index.Feed(ac.ws.ID, n) {
 		ev := viewEvent(ac.cfg, ac.ws.ID, f.Event, f.Lead)
-		ev.Lead = &leadRef{ID: f.Lead.Rec.ID, Name: f.Lead.Rec.Lead.Name, Status: f.Lead.Status}
+		ev.Lead = &leadRef{ID: f.Lead.Rec.ID, Name: f.Lead.Rec.Lead.Name, Status: f.Lead.Status, Mode: f.Lead.Rec.Lead.Mode}
 		items = append(items, ev)
 	}
 	adminJSON(w, http.StatusOK, map[string]any{"items": items})
