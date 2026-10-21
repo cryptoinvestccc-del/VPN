@@ -20,6 +20,8 @@ const adminUsage = `Team panel setup. admin.json holds password hashes: keep it 
 
   axiomantic-leads admin workspace set -config FILE -id ID -name NAME [-origins URL,URL] [-site URL]
                                        [-tz Europe/Moscow] [-accent #3D4BF0] [-logo А] [-telegram-chat ID] [-default]
+                                       [-site-dir /opt/axiomantic -site-root /var/www/axiomantic -site-data /var/lib/axiomantic/site]
+                                       [-no-leads]
   axiomantic-leads admin user add      -config FILE -workspace ID -login LOGIN -name NAME -role owner|manager|viewer [-password-stdin]
   axiomantic-leads admin user passwd   -config FILE -login LOGIN [-password-stdin]
   axiomantic-leads admin user disable  -config FILE -login LOGIN
@@ -115,6 +117,11 @@ func cliWorkspaceSet(args []string, out io.Writer) error {
 	logo := fs.String("logo", "", "one or two letters for the logo tile")
 	chat := fs.String("telegram-chat", "", "Telegram chat id for this workspace's leads")
 	def := fs.Bool("default", false, "make this the default workspace (old and Origin-less leads go there)")
+	siteDir := fs.String("site-dir", "", "the site's sources (build.py, site/, cms/schema.json): turns on the site editor")
+	siteRoot := fs.String("site-root", "", "where releases are published; the web server serves <root>/current")
+	siteData := fs.String("site-data", "", "the editor's draft, uploads and release records (not under -site-root)")
+	python := fs.String("python", "/usr/bin/python3", "Python for the site generator")
+	noLeads := fs.Bool("no-leads", false, "hide the leads section for this workspace")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -146,6 +153,17 @@ func cliWorkspaceSet(args []string, out io.Writer) error {
 	set(&w.Brand.Accent, *accent)
 	set(&w.Brand.Logo, *logo)
 	set(&w.TelegramChat, *chat)
+	if *siteDir != "" {
+		if *siteRoot == "" || *siteData == "" {
+			return errors.New("-site-dir needs -site-root and -site-data")
+		}
+		dir := filepath.Clean(*siteDir)
+		w.Site = &SiteConfig{Builder: []string{*python, filepath.Join(dir, "build.py")}, Template: filepath.Join(dir, "site"),
+			Root: filepath.Clean(*siteRoot), Data: filepath.Clean(*siteData), Schema: filepath.Join(dir, "cms", "schema.json")}
+	}
+	if *noLeads {
+		w.NoLeads = true
+	}
 	if *def || c.DefaultWorkspace == "" {
 		c.DefaultWorkspace = w.ID
 	}

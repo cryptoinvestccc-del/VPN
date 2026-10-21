@@ -1,26 +1,29 @@
 [Unit]
-Description=Axiomantic site: order forms
+Description=Axiomantic site: order forms and the team panel
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# A system user of its own (useradd --system axiomantic). It owns
-# /etc/axiomantic/admin.json, the panel's users and password hashes,
-# mode 600; ProtectSystem below keeps /etc read-only for the process.
-# The service rereads that file when «axiomantic-leads admin …» changes
-# it, so a disabled user or a new password takes effect in seconds.
-# /var/lib/axiomantic is created for it with mode 0700, so the lead file
-# is readable by this service and root only.
+# A system user of its own (useradd --system axiomantic).
+#   /var/lib/axiomantic   leads, admin.json (users and password hashes, 600),
+#                         the site editor's draft, uploads, release records
+#   /var/www/axiomantic   published releases; nginx serves …/current
+#   /opt/axiomantic       the site's sources: build.py, content.py, legal.py,
+#                         site/ (template with pictures), cms/schema.json
+# The service rereads admin.json when it changes, so a user disabled from
+# the panel or the console loses access within seconds.
 User=axiomantic
 Group=axiomantic
 StateDirectory=axiomantic
 StateDirectoryMode=0700
+ReadWritePaths=/var/www/axiomantic
 UMask=0077
 # AXM_TG_TOKEN and AXM_TG_CHAT, if leads should also go to Telegram.
-# systemd reads this file as root: keep it root:root, mode 600.
+# systemd reads this file as root: keep it root:root, mode 600. The site
+# generator never sees these variables.
 EnvironmentFile=-/etc/axiomantic/leads.env
-ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -admin /etc/axiomantic/admin.json -origins https://axiomantic.example,https://www.axiomantic.example -trust-proxy
+ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -admin /var/lib/axiomantic/admin.json -origins https://axiomantic.example,https://www.axiomantic.example -trust-proxy
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ProtectSystem=strict
