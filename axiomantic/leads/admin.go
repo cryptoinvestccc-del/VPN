@@ -107,6 +107,8 @@ func (a *Admin) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/team", a.auth(roleViewer, a.handleTeam))
 	mux.HandleFunc("GET /api/admin/settings", a.auth(roleViewer, a.handleSettings))
 	mux.HandleFunc("GET /api/admin/export.csv", a.auth(roleManager, a.handleExport))
+	a.siteRoutes(mux)
+	a.userRoutes(mux)
 	mux.HandleFunc("/api/admin/", func(w http.ResponseWriter, r *http.Request) {
 		adminJSON(w, http.StatusNotFound, apiError{Error: "not_found"})
 	})
@@ -440,6 +442,7 @@ func (a *Admin) handleSession(w http.ResponseWriter, r *http.Request, ac *actor)
 			"initials": initials(ac.user.Name),
 		},
 		"workspace": viewWS(ac.ws),
+		"features":  map[string]bool{"site": ac.ws.Site != nil, "leads": !ac.ws.NoLeads},
 		"csrf":      ac.sess.CSRF,
 		"counts":    map[string]int{"new": newCount},
 	})

@@ -383,3 +383,24 @@ CHANNELS = [
 ]
 
 BUDGETS = [('lt100', 'До 100 000 ₽'), ('100-300', '100–300 000 ₽'), ('gt300', 'От 300 000 ₽'), ('unknown', 'Пока не знаю')]
+
+
+# The team panel keeps the content as JSON and builds the site from it:
+# AXM_CONTENT names that file, and its values replace the ones above. Only
+# names defined above are taken; the panel has already checked every value
+# against cms/schema.json.
+def _load_panel_content():
+    import json
+    import os
+    path = os.environ.get('AXM_CONTENT')
+    if not path:
+        return
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+    g = globals()
+    for name, value in data.items():
+        if name.isupper() and name in g:
+            g[name] = value
+
+
+_load_panel_content()

@@ -19,10 +19,14 @@ import hashlib
 import html
 import json
 import os
+import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, 'site')
+# The panel builds previews and releases elsewhere: AXM_OUT is a copy of
+# site/ to write into, AXM_MEDIA the folder of uploaded pictures.
+OUT = os.environ.get('AXM_OUT') or os.path.join(HERE, 'site')
+MEDIA_DIR = os.environ.get('AXM_MEDIA', '')
 sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True  # no __pycache__ beside the sources
 import content as C  # noqa: E402
@@ -111,6 +115,44 @@ def asset_version(*parts):
 
 
 # ------------------------------------------------------------- pictures
+
+MEDIA = None
+
+
+def media_picture(p, mid, alt, sizes, cls, eager):
+    """A picture uploaded in the panel: JPEG at several widths, made and
+    described in AXM_MEDIA/manifest.json by the panel. The files used are
+    copied next to the pages."""
+    global MEDIA
+    if MEDIA is None:
+        MEDIA = {}
+        mp = os.path.join(MEDIA_DIR, 'manifest.json') if MEDIA_DIR else ''
+        if mp and os.path.exists(mp):
+            with open(mp, encoding='utf-8') as f:
+                MEDIA = json.load(f)
+    m = MEDIA.get(mid)
+    if not m:
+        return None
+    os.makedirs(os.path.join(OUT, 'assets', 'media'), exist_ok=True)
+    for _, name in m['jpg']:
+        dst = os.path.join(OUT, 'assets', 'media', name)
+        if not os.path.exists(dst):
+            shutil.copyfile(os.path.join(MEDIA_DIR, name), dst)
+    srcset = ', '.join(f'{p.u("assets/media/" + name)} {w}w' for w, name in m['jpg'])
+    load = 'loading="eager" fetchpriority="high"' if eager else 'loading="lazy"'
+    alt_attr = f'alt="{e(alt)}"' if alt else 'alt="" aria-hidden="true"'
+    return (f'<picture class="{cls}"><img src="{p.u("assets/media/" + m["jpg"][-1][1])}" srcset="{srcset}" sizes="{sizes}" '
+            f'width="{m["w"]}" height="{m["h"]}" {alt_attr} {load} decoding="async"></picture>')
+
+
+def case_picture(p, c, alt='', sizes='100vw', eager=False):
+    """A case's cover: the picture uploaded in the panel, else the 3D render."""
+    if c.get('cover'):
+        out = media_picture(p, c['cover'], alt, sizes, '', eager)
+        if out:
+            return out
+    return picture(p, 'case-' + c['slug'], alt=alt, sizes=sizes, eager=eager)
+
 
 def picture(p, aid, alt='', sizes='100vw', cls='', eager=False):
     """<picture> with AVIF and WebP srcsets from the render manifest; the
@@ -430,7 +472,7 @@ def case_card(p, c, cls='', sizes='(min-width: 1824px) 788px, (min-width: 768px)
     eager: the first card of a list is on screen at once, so it is not lazy."""
     result_n, result_t = c['results'][0]
     return f'''<a class="case t-{c["slug"]} {cls}" href="{p.u("projects/" + c["slug"] + "/")}" data-cat="{c["type"]}" data-reveal>
-<div class="case__media">{picture(p, "case-" + c["slug"], sizes=sizes, eager=eager)}</div>
+<div class="case__media">{case_picture(p, c, sizes=sizes, eager=eager)}</div>
 <div class="case__body">
 <div class="case__meta"><span class="tag">{e(C.CATEGORIES[c["type"]])}</span><span>{e(c["term"])}</span></div>
 <h{h} class="case__title">{e(c["title"])}</h{h}>
@@ -731,7 +773,7 @@ def case_page(i, c):
             + f'''<div class="sheet">
 <div class="section section--first">
 <div class="wrap">
-<div class="case-hero t-{c["slug"]}" data-reveal>{picture(p, "case-" + c["slug"], alt="Макет сайта на ноутбуке и телефоне", sizes="(min-width: 1824px) 1600px, 88.8vw", eager=True)}</div>
+<div class="case-hero t-{c["slug"]}" data-reveal>{case_picture(p, c, alt="Макет сайта на ноутбуке и телефоне", sizes="(min-width: 1824px) 1600px, 88.8vw", eager=True)}</div>
 <div class="case-grid">
 <aside class="case-facts" data-reveal>
 <dl>
@@ -1021,5 +1063,16 @@ def main():
             sys.exit(1)
 
 
+def export_content(path):
+    """Writes everything content.py defines as JSON: the panel's first draft."""
+    data = {k: getattr(C, k) for k in dir(C) if k.isupper()}
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+        f.write('\n')
+
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) == 3 and sys.argv[1] == '--export-content':
+        export_content(sys.argv[2])
+    else:
+        main()

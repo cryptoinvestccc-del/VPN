@@ -35,8 +35,51 @@ type Workspace struct {
 	SiteURL      string   `json:"siteURL,omitempty"`
 	TelegramChat string   `json:"telegramChat,omitempty"`
 	Brand        Brand    `json:"brand"`
+	// Site, when set, lets the panel edit and publish this workspace's site.
+	Site *SiteConfig `json:"site,omitempty"`
+	// NoLeads hides the leads section for sites that do not take forms here.
+	NoLeads bool `json:"noLeads,omitempty"`
 
 	loc *time.Location
+}
+
+// SiteConfig says where a workspace's site is built and published.
+//
+//	builder  — the site generator's command line, run without a shell
+//	template — a built copy of the site; every build starts from a copy of it
+//	root     — releases/, current (what nginx serves) and preview/
+//	data     — the draft, uploaded pictures and the record of releases;
+//	           outside root, so a draft is never on the web before it is
+//	           published
+//	schema   — what may be edited (cms/schema.json)
+type SiteConfig struct {
+	Builder  []string `json:"builder"`
+	Template string   `json:"template"`
+	Root     string   `json:"root"`
+	Data     string   `json:"data"`
+	Schema   string   `json:"schema"`
+	Keep     int      `json:"keep,omitempty"`
+}
+
+func (c *SiteConfig) validate() error {
+	if len(c.Builder) == 0 || c.Builder[0] == "" {
+		return errors.New("site.builder is the generator's command line")
+	}
+	for name, p := range map[string]string{"template": c.Template, "root": c.Root, "data": c.Data, "schema": c.Schema} {
+		if p == "" || !filepath.IsAbs(p) || filepath.Clean(p) != p {
+			return fmt.Errorf("site.%s must be an absolute, clean path", name)
+		}
+	}
+	if rel, err := filepath.Rel(c.Root, c.Data); err == nil && (rel == "." || filepath.IsLocal(rel)) {
+		return errors.New("site.data must be outside site.root: drafts are not for the web")
+	}
+	if c.Keep == 0 {
+		c.Keep = 10
+	}
+	if c.Keep < 2 || c.Keep > 100 {
+		return errors.New("site.keep is between 2 and 100 releases")
+	}
+	return nil
 }
 
 // User is a person allowed into one workspace's panel.
@@ -192,6 +235,11 @@ func (c *AdminConfig) Validate() error {
 		if w.SiteURL != "" {
 			if u, err := url.Parse(w.SiteURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 				return fmt.Errorf("admin config: workspace %q: siteURL must be an http(s) address", w.ID)
+			}
+		}
+		if w.Site != nil {
+			if err := w.Site.validate(); err != nil {
+				return fmt.Errorf("admin config: workspace %q: %v", w.ID, err)
 			}
 		}
 		if w.TelegramChat != "" && !reChat.MatchString(w.TelegramChat) {
@@ -407,6 +455,31 @@ func (s *ConfigSource) Get() *AdminConfig {
 		s.onReload(old, c)
 	}
 	return c
+}
+
+// Update changes admin.json from the panel: under the same lock as the
+// console, on a fresh read of the file, then taken in at once.
+func (s *ConfigSource) Update(change func(c *AdminConfig) error) error {
+	unlock, err := lockConfig(s.path)
+	if err != nil {
+		return err
+	}
+	c, err := LoadAdminConfig(s.path)
+	if err == nil {
+		if err = change(c); err == nil {
+			err = SaveAdminConfig(s.path, c)
+		}
+	}
+	unlock()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.checked = time.Time{}
+	s.mod = time.Time{}
+	s.mu.Unlock()
+	s.Get()
+	return nil
 }
 
 // revoked lists users of old who lost their access in cur: removed,
