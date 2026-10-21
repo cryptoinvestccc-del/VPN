@@ -152,7 +152,7 @@
     },
     {
       "id": "blog", "group": "pages", "title": "Блог", "where": "Страница «Блог» и статьи", "icon": "pen",
-      "hint": "Каждая статья — своя страница /blog/ключ. Текст статьи собирается из абзацев, подзаголовков и списков.",
+      "hint": "Каждая статья — своя страница /blog/ключ. Текст статьи собирается из абзацев, подзаголовков, списков и цитат.",
       "fields": [
         {"key": "BLOG_CATEGORIES", "label": "Рубрики", "type": "map", "fixedKeys": true, "item": {"type": "text", "max": 30, "required": true}},
         {"key": "ARTICLES", "label": "Статьи", "type": "list", "min": 0, "max": 200, "itemTitle": "title", "item": {"type": "object", "fields": [

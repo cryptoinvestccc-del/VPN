@@ -411,11 +411,14 @@ func checkBlock(path string, val any) (any, error) {
 	}
 	kind, _ := arr[0].(string)
 	switch kind {
-	case "p", "h2":
+	case "p", "h2", "quote":
 		s, ok := arr[1].(string)
 		max := 3000
-		if kind == "h2" {
+		switch kind {
+		case "h2":
 			max = 160
+		case "quote":
+			max = 600
 		}
 		s = strings.TrimSpace(s)
 		if !ok || s == "" || utf8.RuneCountInString(s) > max || !textOK(s, kind == "p") {
@@ -438,7 +441,7 @@ func checkBlock(path string, val any) (any, error) {
 		}
 		return []any{"ul", out}, nil
 	}
-	return bad("блок — абзац, подзаголовок или список")
+	return bad("блок — абзац, подзаголовок, список или цитата")
 }
 
 // optionOK checks a select against its options: fixed ones, the keys of a

@@ -422,3 +422,46 @@ func TestOwnPasswordChange(t *testing.T) {
 	}
 	_ = fmt.Sprint
 }
+
+func TestSiteBlogBlocksAndHealth(t *testing.T) {
+	h := newSiteHarness(t)
+	owner := h.login("owner@alpha.example")
+	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	type health struct {
+		Checks []check `json:"checks"`
+	}
+	hl := decode[health](t, owner.do("GET", "/api/admin/site/health", nil))
+	for _, c := range hl.Checks {
+		if c.Level == "error" {
+			t.Fatalf("untouched draft reported as broken: %s %v", c.Title, c.Details)
+		}
+	}
+	arts := deepCopy(st.Content["ARTICLES"]).([]any)
+	quotes := 0
+	for _, a := range arts {
+		for _, b := range a.(map[string]any)["body"].([]any) {
+			if b.([]any)[0] == "quote" {
+				quotes++
+			}
+		}
+	}
+	if quotes == 0 {
+		t.Fatal("the site's articles have no quotes to round-trip")
+	}
+	cats := st.Content["BLOG_CATEGORIES"]
+	if rec := owner.save("blog", st.Version, map[string]any{"BLOG_CATEGORIES": cats, "ARTICLES": arts}); rec.Code != http.StatusOK {
+		t.Fatalf("blog with quotes: %d %s", rec.Code, rec.Body)
+	}
+	st = decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	for name, block := range map[string][]any{
+		"long quote": {"quote", strings.Repeat("ц", 601)},
+		"unknown":    {"script", "x"},
+	} {
+		bad := deepCopy(arts).([]any)
+		body := bad[0].(map[string]any)["body"].([]any)
+		bad[0].(map[string]any)["body"] = append(body, block)
+		if rec := owner.save("blog", st.Version, map[string]any{"BLOG_CATEGORIES": cats, "ARTICLES": bad}); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d", name, rec.Code)
+		}
+	}
+}

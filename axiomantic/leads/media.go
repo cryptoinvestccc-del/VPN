@@ -224,7 +224,19 @@ func (a *Admin) handleHealth(w http.ResponseWriter, r *http.Request, ac *actor) 
 		for _, sec := range schema.Sections {
 			vals := map[string]any{}
 			for _, f := range sec.Fields {
-				vals[f.Key] = getPath(d.Content, f.Key)
+				v := getPath(d.Content, f.Key)
+				// an object holds keys other sections edit (SITE.operator):
+				// check only this section's own
+				if obj, ok := v.(map[string]any); ok && f.Type == "object" {
+					own := map[string]any{}
+					for _, k := range f.Fields {
+						if x, has := obj[k.Key]; has {
+							own[k.Key] = x
+						}
+					}
+					v = own
+				}
+				vals[f.Key] = v
 			}
 			if _, err := schema.ApplySection(d.Content, sec.ID, vals, a.mediaExists(sc)); err != nil {
 				bad = append(bad, sec.Title+": "+err.Error())
