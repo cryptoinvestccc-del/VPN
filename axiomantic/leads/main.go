@@ -91,7 +91,13 @@ func main() {
 	}
 	for _, o := range strings.Split(*origins, ",") {
 		if o = strings.TrimSpace(o); o != "" {
-			srv.origins[strings.TrimRight(o, "/")] = true
+			// the same form as workspace origins, so a case or a trailing
+			// slash cannot quietly refuse the studio's own form
+			n, err := normOrigin(o)
+			if err != nil {
+				logger.Fatalf("-origins: %v", err)
+			}
+			srv.origins[n] = true
 		}
 	}
 	token, chat := os.Getenv("AXM_TG_TOKEN"), os.Getenv("AXM_TG_CHAT")
@@ -114,7 +120,12 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// ListenAndServe returns as soon as Shutdown starts; wait for it to
+	// finish, so leads already being written and their Telegram copies
+	// are not cut off.
+	shutDone := make(chan struct{})
 	go func() {
+		defer close(shutDone)
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -124,5 +135,6 @@ func main() {
 	if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Fatal(err)
 	}
+	<-shutDone
 	srv.Wait()
 }

@@ -362,6 +362,9 @@ type ConfigSource struct {
 	now     func() time.Time
 	logf    func(string, ...any)
 	failed  string
+	// onReload sees the old and the new config whenever a change is taken
+	// in; the panel uses it to end sessions of users who lost access.
+	onReload func(old, cur *AdminConfig)
 }
 
 func NewConfigSource(path string, now func() time.Time, logf func(string, ...any)) (*ConfigSource, error) {
@@ -397,7 +400,27 @@ func (s *ConfigSource) Get() *AdminConfig {
 		}
 		return s.cur
 	}
+	old := s.cur
 	s.cur, s.mod, s.size, s.failed = c, st.ModTime(), st.Size(), ""
 	s.logf("admin config reloaded: %d workspaces, %d users", len(c.Workspaces), len(c.Users))
+	if s.onReload != nil {
+		s.onReload(old, c)
+	}
 	return c
+}
+
+// revoked lists users of old who lost their access in cur: removed,
+// disabled, moved to another workspace or given a new password. Their
+// sessions must end at once — not only when a session is next used, or a
+// stolen cookie that sat idle while the user was disabled would work
+// again after «user enable».
+func revoked(old, cur *AdminConfig) []string {
+	var out []string
+	for _, u := range old.Users {
+		n := cur.User(u.ID)
+		if n == nil || n.Disabled || n.Workspace != u.Workspace || n.Hash != u.Hash {
+			out = append(out, u.ID)
+		}
+	}
+	return out
 }

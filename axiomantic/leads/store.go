@@ -69,6 +69,12 @@ func OpenFileStore(path string) (*FileStore, error) {
 	if err := f.Close(); err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
+	// An erase cut off by a crash leaves its half-written copy next to the
+	// store; it may hold the data that was being erased.
+	stale, _ := filepath.Glob(filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".erase-*"))
+	for _, p := range stale {
+		_ = os.Remove(p)
+	}
 	return &FileStore{path: path}, nil
 }
 
@@ -292,7 +298,16 @@ func (s *FileStore) Erase(ws, defaultWS, leadID string, ev Event) error {
 		}
 		out := line
 		var kind storeLine
-		if json.Unmarshal(line, &kind) == nil {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		if json.Unmarshal(line, &kind) != nil {
+			// A damaged line (a write cut short) is not a record Load
+			// would use, but it may hold a copy of the data being erased:
+			// it goes, like over-long damage.
+			continue
+		}
+		{
 			if kind.Ev == "" {
 				var r Record
 				if json.Unmarshal(line, &r) == nil && r.ID == leadID && inWS(r.WS) {

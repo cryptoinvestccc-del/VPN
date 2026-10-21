@@ -363,19 +363,110 @@ func TestAdminLoginRateLimits(t *testing.T) {
 }
 
 // Nobody can lock the panel by flooding it: junk sign-ins from many
-// addresses, or failures aimed at one person's login, leave a correct
-// sign-in from elsewhere working.
+// addresses leave other people alone, and failures aimed at one person's
+// login from many addresses stop the guessing from new browsers while the
+// person's own browser (it carries the device cookie) still gets in.
 func TestAdminLoginFloodCannotLockOthersOut(t *testing.T) {
 	h := newAdminHarness(t)
+	first := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.50")
+	var device *http.Cookie
+	for _, c := range first.Result().Cookies() {
+		if c.Name == deviceCookie {
+			device = c
+		}
+	}
+	if device == nil || !device.HttpOnly || !device.Secure || device.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("device cookie %+v", device)
+	}
 	for ip := 0; ip < 20; ip++ {
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 9; i++ {
 			h.loginReq(fmt.Sprintf("junk%d@x.example", i), "junk-junk-junk", fmt.Sprintf("192.0.2.%d", ip))
 		}
-		// a determined guesser spreads failures for the owner's login too
 		h.loginReq("owner@alpha.example", "guess-guess", fmt.Sprintf("203.0.113.%d", ip))
 	}
-	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.99"); rec.Code != http.StatusOK {
-		t.Fatalf("owner locked out by a flood: %d %s", rec.Code, rec.Body)
+	if rec := h.loginReq("manager@alpha.example", "alpha-manager-pass", "198.51.100.98"); rec.Code != http.StatusOK {
+		t.Fatalf("another user caught by the flood: %d", rec.Code)
+	}
+	withDevice := func(r *http.Request) { r.AddCookie(&http.Cookie{Name: deviceCookie, Value: device.Value}) }
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.99", withDevice); rec.Code != http.StatusOK {
+		t.Fatalf("owner's own browser locked out by a flood: %d %s", rec.Code, rec.Body)
+	}
+	// a browser that never signed in to this login is held back: that is
+	// the bound on guessing from many addresses
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.97"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("21st failure-window attempt from a new browser: %d", rec.Code)
+	}
+	// a device cookie for another login does not help
+	other := func(r *http.Request) {
+		r.AddCookie(&http.Cookie{Name: deviceCookie, Value: h.srv.admin.deviceToken("manager@alpha.example")})
+	}
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "198.51.100.96", other); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("someone else's device cookie: %d", rec.Code)
+	}
+}
+
+// Parallel wrong passwords from one address must not all be checked
+// before the first one is counted.
+func TestAdminParallelFailuresAreCounted(t *testing.T) {
+	h := newAdminHarness(t)
+	var wg sync.WaitGroup
+	codes := make(chan int, 10)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes <- h.loginReq("owner@alpha.example", "wrong-wrong-wrong", "198.51.100.60").Code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	checked := 0
+	for c := range codes {
+		if c == http.StatusUnauthorized {
+			checked++
+		}
+	}
+	if checked > 5 {
+		t.Fatalf("%d passwords checked in parallel, the limit is 5", checked)
+	}
+}
+
+// One IPv6 /64 is one address for the limits.
+func TestAdminLoginLimitGroupsIPv6(t *testing.T) {
+	h := newAdminHarness(t)
+	for i := 1; i <= 10; i++ {
+		h.loginReq(fmt.Sprintf("nobody%d@x.example", i), "x-x-x-x-x-x", fmt.Sprintf("[2001:db8:1:2::%x]", i))
+	}
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "[2001:db8:1:2::ff]"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("11th attempt from one /64: %d", rec.Code)
+	}
+	if rec := h.loginReq("owner@alpha.example", "alpha-owner-pass", "[2001:db8:1:3::1]"); rec.Code != http.StatusOK {
+		t.Fatalf("another /64: %d", rec.Code)
+	}
+}
+
+// Disabling a user must end their sessions at once, so that a cookie
+// that sat unused while they were disabled does not work after «enable».
+func TestAdminDisableEnableDoesNotReviveSessions(t *testing.T) {
+	h := newAdminHarness(t)
+	stolen := h.login("manager@alpha.example")
+	owner := h.login("owner@alpha.example")
+	var out bytes.Buffer
+	if code := adminCLI([]string{"user", "disable", "-config", h.cfgPath, "-login", "manager@alpha.example"}, nil, &out, &out); code != 0 {
+		t.Fatal(out.String())
+	}
+	h.clock.Add(2 * time.Second)
+	owner.do("GET", "/api/admin/session", nil) // someone else's request takes the change in
+	if code := adminCLI([]string{"user", "enable", "-config", h.cfgPath, "-login", "manager@alpha.example"}, nil, &out, &out); code != 0 {
+		t.Fatal(out.String())
+	}
+	h.clock.Add(2 * time.Second)
+	owner.do("GET", "/api/admin/session", nil)
+	if rec := stolen.do("GET", "/api/admin/session", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("old cookie after disable+enable: %d", rec.Code)
+	}
+	if rec := h.loginReq("manager@alpha.example", "alpha-manager-pass", "198.51.100.70"); rec.Code != http.StatusOK {
+		t.Fatalf("re-enabled user cannot sign in: %d", rec.Code)
 	}
 }
 
@@ -1119,9 +1210,9 @@ func TestStoreSurvivesACutWrite(t *testing.T) {
 	}
 }
 
-// A damaged line longer than any record neither stops the start nor
-// breaks erasing; it is not kept by an erase, since it may hold
-// personal data nobody can address.
+// A damaged line neither stops the start nor breaks erasing; an erase
+// drops damaged lines, since they may hold personal data nobody can
+// address.
 func TestStoreSkipsOverlongDamage(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "leads.jsonl")
 	rec := Record{ID: "20261017-aaaaaaaaaa", Time: time.Now(), WS: "alpha", Lead: Lead{Name: "Стереть"}}
@@ -1149,8 +1240,19 @@ func TestStoreSkipsOverlongDamage(t *testing.T) {
 	if bytes.Contains(after, []byte("Стереть")) || bytes.Contains(after, junk[:1000]) || len(after) > 4096 {
 		t.Fatalf("after erase: %d bytes", len(after))
 	}
-	if !bytes.Contains(after, []byte("{\"broken")) {
-		t.Fatal("a short damaged line was dropped")
+	if bytes.Contains(after, []byte("{\"broken")) {
+		t.Fatal("a damaged line survived the erase; it may hold the erased data")
+	}
+	// a half-written copy left by a crashed erase is removed at the next start
+	stale := filepath.Join(filepath.Dir(p), "."+filepath.Base(p)+".erase-123")
+	if err := os.WriteFile(stale, []byte("Стереть"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenFileStore(p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("a crashed erase's copy was left behind")
 	}
 }
 
@@ -1183,5 +1285,54 @@ func TestSavingConfigKeepsItsOwner(t *testing.T) {
 	st, _ := os.Stat(p)
 	if sys := st.Sys().(*syscall.Stat_t); sys.Uid != 65534 || sys.Gid != 65534 || st.Mode().Perm() != 0o600 {
 		t.Fatalf("owner %d:%d mode %v", sys.Uid, sys.Gid, st.Mode().Perm())
+	}
+}
+
+// A flood of valid-looking leads on one site closes only that site's form.
+func TestLeadCeilingIsPerSite(t *testing.T) {
+	h := newAdminHarness(t)
+	h.srv.ceiling = NewLimiter(10*time.Minute, 3, 1<<30)
+	post := func(origin string) int {
+		raw, _ := json.Marshal(callLead())
+		req := httptest.NewRequest(http.MethodPost, "https://api.example/api/lead", bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", origin)
+		return h.serve(req).Code
+	}
+	for i := 0; i < 3; i++ {
+		if code := post("https://beta.example"); code != http.StatusOK {
+			t.Fatalf("beta lead %d: %d", i, code)
+		}
+	}
+	if code := post("https://beta.example"); code != http.StatusTooManyRequests {
+		t.Fatalf("4th beta lead: %d", code)
+	}
+	if code := post("https://alpha.example"); code != http.StatusOK {
+		t.Fatalf("alpha closed by beta's flood: %d", code)
+	}
+}
+
+// Two console commands at once must not undo each other.
+func TestAdminCLIConcurrentEditsKeepBoth(t *testing.T) {
+	h := newAdminHarness(t)
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			var out bytes.Buffer
+			adminCLI([]string{"user", "add", "-config", h.cfgPath, "-workspace", "alpha", "-login", fmt.Sprintf("u%d@alpha.example", i),
+				"-name", "Сотрудник", "-role", "viewer"}, nil, &out, &out)
+		}(i)
+	}
+	wg.Wait()
+	cfg, err := LoadAdminConfig(h.cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 8; i++ {
+		if cfg.UserByLogin(fmt.Sprintf("u%d@alpha.example", i)) == nil {
+			t.Fatalf("user %d lost to a concurrent edit", i)
+		}
 	}
 }

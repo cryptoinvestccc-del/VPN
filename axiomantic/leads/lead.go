@@ -29,7 +29,7 @@ type Lead struct {
 var (
 	reEmail    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`)
 	reTelegram = regexp.MustCompile(`^@?[A-Za-z0-9_]{5,32}$`)
-	rePhone    = regexp.MustCompile(`^[+\d\s()-]+$`)
+	rePhone    = regexp.MustCompile(`^[+\d ()-]+$`)
 	reRussian  = regexp.MustCompile(`^\s*(\+\s*7|[78])`)
 )
 
@@ -44,7 +44,7 @@ var (
 // from +7, 7 or 8) must have exactly 11: one digit short is a number
 // nobody can call back. The same rule as main.js.
 func isPhone(s string) bool {
-	if !rePhone.MatchString(s) {
+	if utf8.RuneCountInString(s) > 24 || !rePhone.MatchString(s) {
 		return false
 	}
 	d := digitsOf(s)
@@ -68,6 +68,25 @@ func plain(s string, multiline bool) bool {
 	return true
 }
 
+// noFormat rejects invisible formatting characters (bidi overrides,
+// zero-width spaces): in a name or a contact they would let what the team
+// sees differ from what was typed.
+func noFormat(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Cf, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// bidiControls are dropped from free text: they can reverse the panel's
+// own wording around a message. Joiners used in emoji are kept.
+var bidiControls = strings.NewReplacer("\u202a", "", "\u202b", "", "\u202c", "", "\u202d", "", "\u202e", "",
+	"\u2066", "", "\u2067", "", "\u2068", "", "\u2069", "", "\u200e", "", "\u200f", "")
+
+var spaces = strings.NewReplacer("\u00a0", " ", "\u202f", " ")
+
 func between(s string, lo, hi int) bool {
 	n := utf8.RuneCountInString(s)
 	return n >= lo && n <= hi
@@ -81,6 +100,9 @@ func oneOf(s string, set map[string]string) bool {
 // Normalize trims every field and clears the ones that do not belong to
 // the chosen mode, so that what is stored is exactly what was validated.
 func (l *Lead) Normalize() {
+	// phones pasted from documents often carry no-break spaces
+	l.Phone, l.Contact = spaces.Replace(l.Phone), spaces.Replace(l.Contact)
+	l.Message = bidiControls.Replace(l.Message)
 	for _, f := range []*string{&l.Source, &l.Mode, &l.Name, &l.Phone, &l.When, &l.Channel, &l.Contact, &l.Message, &l.Interest, &l.Budget, &l.Website} {
 		*f = strings.TrimSpace(*f)
 	}
@@ -102,8 +124,11 @@ func (l *Lead) Validate() string {
 	default:
 		return "mode"
 	}
-	if !between(l.Name, 2, 80) || !plain(l.Name, false) {
+	if !between(l.Name, 2, 80) || !plain(l.Name, false) || !noFormat(l.Name) {
 		return "name"
+	}
+	if !plain(l.Contact, false) || !noFormat(l.Contact) {
+		return "contact"
 	}
 	if !between(l.Message, 0, 3000) || !plain(l.Message, true) {
 		return "message"

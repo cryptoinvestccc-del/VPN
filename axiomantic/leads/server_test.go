@@ -202,6 +202,11 @@ func TestInvalidLeadsAreRejected(t *testing.T) {
 		{"Russian number a digit short", with(callLead(), "phone", "+7 (900) 123-45-6"), "phone"},
 		{"8-number a digit short", with(callLead(), "phone", "8 900 123 45 6"), "phone"},
 		{"Russian number a digit long", with(callLead(), "phone", "+7 (900) 123-45-678"), "phone"},
+		{"phone with a line break", with(callLead(), "phone", "+7 900\n123 45 67"), "phone"},
+		{"phone too long", with(callLead(), "phone", "+44 "+strings.Repeat("0 ", 12)+"1"), "phone"},
+		{"name with a bidi override", with(callLead(), "name", "Мари\u202eна"), "name"},
+		{"name with a zero-width space", with(callLead(), "name", "Ма\u200bрина"), "name"},
+		{"contact with a bidi override", with(writeLead(), "contact", "@alexey\u202e_d"), "contact"},
 		{"phone with letters", with(callLead(), "phone", "+7 900 CALL ME"), "phone"},
 		{"unknown call time", with(callLead(), "when", "never"), "when"},
 		{"unknown mode", with(callLead(), "mode", "fax"), "mode"},
@@ -277,6 +282,20 @@ func TestPhoneRules(t *testing.T) {
 		if got := isPhone(in); got != want {
 			t.Errorf("isPhone(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+// No-break spaces in a pasted phone count as spaces; bidi controls are
+// taken out of the message.
+func TestLeadNormalizesSpacesAndBidi(t *testing.T) {
+	l := Lead{Source: "modal", Mode: "write", Name: "Марина", Channel: "whatsapp", Contact: "+7\u00a0900\u202f123-45-67",
+		Message: "текст\u202eперевёрнут\u202c 👩\u200d💻", Consent: true}
+	l.Normalize()
+	if f := l.Validate(); f != "" {
+		t.Fatalf("field %s", f)
+	}
+	if l.Contact != "+7 900 123-45-67" || l.Message != "текстперевёрнут 👩\u200d💻" {
+		t.Fatalf("normalized %q %q", l.Contact, l.Message)
 	}
 }
 

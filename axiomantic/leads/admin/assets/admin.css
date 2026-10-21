@@ -1371,3 +1371,8 @@ a.kpi--link:hover{background:var(--tile-2)}
 .skip:focus{transition:none}
 /* the search field's keyboard ring is the same ring as everywhere, drawn on the whole pill */
 .search:focus-within{box-shadow:var(--shadow-sm),var(--ring)}
+
+/* Text typed by site visitors sits in its own bidi isolate: invisible
+   direction marks in it cannot reorder the panel's wording around it.
+   (The server also refuses them in names and contacts.) */
+.row__name,.contact-line__value,.presult__name,.presult__sub,.feed__text b,.tl__note,.msg,.cell__v,.drawer__title,.lcard__head{unicode-bidi:isolate}

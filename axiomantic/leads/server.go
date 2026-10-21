@@ -108,7 +108,7 @@ func (s *Server) leadWorkspace(r *http.Request) (*Workspace, string, bool) {
 	if w := cfg.WorkspaceForOrigin(o); w != nil {
 		return w, w.ID, true
 	}
-	if s.origins[o] {
+	if n, err := normOrigin(o); err == nil && s.origins[n] {
 		return cfg.Workspace(s.workspaceID()), s.workspaceID(), true
 	}
 	return nil, "", false
@@ -147,7 +147,7 @@ func (s *Server) handleLead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := s.clientIP(r)
-	if ok, retry := s.limit.Allow(ip, s.now()); !ok {
+	if ok, retry := s.limit.Allow(limitKey(ip), s.now()); !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
 		writeJSON(w, http.StatusTooManyRequests, reply{Error: "rate"})
 		return
@@ -186,13 +186,23 @@ func (s *Server) handleLead(w http.ResponseWriter, r *http.Request) {
 	// stored: junk from many addresses cannot use it up and shut the form
 	// for real visitors, while a flood of valid-looking leads still stops
 	// before it fills the chat.
+	// The ceiling is kept per site, so a flood of valid-looking leads on
+	// one client's site closes only that site's form, never the studio's.
+	// Posts without an Origin (not browsers) share a bucket of their own.
+	// Allow checks and counts in one step, so parallel posts cannot slip
+	// past it together.
 	if s.ceiling != nil {
-		if over, retry := s.ceiling.Over("all", s.now()); over {
+		key := wsID
+		if r.Header.Get("Origin") == "" {
+			key = "_no-origin"
+		} else if key == "" {
+			key = "_site"
+		}
+		if ok, retry := s.ceiling.Allow(key, s.now()); !ok {
 			w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
 			writeJSON(w, http.StatusTooManyRequests, reply{Error: "rate"})
 			return
 		}
-		s.ceiling.Hit("all", s.now())
 	}
 
 	rec := Record{ID: s.newID(), Time: s.now().UTC(), IP: ip, WS: wsID, Lead: l}
@@ -238,7 +248,8 @@ func (s *Server) originAllowed(r *http.Request) bool {
 		return true
 	}
 	if len(s.origins) > 0 {
-		return s.origins[o]
+		n, err := normOrigin(o)
+		return err == nil && s.origins[n]
 	}
 	u, err := url.Parse(o)
 	return err == nil && u.Host != "" && u.Host == r.Host

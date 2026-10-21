@@ -8,7 +8,9 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 	"unicode/utf8"
@@ -67,6 +69,30 @@ func adminCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// lockConfig holds an exclusive lock on admin.json.lock for one
+// read-change-write, so two console commands run at once cannot undo each
+// other (a «disable» lost under a concurrent «user add», say).
+func lockConfig(path string) (func(), error) {
+	if path == "" {
+		return func() {}, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path+".lock", os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+	}, nil
+}
+
 func loadOrEmpty(path string) (*AdminConfig, error) {
 	if path == "" {
 		return nil, errors.New("-config is required")
@@ -92,6 +118,11 @@ func cliWorkspaceSet(args []string, out io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	unlock, err := lockConfig(*path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	c, err := loadOrEmpty(*path)
 	if err != nil {
 		return err
@@ -163,6 +194,11 @@ func cliUser(cmd string, args []string, stdin io.Reader, out io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	unlock, err := lockConfig(*path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	c, err := loadOrEmpty(*path)
 	if err != nil {
 		return err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"sync"
 	"time"
 )
@@ -106,4 +107,34 @@ func (l *Limiter) Hit(key string, now time.Time) {
 		l.lastSweep = now
 	}
 	l.byIP[key] = append(recent(l.byIP[key], since), now)
+}
+
+// Refund takes back the newest attempt of a key — for an attempt that
+// was reserved up front (so parallel requests cannot all slip past the
+// limit before any is counted) and turned out not to count.
+func (l *Limiter) Refund(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if ts := l.byIP[key]; len(ts) > 0 {
+		last := ts[len(ts)-1]
+		if l.byIP[key] = ts[:len(ts)-1]; len(l.byIP[key]) == 0 {
+			delete(l.byIP, key)
+		}
+		for i := len(l.all) - 1; i >= 0; i-- {
+			if l.all[i].Equal(last) {
+				l.all = append(l.all[:i], l.all[i+1:]...)
+				break
+			}
+		}
+	}
+}
+
+// limitKey is the address a limiter counts. An IPv6 client usually has a
+// whole /64 to pick addresses from, so the /64 is what counts as one.
+func limitKey(ip string) string {
+	p := net.ParseIP(ip)
+	if p == nil || p.To4() != nil {
+		return ip
+	}
+	return p.Mask(net.CIDRMask(64, 128)).String() + "/64"
 }

@@ -209,8 +209,10 @@
     tg: /^@?[A-Za-z0-9_]{5,32}$/,
   };
   const digits = (v) => v.replace(/\D/g, '');
-  const isPhone = (v) => {
-    if (!/^[+\d\s()-]+$/.test(v)) return false;
+  const isPhone = (raw) => {
+    // the same rule as the server: no-break spaces count as spaces, at most 24 characters
+    const v = raw.replace(/[\u00a0\u202f]/g, ' ').trim();
+    if (v.length > 24 || !/^[+\d ()-]+$/.test(v)) return false;
     const n = digits(v).length;
     // +7 / 8 / 7…: a Russian number, which is always 11 digits
     if (/^\s*(\+\s*7|[78])/.test(v)) return n === 11;

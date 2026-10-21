@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -50,7 +52,10 @@ type Admin struct {
 	store     *FileStore
 	loginIP   *Limiter // every sign-in attempt, per address
 	loginFail *Limiter // failed sign-ins, per login and address
+	loginName *Limiter // failed sign-ins per login from browsers it does not know
 	hashSlots chan struct{}
+	knownSlot chan struct{} // kept free for browsers that signed in before
+	deviceKey []byte
 	clientIP  func(*http.Request) string
 	hasNotify func(*Workspace) bool
 	uiDir     string // serve the panel from this folder instead of the binary (development)
@@ -64,18 +69,29 @@ type Admin struct {
 }
 
 func NewAdmin(cfg *ConfigSource, idx *Index, store *FileStore, now func() time.Time, logger *log.Logger) *Admin {
-	return &Admin{
+	a := &Admin{
 		cfg:       cfg,
 		sessions:  NewSessions(sessionIdle, sessionMaxAge),
 		index:     idx,
 		store:     store,
 		loginIP:   NewLimiter(15*time.Minute, 10, 1<<30),
 		loginFail: NewLimiter(15*time.Minute, 5, 1<<30),
+		loginName: NewLimiter(15*time.Minute, 20, 1<<30),
 		hashSlots: make(chan struct{}, 2),
+		knownSlot: make(chan struct{}, 1),
+		deviceKey: []byte(randomToken(32)),
 		now:       now,
 		log:       logger,
 		seen:      map[string]time.Time{},
 	}
+	cfg.mu.Lock()
+	cfg.onReload = func(old, cur *AdminConfig) {
+		for _, id := range revoked(old, cur) {
+			a.sessions.DropUser(id)
+		}
+	}
+	cfg.mu.Unlock()
+	return a
 }
 
 func (a *Admin) routes(mux *http.ServeMux) {
@@ -218,9 +234,8 @@ func (a *Admin) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	now := a.now()
 	ip := a.clientIP(r)
-	if ok, retry := a.loginIP.Allow(ip, now); !ok {
-		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
-		adminJSON(w, http.StatusTooManyRequests, apiError{Error: "rate"})
+	if ok, retry := a.loginIP.Allow(limitKey(ip), now); !ok {
+		tooMany(w, retry)
 		return
 	}
 	var body struct {
@@ -240,27 +255,46 @@ func (a *Admin) handleLogin(w http.ResponseWriter, r *http.Request) {
 		adminJSON(w, http.StatusBadRequest, apiError{Error: "invalid", Field: "password"})
 		return
 	}
-	// Failures count per login *and* address: guessing one person's
-	// password from one place stops after five tries, while nobody can
-	// lock that person out from somewhere else. There is no ceiling for
-	// everyone together — that would let anyone lock the whole panel —
-	// the two hashing slots below are what bounds the load.
-	failKey := login + "\x00" + ip
-	if over, retry := a.loginFail.Over(failKey, now); over {
-		w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
-		adminJSON(w, http.StatusTooManyRequests, apiError{Error: "rate"})
+	// Three limits, each reserved before the slow check so that parallel
+	// requests cannot all slip past before one is counted, and handed back
+	// when the password is right:
+	//   - 5 failures per login and address: one place guessing one password;
+	//   - 20 failures per login from browsers that never signed in to it:
+	//     guessing from many addresses. A browser that signed in before
+	//     carries a device cookie and is not held by this one, so a flood
+	//     cannot lock the person out of their own browser (the OWASP
+	//     device-cookie scheme);
+	//   - 10 attempts per address (above), counted whatever the outcome.
+	known := a.knownDevice(r, login)
+	failKey := login + "\x00" + limitKey(ip)
+	if ok, retry := a.loginFail.Allow(failKey, now); !ok {
+		tooMany(w, retry)
 		return
 	}
-	// Key derivation is deliberately slow; two at a time keeps a burst of
-	// sign-ins from eating every core, and a caller waits at most a few
-	// seconds for a slot.
-	select {
-	case a.hashSlots <- struct{}{}:
-	case <-time.After(5 * time.Second):
-		w.Header().Set("Retry-After", "5")
-		adminJSON(w, http.StatusServiceUnavailable, apiError{Error: "busy"})
-		return
-	case <-r.Context().Done():
+	if !known {
+		if ok, retry := a.loginName.Allow(login, now); !ok {
+			a.loginFail.Refund(failKey)
+			tooMany(w, retry)
+			return
+		}
+	}
+	refund := func() {
+		a.loginFail.Refund(failKey)
+		if !known {
+			a.loginName.Refund(login)
+		}
+	}
+	// Key derivation is deliberately slow; two slots keep a burst of
+	// sign-ins from eating every core. One more slot is kept for known
+	// browsers, so junk sign-ins cannot crowd them out. Nobody waits more
+	// than a few seconds.
+	slot, ok := a.takeSlot(r, known)
+	if !ok {
+		refund()
+		if r.Context().Err() == nil {
+			w.Header().Set("Retry-After", "5")
+			adminJSON(w, http.StatusServiceUnavailable, apiError{Error: "busy"})
+		}
 		return
 	}
 	u := a.cfg.Get().UserByLogin(login)
@@ -270,15 +304,19 @@ func (a *Admin) handleLogin(w http.ResponseWriter, r *http.Request) {
 	} else {
 		good = CheckPassword(u.Hash, body.Password)
 	}
-	<-a.hashSlots
+	<-slot
 	if !good {
-		a.loginFail.Hit(failKey, now)
 		// No login in the log: a password typed into the login field
 		// would otherwise end up there.
 		a.log.Printf("admin: failed sign-in from %s", ip)
 		adminJSON(w, http.StatusUnauthorized, apiError{Error: "credentials"})
 		return
 	}
+	refund()
+	http.SetCookie(w, &http.Cookie{
+		Name: deviceCookie, Value: a.deviceToken(login), Path: "/", MaxAge: 180 * 24 * 3600,
+		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
+	})
 	token, _ := a.sessions.New(u, now)
 	http.SetCookie(w, &http.Cookie{
 		Name: cookieName, Value: token, Path: "/", MaxAge: int(sessionMaxAge.Seconds()),
@@ -289,6 +327,53 @@ func (a *Admin) handleLogin(w http.ResponseWriter, r *http.Request) {
 	a.seenMu.Unlock()
 	a.log.Printf("admin: %s signed in to %s", u.ID, u.Workspace)
 	adminJSON(w, http.StatusOK, reply{OK: true})
+}
+
+func tooMany(w http.ResponseWriter, retry time.Duration) {
+	w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+	adminJSON(w, http.StatusTooManyRequests, apiError{Error: "rate"})
+}
+
+// The device cookie marks a browser that has signed in to a login before.
+// It is a MAC of the login under a key made at start, so it proves nothing
+// but that, opens nothing by itself, and stops working after a restart.
+const deviceCookie = "__Host-axm_dev"
+
+func (a *Admin) deviceToken(login string) string {
+	m := hmac.New(sha256.New, a.deviceKey)
+	m.Write([]byte("device\x00" + login))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:18])
+}
+
+func (a *Admin) knownDevice(r *http.Request, login string) bool {
+	c, err := r.Cookie(deviceCookie)
+	return err == nil && sameToken(c.Value, a.deviceToken(login))
+}
+
+// takeSlot waits up to five seconds for a hashing slot; a known browser
+// may also use the slot kept for it. The returned channel is the one to
+// release.
+func (a *Admin) takeSlot(r *http.Request, known bool) (chan struct{}, bool) {
+	wait := time.NewTimer(5 * time.Second)
+	defer wait.Stop()
+	if known {
+		select {
+		case a.knownSlot <- struct{}{}:
+			return a.knownSlot, true
+		case a.hashSlots <- struct{}{}:
+			return a.hashSlots, true
+		case <-wait.C:
+		case <-r.Context().Done():
+		}
+		return nil, false
+	}
+	select {
+	case a.hashSlots <- struct{}{}:
+		return a.hashSlots, true
+	case <-wait.C:
+	case <-r.Context().Done():
+	}
+	return nil, false
 }
 
 func (a *Admin) handleLogout(w http.ResponseWriter, r *http.Request, ac *actor) {
