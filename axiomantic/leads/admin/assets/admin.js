@@ -136,6 +136,7 @@
 
   /* ------------------------------------------------------------------ text helpers */
 
+  var NB = '\u00A0';  // non-breaking space: numbers and their units, «№ 1», « — »
   var PR = new Intl.PluralRules('ru');
   function plural(n, forms) {
     var r = PR.select(n);
@@ -189,10 +190,23 @@
     var s = (p[0] ? Array.from(p[0])[0] : '') + (p[1] ? Array.from(p[1])[0] : '');
     return (s || '•').toUpperCase();
   }
+  // Team members get distinct tints by their place in the team list (a hash
+  // put three of four people on the same colour); anyone else gets a hash.
+  var TINTS = ['av--0', 'av--1', 'av--2', 'av--3', 'av--4', 'av--5'];
+  function tintFor(key) { return (key && S.tint && has(S.tint, key)) ? S.tint[key] : avatarTint(key); }
+  function setTeamTints(items) {
+    S.tint = {};
+    (items || []).forEach(function (u, i) { if (u && u.id) S.tint[u.id] = TINTS[i % TINTS.length]; });
+    $$('.av[data-pid]').forEach(function (el) {
+      TINTS.forEach(function (t) { el.classList.remove(t); });
+      el.classList.add(tintFor(el.dataset.pid));
+    });
+  }
   function avatar(person, size) {
     var name = person && person.name;
+    var key = person && (person.id || name);
     var ini = (person && person.initials) || initials(name);
-    return h('span', { class: 'av ' + (size ? 'av--' + size + ' ' : '') + avatarTint(person && (person.id || name)), 'aria-hidden': 'true', text: String(ini).slice(0, 3) });
+    return h('span', { class: 'av ' + (size ? 'av--' + size + ' ' : '') + tintFor(key), 'data-pid': key || null, 'aria-hidden': 'true', text: String(ini).slice(0, 3) });
   }
 
   /* ------------------------------------------------------------------ dates (workspace time zone) */
@@ -231,10 +245,10 @@
     if (!d) return '';
     var diff = (Date.now() - d.getTime()) / 1000;
     if (diff < 60) return 'только что';
-    if (diff < 3600) return Math.floor(diff / 60) + ' мин назад';
+    if (diff < 3600) return Math.floor(diff / 60) + NB + 'мин назад';
     var ago = daysAgo(d);
-    if (ago <= 0) return Math.floor(diff / 3600) + ' ч назад';
-    if (ago === 1) return 'вчера в ' + hm(d);
+    if (ago <= 0) return Math.floor(diff / 3600) + NB + 'ч назад';
+    if (ago === 1) return 'вчера в' + NB + hm(d);
     return dm(d);
   }
   function listTime(iso) {
@@ -253,17 +267,19 @@
     var p = String(str || '').split('-');
     if (p.length !== 3) return '';
     var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2], 12));
-    return fmt({ day: 'numeric', month: long ? 'long' : 'short' }, 'UTC').format(d).replace(/\.(?=\s|$)/g, '');
+    return fmt({ day: 'numeric', month: long ? 'long' : 'short' }, 'UTC').format(d).replace(/\.(?=\s|$)/g, '').replace(/\s/g, NB);
   }
   function shortDate(str) { var p = String(str || '').split('-'); return p.length === 3 ? p[2] + '.' + p[1] : ''; }
-  function rangeLabel(from, to) { return plainDate(from) + ' – ' + plainDate(to); }
+  function rangeLabel(from, to) { return plainDate(from) + NB + '– ' + plainDate(to); }
   function durationMin(m) {
     if (m === null || m === undefined || isNaN(m)) return null;
     m = Math.max(0, Math.round(m));
     if (m < 60) return { n: String(m), u: 'мин' };
     var hrs = Math.floor(m / 60), rest = m % 60;
     if (hrs >= 48) return { n: String(Math.round(m / 1440)), u: 'дн' };
-    return { n: String(hrs), u: rest ? 'ч ' + rest + ' мин' : 'ч' };
+    return { n: String(hrs), u: rest ? 'ч' + NB + rest + NB + 'мин' : 'ч' };
+  }
+  function durationText(m) { var d = durationMin(m); return d ? d.n + NB + d.u : '';
   }
 
   /* ------------------------------------------------------------------ URL whitelists */
@@ -304,17 +320,29 @@
   }
   ApiError.prototype = Object.create(Error.prototype);
 
+  var API_TIMEOUT = 15000;
   function api(path, opt) {
     opt = opt || {};
     var method = opt.method || 'GET';
     var headers = { Accept: 'application/json' };
-    var init = { method: method, credentials: 'same-origin', headers: headers, cache: 'no-store', signal: opt.signal };
+    // A request that never answers must end in an error card with «Повторить»,
+    // not in an endless skeleton: our own controller aborts it after 15 s and
+    // also follows the caller's signal.
+    var own = new AbortController(), timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; own.abort(); }, opt.timeout || API_TIMEOUT);
+    if (opt.signal) {
+      if (opt.signal.aborted) own.abort();
+      else opt.signal.addEventListener('abort', function () { own.abort(); }, { once: true });
+    }
+    var init = { method: method, credentials: 'same-origin', headers: headers, cache: 'no-store', signal: own.signal };
     if (opt.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opt.body); }
     if (method !== 'GET' && method !== 'HEAD' && S.csrf) headers['X-CSRF-Token'] = S.csrf;
     return fetch(API + path, init).then(function (res) {
       var ctype = res.headers.get('Content-Type') || '';
       var parse = opt.raw && res.ok ? Promise.resolve(res) : (ctype.indexOf('json') >= 0 ? res.json().catch(function () { return null; }) : Promise.resolve(null));
       return parse.then(function (data) {
+        clearTimeout(timer);
+        if (timedOut) throw new ApiError('timeout', 0);
         if (res.ok) return data;
         var code = (data && typeof data.error === 'string') ? data.error : 'http';
         var err = new ApiError(code, res.status, data && data.field, res.headers.get('Retry-After'));
@@ -325,6 +353,8 @@
         throw err;
       });
     }, function (e) {
+      clearTimeout(timer);
+      if (timedOut) throw new ApiError('timeout', 0);
       if (e && e.name === 'AbortError') throw new ApiError('abort', 0);
       throw new ApiError('network', 0);
     });
@@ -332,17 +362,18 @@
   function errText(e) {
     switch (e && e.code) {
       case 'network': return 'Нет связи с сервером. Проверьте подключение и попробуйте ещё раз.';
-      case 'auth': return 'Сеанс истёк — войдите снова.';
+      case 'timeout': return 'Сервер не отвечает. Попробуйте ещё раз.';
+      case 'auth': return 'Сеанс истёк\u00A0— войдите снова.';
       case 'csrf': return 'Сеанс устарел. Обновите страницу.';
       case 'role': return 'Недостаточно прав для этого действия.';
-      case 'not_found': return 'Заявка не найдена — возможно, её уже нет.';
+      case 'not_found': return 'Заявка не найдена\u00A0— возможно, её уже нет.';
       case 'invalid': return 'Сервер не принял значение' + (e.field ? ' поля «' + e.field + '»' : '') + '.';
-      case 'rate': return 'Слишком много запросов — подождите немного.';
+      case 'rate': return 'Слишком много запросов\u00A0— подождите немного.';
       default: return 'Что-то пошло не так. Попробуйте ещё раз.';
     }
   }
   function onUnauthorized() {
-    if (S.user) { S.user = null; renderLogin('Сеанс истёк — войдите снова.'); }
+    if (S.user) { S.user = null; renderLogin('Сеанс истёк\u00A0— войдите снова.'); }
   }
 
   /* ------------------------------------------------------------------ session */
@@ -439,7 +470,6 @@
     document.title = 'Вход · ' + DEFAULT_BRAND.name;
 
     var errBox = h('p', { class: 'login__error', 'aria-live': 'assertive', id: 'login-err' });
-    if (notice) add(errBox, [icon('alert', 'ico--sm'), h('span', { text: notice })]);
     var login = h('input', { class: 'input', id: 'login', name: 'username', type: 'email', inputmode: 'email', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false', required: true, 'aria-describedby': 'login-err' });
     var pass = h('input', { class: 'input', id: 'password', name: 'password', type: 'password', autocomplete: 'current-password', required: true, 'aria-describedby': 'login-err' });
     var eye = h('button', { class: 'icon-btn icon-btn--flat icon-btn--sm input-wrap__btn', type: 'button', 'aria-label': 'Показать пароль', 'aria-pressed': 'false', 'aria-controls': 'password' }, icon('eye', 'ico--sm'));
@@ -481,7 +511,7 @@
         if (err.code === 'credentials') { setError('Неверный логин или пароль'); pass.select(); pass.focus(); }
         else if (err.code === 'rate') {
           var m = Math.max(1, Math.ceil((parseInt(err.retry, 10) || 60) / 60));
-          setError('Слишком много попыток — подождите ' + m + ' мин');
+          setError('Слишком много попыток\u00A0— подождите ' + m + NB + 'мин');
         } else setError(errText(err));
       });
     });
@@ -502,7 +532,7 @@
         h('p', { class: 'login__kicker', text: 'Панель заявок' }),
         h('div', { class: 'login__copy' },
           h('p', { class: 'login__headline' }, h('span', { text: 'Все заявки' }), h('span', { class: 'login__grad', text: 'в одном месте' })),
-          h('p', { class: 'login__lead', text: 'Звонки, сообщения и формы с сайта — в одной ленте. Статусы, ответственные и заметки команды, без таблиц и пересылок.' })),
+          h('p', { class: 'login__lead', text: 'Звонки, сообщения и формы с сайта\u00A0— в одной ленте. Статусы, ответственные и заметки команды, без таблиц и пересылок.' })),
         h('div', { class: 'mini' },
           h('div', { class: 'mini__row' }, h('span', { class: 'label', text: 'Заявки за неделю' }), h('span', { class: 'round-go round-go--dark' }, icon('arrow-up-right', 'ico--sm'))),
           h('div', { class: 'mini__row' }, h('span', { class: 'mini__num', text: '48' }), h('span', { class: 'delta' }, icon('arrow-up'), '24%')),
@@ -514,8 +544,10 @@
           h('div', { class: 'brand' }, h('span', { class: 'brand__tile', 'aria-hidden': 'true', text: DEFAULT_BRAND.logo }), h('span', { class: 'brand__name', text: DEFAULT_BRAND.name })),
           h('div', null, h('h1', { class: 'login__title', text: 'Вход в админку' }), h('p', { class: 'login__sub', text: 'Заявки с сайта, статусы и команда.' })),
           form,
-          h('p', { class: 'login__foot' }, icon('shield', 'ico--sm'), 'Доступ выдаёт владелец рабочего пространства')))));
+          h('p', { class: 'login__foot' }, icon('shield', 'ico--sm'), 'Доступ выдаёт владелец рабочего' + NB + 'пространства')))));
     setTimeout(function () { login.focus(); }, 0);
+    // a live region only announces changes made after it is in the page
+    if (notice) setTimeout(function () { if (errBox.isConnected && !errBox.firstChild) add(errBox, [icon('alert', 'ico--sm'), h('span', { text: notice })]); }, 60);
   }
 
   function logout() {
@@ -558,7 +590,7 @@
         navLink('#/team', 'users', 'Команда', 'team'),
         navLink('#/settings', 'settings', 'Настройки', 'settings')),
       h('div', { class: 'side-foot' },
-        site ? h('a', { class: 'nav__link', href: site, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), h('span', { class: 'nav__text', text: 'Открыть сайт ↗' })) : null,
+        site ? h('a', { class: 'nav__link', href: site, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), h('span', { class: 'nav__text', text: 'Открыть сайт' }), h('span', { class: 'sr', text: ' (в новой вкладке)' })) : null,
         h('a', { class: 'nav__link', href: 'mailto:' + HELP_MAIL }, icon('help'), h('span', { class: 'nav__text', text: 'Помощь' })),
         E.collapseBtn,
         h('div', { class: 'me' },
@@ -570,10 +602,16 @@
 
     // top bar
     E.search = h('input', { class: 'search__input', type: 'search', placeholder: 'Поиск по заявкам', 'aria-label': 'Поиск по заявкам', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'search' });
-    var kbd = h('span', { class: 'kbd', 'aria-hidden': 'true', text: isMac ? '⌘K' : 'Ctrl K' });
+    var kbd = h('span', { class: 'kbd', 'aria-hidden': 'true', text: isMac ? '⌘K' : 'Ctrl' + NB + 'K' });
     E.searchClear = h('button', { class: 'icon-btn icon-btn--flat icon-btn--sm search__clear', type: 'button', 'aria-label': 'Очистить поиск', hidden: true }, icon('close', 'ico--sm'));
     E.searchBox = h('div', { class: 'search', role: 'search' }, icon('search'), E.search, E.searchClear, kbd);
     E.searchBox.addEventListener('mousedown', function (e) { if (e.target !== E.search && !E.searchClear.contains(e.target)) { e.preventDefault(); E.search.focus(); } });
+    // Outside «Заявки» the field opens the search palette — on a click or on
+    // typing, never on mere focus (tabbing past it must not open a dialog).
+    E.searchBox.addEventListener('click', function (e) {
+      if (E.searchClear.contains(e.target) || (S.route && S.route.name === 'leads')) return;
+      openPalette(E.search.value, E.search);
+    });
     wireTopSearch(kbd);
 
     E.themeBtn = h('button', { class: 'icon-btn', type: 'button', onclick: toggleTheme });
@@ -597,9 +635,11 @@
     E.shell = h('div', { class: 'shell' + (collapsed ? ' is-collapsed' : '') },
       h('div', { class: 'haze', 'aria-hidden': 'true' }), E.sidebar, E.scrim, E.mainCol);
     fill(E.app, E.shell);
+    E.firstRender = true;
     document.title = 'Заявки · ' + wsName();
     syncSidebarInert();
     updateCounts();
+    loadTeam().catch(function () {});   // team tints for every avatar on the page
   }
 
   function wireTopSearch(kbd) {
@@ -608,33 +648,36 @@
       var p = Object.assign({}, S.route.params, { q: E.search.value.trim(), page: '' });
       setHash(leadsHash(p), true);
     }, 250);
+    function onLeads() { return !!(S.route && S.route.name === 'leads'); }
     E.search.addEventListener('input', function () {
-      E.searchClear.hidden = !E.search.value;
-      kbd.hidden = !!E.search.value;
-      if (S.route && S.route.name === 'leads') push();
-    });
-    E.search.addEventListener('focus', function () {
-      if (E.suppressFocus) { E.suppressFocus = false; return; }
-      if (!S.route || S.route.name !== 'leads') {
+      if (!onLeads() && E.search.value) {   // paste, dictation, IME: hand the text to the palette
         var v = E.search.value;
-        E.search.blur();
+        E.search.value = '';
         openPalette(v, E.search);
       }
+      E.searchClear.hidden = !E.search.value;
+      kbd.hidden = !!E.search.value;
+      if (onLeads()) push();
     });
     E.search.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && S.route && S.route.name === 'leads') { push.cancel(); var p = Object.assign({}, S.route.params, { q: E.search.value.trim(), page: '' }); setHash(leadsHash(p), true); }
+      if (!onLeads() && !e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key.length === 1 && e.key !== ' ') { e.preventDefault(); openPalette(E.search.value + e.key, E.search); return; }
+        if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); openPalette(E.search.value, E.search); return; }
+      }
+      if (e.key === 'Enter' && onLeads()) { push.cancel(); var p = Object.assign({}, S.route.params, { q: E.search.value.trim(), page: '' }); setHash(leadsHash(p), true); }
       if (e.key === 'Escape' && E.search.value) { e.stopPropagation(); E.search.value = ''; E.search.dispatchEvent(new Event('input')); }
     });
     E.searchClear.addEventListener('click', function () {
       E.search.value = '';
       E.search.dispatchEvent(new Event('input'));
-      E.suppressFocus = true;
       E.search.focus();
     });
   }
   function syncTopSearch() {
     if (!E.search) return;
-    var q = S.route && S.route.name === 'leads' ? (S.route.params.q || '') : '';
+    var leads = !!(S.route && S.route.name === 'leads');
+    if (leads) E.search.removeAttribute('aria-haspopup'); else E.search.setAttribute('aria-haspopup', 'dialog');
+    var q = leads ? (S.route.params.q || '') : '';
     if (document.activeElement !== E.search) E.search.value = q;
     E.searchClear.hidden = !E.search.value;
     var kbd = $('.kbd', E.searchBox);
@@ -787,7 +830,12 @@
     S.leads = null;
   }
   function render(fn, r) {
-    var fromNav = document.activeElement && (E.sidebar.contains(document.activeElement) || document.activeElement === document.body);
+    // Move focus to the new page's heading only on in-app navigation. On the
+    // first render after boot or login focus stays at the document start, so
+    // the first Tab reaches the skip link.
+    var first = !!E.firstRender;
+    E.firstRender = false;
+    var fromNav = !first && document.activeElement && (E.sidebar.contains(document.activeElement) || document.activeElement === document.body);
     runCleanups();
     S.nav += 1;
     S.view = r.name;
@@ -825,7 +873,8 @@
     function step(t) {
       var k = Math.min(1, (t - start) / dur);
       var e = 1 - Math.pow(1 - k, 3);
-      el.textContent = format(k < 1 ? to * e : to);
+      // integers stay integers mid-animation: «57,91» reads as a fraction
+      el.textContent = format(k < 1 ? (format === num ? Math.round(to * e) : to * e) : to);
       if (k < 1 && el.isConnected) requestAnimationFrame(step);
     }
     el.textContent = format(0);
@@ -892,21 +941,27 @@
     fill(root, h('div', { class: 'dash' }, head, qa, body));
 
     var ctrl = null;
+    var loadCleanups = [];   // teardown of the rows of the current period (chart observer)
+    function dropRows() { loadCleanups.forEach(function (fn) { try { fn(); } catch (e) { /* ignore */ } }); loadCleanups = []; S.redrawChart = null; }
     function load(d) {
       days = d;
       $$('.seg__opt', seg).forEach(function (o) { o.setAttribute('aria-pressed', String(+o.dataset.days === d)); });
       if (ctrl) ctrl.abort();
       ctrl = new AbortController();
       var my = ctrl;
+      dropRows();
       fill(body, dashSkeleton());
       body.setAttribute('aria-busy', 'true');
       Promise.all([
         api('/stats?days=' + d, { signal: my.signal }),
-        api('/activity?limit=5', { signal: my.signal })
+        api('/activity?limit=5', { signal: my.signal }),
+        // current counts (the same numbers as the tabs of «Заявки») and the oldest new lead
+        api('/leads?status=new&sort=old&limit=1', { signal: my.signal }).catch(function (e) { if (e.code === 'abort') throw e; return null; }),
+        loadTeam().catch(function () { return null; })
       ]).then(function (res) {
         if (!alive(token) || my !== ctrl) return;
         body.removeAttribute('aria-busy');
-        fill(body, dashRows(res[0], res[1].items || []));
+        fill(body, dashRows(res[0], res[1].items || [], res[2], loadCleanups));
       }, function (e) {
         if (!alive(token) || my !== ctrl || e.code === 'abort' || e.code === 'auth') return;
         body.removeAttribute('aria-busy');
@@ -914,7 +969,7 @@
       });
     }
     S.dash = { setDays: function (d) { if (d !== days) load(d); } };
-    S.cleanups.push(function () { if (ctrl) ctrl.abort(); });
+    S.cleanups.push(function () { if (ctrl) ctrl.abort(); dropRows(); });
     load(days);
   }
 
@@ -933,28 +988,35 @@
     ];
   }
 
-  function deltaChip(cur, prev, points) {
-    var diff, txt, dir;
+  // Change against the previous period. A percentage on a tiny base
+  // («+6850%» after 2 leads) means nothing, so below 10 leads or beyond ±300%
+  // the absolute change is shown instead. null = no previous data.
+  function deltaInfo(cur, prev, points) {
+    var dir, sign;
     if (points) {
-      diff = (cur - prev) * 100;
-      txt = (diff > 0 ? '+' : diff < 0 ? '−' : '') + pct1(Math.abs(diff)) + ' п.п.';
-      dir = Math.abs(diff) < 0.05 ? 0 : diff > 0 ? 1 : -1;
-    } else {
-      if (!prev) {
-        return cur ? h('span', { class: 'delta delta--flat', text: 'новый период' }) : h('span', { class: 'delta delta--flat', text: '0%' });
-      }
-      diff = Math.round((cur - prev) / prev * 100);
-      txt = Math.abs(diff) + '%';
-      dir = diff === 0 ? 0 : diff > 0 ? 1 : -1;
+      var dp = (cur - prev) * 100;
+      dir = Math.abs(dp) < 0.05 ? 0 : dp > 0 ? 1 : -1;
+      return { dir: dir, text: pct1(Math.abs(dp)) + NB + 'п.п.', sr: dir > 0 ? 'рост на ' : dir < 0 ? 'снижение на ' : 'без изменений, ' };
     }
-    var label = dir > 0 ? 'рост ' : dir < 0 ? 'снижение ' : '';
-    return h('span', { class: 'delta' + (dir < 0 ? ' delta--down' : dir === 0 ? ' delta--flat' : '') },
-      dir ? icon(dir > 0 ? 'arrow-up' : 'arrow-down') : null,
-      h('span', { class: 'sr', text: label }),
-      points ? txt.replace(/^[+−]/, '') : txt);
+    if (!prev) return null;
+    dir = cur === prev ? 0 : cur > prev ? 1 : -1;
+    sign = dir > 0 ? '+' : dir < 0 ? '−' : '';
+    var pc = Math.round((cur - prev) / prev * 100);
+    if (prev < 10 || Math.abs(pc) > 300) {
+      return { dir: dir, abs: true, n: num(Math.abs(cur - prev)), text: sign + num(Math.abs(cur - prev)), sr: dir > 0 ? 'больше на ' : dir < 0 ? 'меньше на ' : 'столько же, ' };
+    }
+    return { dir: dir, text: Math.abs(pc) + '%', signed: sign + Math.abs(pc) + '%', sr: dir > 0 ? 'рост на ' : dir < 0 ? 'снижение на ' : 'без изменений, ' };
+  }
+  function deltaChip(info) {
+    if (!info) return null;
+    return h('span', { class: 'delta' + (info.dir < 0 ? ' delta--down' : info.dir === 0 ? ' delta--flat' : '') },
+      info.dir && !info.abs ? icon(info.dir > 0 ? 'arrow-up' : 'arrow-down') : null,
+      h('span', { class: 'sr', text: info.sr }),
+      info.abs ? h('span', { 'aria-hidden': 'true', text: info.text }) : info.text,
+      info.abs ? h('span', { class: 'sr', text: info.n }) : null);
   }
 
-  function dashRows(st, events) {
+  function dashRows(st, events, leadsNow, cleanups) {
     var t = st.totals || {};
     var range = rangeLabel(st.from, st.to);
     var i = 0;
@@ -964,35 +1026,58 @@
     }
     function rangeChip() { return h('span', { class: 'kbd' }, icon('calendar', 'ico--xs'), range); }
 
+    // current numbers: the same ones the tabs of «Заявки» show
+    var cnt = leadsNow && leadsNow.counts ? leadsNow.counts : null;
+    var nowNew = cnt ? (cnt.new || 0) : (S.counts.new || 0);
+    var nowProgress = cnt && typeof cnt.progress === 'number' ? cnt.progress : null;
+    var nowClosed = cnt ? (cnt.closed || 0) : null;
+    var oldestNew = leadsNow && leadsNow.items && leadsNow.items[0];
+
     /* period card */
     var waiting = (st.attention || []).filter(function (a) { return a.kind === 'waiting'; })[0];
+    var waitN = waiting ? (waiting.count || 0) : 0;
     var nums = [];
-    function kpi(label, ico, value, format, chip, caption) {
+    // label · number alone on its baseline · chip and caption on one line under it
+    function kpi(label, ico, value, format, chip, caption, href) {
       var n = h('span', { class: 'kpi__num' });
       nums.push([n, value, format]);
-      return h('div', { class: 'tile kpi' },
+      return h(href ? 'a' : 'div', { class: 'tile kpi' + (href ? ' kpi--link' : ''), href: href || null },
         h('div', { class: 'kpi__top' }, h('span', { class: 'kpi__label', text: label }), icon(ico, 'kpi__ico')),
-        h('div', { class: 'kpi__row' }, n, chip),
-        h('p', { class: 'kpi__foot', text: caption }));
+        h('div', { class: 'kpi__row' }, n),
+        h('p', { class: 'kpi__foot' }, chip, caption ? h('span', { class: 'kpi__cap', text: caption }) : null));
     }
     var convFmt = function (v) { return pct1(v * 100) + '%'; };
+    var leadsDelta = deltaInfo(t.leads || 0, t.prevLeads || 0);
+    var waitChip = null, waitCap;
+    if (nowNew) {
+      waitChip = waitN > 0
+        ? h('span', { class: 'delta delta--warn', title: nowNew === 1 ? 'Ждёт дольше часа' : 'Ждут дольше часа' }, icon('alert'),
+            // one waiting lead: just «> 1 ч»; several: «все > 1 ч» or «2 > 1 ч»
+            h('span', { 'aria-hidden': 'true', text: (nowNew === 1 ? '' : (waitN >= nowNew ? 'все' : num(waitN)) + NB) + '>' + NB + '1' + NB + 'ч' }),
+            h('span', { class: 'sr', text: nowNew === 1 ? 'ждёт дольше часа' : (waitN >= nowNew ? 'все' : 'из них ' + num(waitN)) + ' ждут дольше часа' }))
+        : h('span', { class: 'delta delta--flat' }, icon('check'), 'в срок');
+      var oldT = oldestNew ? toDate(oldestNew.time) : null;
+      waitCap = oldT ? 'старейшая ждёт ' + durationText((Date.now() - oldT.getTime()) / 60000) : 'новые, без ответа';
+    } else waitCap = 'новых заявок нет';
     var kpis = h('div', { class: 'kpis' },
-      kpi('Всего заявок', 'inbox', t.leads || 0, num, deltaChip(t.leads || 0, t.prevLeads || 0), 'к прошлому периоду'),
-      kpi('Ждут ответа', 'clock', t.newWaiting || 0, num, waiting && waiting.count
-        ? h('span', { class: 'delta delta--warn' }, icon('clock'), String(waiting.count))
-        : h('span', { class: 'delta delta--flat' }, icon('check'), 'в срок'),
-        waiting && waiting.count ? 'ждут дольше часа' : 'никто не ждёт дольше часа'),
-      kpi('Конверсия в договор', 'target', t.conversion || 0, convFmt, deltaChip(t.conversion || 0, t.prevConversion || 0, true), 'к прошлому периоду, п.п.'));
+      kpi('Всего заявок', 'inbox', t.leads || 0, num, deltaChip(leadsDelta), leadsDelta ? 'к прошлому периоду' : 'за прошлый период данных нет'),
+      kpi('Ждут ответа', 'clock', nowNew, num, waitChip, waitCap, '#/leads?status=new'),
+      kpi('Конверсия в договор', 'target', t.conversion || 0, convFmt,
+        t.prevLeads ? deltaChip(deltaInfo(t.conversion || 0, t.prevConversion || 0, true)) : null,
+        t.prevLeads ? 'к прошлому периоду' : 'за прошлый период данных нет'));
 
     function rankCard(cls, title, items, link, keyName) {
       var total = items.reduce(function (s, x) { return s + (x.count || 0); }, 0);
       var list = h('ol', { class: 'rank__list' });
       items.slice(0, 3).forEach(function (x, k) {
         var q = {}; q[keyName] = x.key;
+        var share = total ? (x.count || 0) / total : 0;
         add(list, h('li', null, h('a', { class: 'rank__row', href: leadsHash(q) },
           h('span', { class: 'rank__n', text: '0' + (k + 1) }),
-          h('span', { class: 'rank__name', text: x.label || lab(keyName === 'mode' ? MODE : INTEREST, x.key) }),
-          h('span', { class: 'rank__count', text: num(x.count) + ' ' + leadsWord(x.count) }))));
+          h('span', { class: 'rank__body' },
+            h('span', { class: 'rank__name', text: x.label || lab(keyName === 'mode' ? MODE : INTEREST, x.key) }),
+            h('span', { class: 'rank__bar', 'aria-hidden': 'true' }, h('span', { class: 'rank__fill', vars: { '--w': (share * 100).toFixed(1) + '%' } }))),
+          h('span', { class: 'rank__count', title: num(x.count) + NB + leadsWord(x.count) }, num(x.count), h('span', { class: 'sr', text: ' ' + leadsWord(x.count) })))));
       });
       if (!items.length) add(list, h('li', { class: 'rank__empty', text: 'Пока нет данных за период' }));
       return h('div', { class: 'rank ' + cls },
@@ -1012,13 +1097,17 @@
     perf.setAttribute('aria-labelledby', 'h-perf');
 
     /* activity card */
+    // The chips show what their links open: the current tabs of «Заявки»
+    // (not the period), so «В работе 23» opens exactly those 23 rows.
     var bs = st.byStatus || {};
     var inWork = (bs.contacted || 0) + (bs.proposal || 0);
-    var closed = (bs.won || 0) + (bs.lost || 0) + (bs.spam || 0);
-    var chips = h('div', { class: 'chips' },
-      h('a', { class: 'chip-stat chip-stat--dark', href: '#/leads?status=new' }, h('span', { class: 'chip-stat__label', text: 'Новые' }), h('span', { class: 'chip-stat__num', text: num(bs.new || 0) })),
-      h('a', { class: 'chip-stat chip-stat--accent', href: '#/leads?status=open' }, h('span', { class: 'chip-stat__label', text: 'В работе' }), h('span', { class: 'chip-stat__num', text: num(inWork) })),
-      h('a', { class: 'chip-stat chip-stat--light', href: '#/leads?status=closed' }, h('span', { class: 'chip-stat__label', text: 'Закрыты' }), h('span', { class: 'chip-stat__num', text: num(closed) })));
+    function chipStat(cls, label, value, href) {
+      return h('a', { class: 'chip-stat ' + cls, href: href }, h('span', { class: 'chip-stat__label', text: label }), h('span', { class: 'chip-stat__num', text: value === null ? '—' : num(value) }));
+    }
+    var chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Заявки сейчас' },
+      chipStat('chip-stat--dark', 'Новые', nowNew, '#/leads?status=new'),
+      chipStat('chip-stat--accent', 'В работе', nowProgress, '#/leads?status=progress'),
+      chipStat('chip-stat--light', 'Закрыты', nowClosed, '#/leads?status=closed'));
     var feed = h('ul', { class: 'feed' });
     events.slice(0, 5).forEach(function (ev) {
       var lead = ev.lead || {};
@@ -1041,10 +1130,11 @@
     var totalWon = (st.series || []).reduce(function (s, p) { return s + (p.won || 0); }, 0);
     var summaryNum = h('span', { class: 'chart-summary__num', text: num(t.leads || 0) });
     var deltaTxt = '';
-    if (t.prevLeads) {
-      var dlt = Math.round(((t.leads || 0) - t.prevLeads) / t.prevLeads * 100);
-      deltaTxt = ', ' + (dlt > 0 ? '+' : dlt < 0 ? '−' : '') + Math.abs(dlt) + '% к прошлому периоду';
+    if (leadsDelta) {
+      if (leadsDelta.abs) deltaTxt = leadsDelta.dir ? ', на' + NB + leadsDelta.n + ' ' + (leadsDelta.dir > 0 ? 'больше' : 'меньше') + ', чем в прошлом периоде' : ', столько же, сколько в прошлом периоде';
+      else deltaTxt = ', ' + leadsDelta.signed + ' к прошлому периоду';
     }
+    var foot = h('p', { class: 'chart-foot' });
     var chart = card('chart-card', [
       head('Заявки по дням', rangeChip(), 'h-chart'),
       h('div', { class: 'chart-summary' }, summaryNum, h('span', { class: 'chart-summary__text', text: leadsWord(t.leads || 0) + deltaTxt })),
@@ -1052,7 +1142,7 @@
         h('span', null, h('i', { class: 'lg-bar' }), 'Заявки'),
         h('span', null, h('i', { class: 'lg-line' }), 'Договоры')),
       chartBox,
-      h('p', { class: 'chart-foot', id: 'chart-foot' })]);
+      foot]);
     chart.setAttribute('aria-labelledby', 'h-chart');
 
     /* status card */
@@ -1066,8 +1156,10 @@
       var share = x[1] / pTotal;
       add(bar, h('span', { class: 'sbar__seg sbar__seg--' + x[0], vars: { '--w': String(share) }, text: share >= 0.14 ? pc(x[1]) + '%' : '' }));
     });
-    function legendItem(cls, name, value, href) {
-      return h('a', { class: 'legend__item legend__item--' + cls, href: href },
+    // period numbers: not links, since the lists of «Заявки» are not limited
+    // to the period and would show other numbers under the same words
+    function legendItem(cls, name, value) {
+      return h('div', { class: 'legend__item legend__item--' + cls },
         h('span', { class: 'legend__name', text: name }),
         h('span', { class: 'legend__num', text: num(value) }),
         h('span', { class: 'legend__pct', text: pc(value) + '%' }));
@@ -1076,9 +1168,9 @@
       h('div', { class: 'card__head' }, h('div', null, h('h2', { class: 'label', id: 'h-status', text: 'Статус заявок' }), h('p', { class: 'card__sub', text: 'За выбранный период' }))),
       bar,
       h('div', { class: 'legend' },
-        legendItem('open', 'Открыты', pOpen, '#/leads?status=open'),
-        legendItem('won', 'Договор', pWon, '#/leads?status=won'),
-        legendItem('lost', 'Отказ, спам', pLost, '#/leads?status=closed'))]);
+        legendItem('open', 'Открыты', pOpen),
+        legendItem('won', 'Договор', pWon),
+        legendItem('lost', 'Отказ, спам', pLost))]);
     status.setAttribute('aria-labelledby', 'h-status');
 
     /* attention */
@@ -1099,17 +1191,18 @@
     var med = durationMin(t.responseMedianMin);
     var target = t.responseTargetMin || 60;
     var p = t.responseMedianMin === null || t.responseMedianMin === undefined ? 0 : Math.min(100, Math.round(t.responseMedianMin / target * 100));
-    var speedNum = h('div', { class: 'speed__num' }, med ? [med.n, h('small', { text: med.u })] : '—');
+    var speedNum = h('div', { class: 'speed__num' }, med ? [med.n, h('small', { text: NB + med.u })] : '—');
     var share = Math.round((t.respondedShare || 0) * 100);
     var over = med && t.responseMedianMin > target;
     var speed = card('speed', [
       h('div', { class: 'card__head' }, h('h2', { class: 'label', id: 'h-speed', text: 'Скорость ответа' }), h('span', { class: 'round-go round-go--glass', 'aria-hidden': 'true' }, icon('zap', 'ico--sm'))),
       h('div', null, speedNum, h('p', { class: 'speed__meta', text: med ? 'медиана за период' : 'нет ответов за период' })),
       h('div', null,
-        h('div', { class: 'prog', role: 'img', 'aria-label': med ? 'Медиана ' + med.n + ' ' + med.u + ' при цели ' + target + ' мин' : 'Нет данных' },
+        h('div', { class: 'prog', role: 'img', 'aria-label': med ? 'Медиана ' + med.n + NB + med.u + ' при цели ' + target + NB + 'мин' : 'Нет данных' },
           h('span', { class: 'prog__fill', vars: { '--p': p + '%' } })),
-        h('div', { class: 'prog-labels' }, h('span', { text: '0' }), h('span', { text: over ? 'выше цели' : 'цель ' + target + ' мин' }))),
-      h('p', { class: 'speed__share', text: 'Ответили на ' + share + '% ' + plural(t.leads || 0, ['заявку', 'заявки', 'заявок']) }),
+        h('div', { class: 'prog-labels' }, h('span', { text: '0' }), h('span', { text: over ? 'выше цели' : 'цель' + NB + target + NB + 'мин' }))),
+      // after a percentage the noun is always genitive plural: «на 97% заявок»
+      h('p', { class: 'speed__share', text: 'Ответили на ' + share + '%' + NB + 'заявок' }),
       h('div', { class: 'speed__tip' },
         h('span', { class: 'label' }, icon('bulb', 'ico--xs'), 'Совет'),
         h('p', { text: 'Чем быстрее первый ответ, тем выше шанс договора. Уведомления в Telegram помогают не пропускать новые заявки.' }))]);
@@ -1120,20 +1213,26 @@
       h('div', { class: 'row-b' }, chart, h('div', { class: 'col-stack' }, status, attention), speed)
     ];
 
-    // after insertion: numbers + chart
+    // after insertion: numbers + chart. The observer belongs to these rows
+    // only: load() disconnects it before the next period replaces them.
     requestAnimationFrame(function () {
+      if (!chartBox.isConnected) return;
       nums.forEach(function (x) { countUp(x[0], x[1], x[2]); });
-      var draw = function () { drawChart(chartBox, st, $('#chart-foot'), totalWon); };
+      var lastW = -1, lastH = -1;
+      var draw = function () {
+        if (!chartBox.isConnected) return;
+        var size = drawChart(chartBox, st, foot, totalWon);
+        lastW = size.w; lastH = size.h;   // the size the chart was drawn for
+      };
       draw();
-      var lastW = chartBox.clientWidth, lastH = chartBox.clientHeight;
       var ro = new ResizeObserver(function () {
+        if (!chartBox.isConnected) { ro.disconnect(); return; }
         if (Math.abs(chartBox.clientWidth - lastW) < 2 && Math.abs(chartBox.clientHeight - lastH) < 2) return;
-        lastW = chartBox.clientWidth; lastH = chartBox.clientHeight;
         draw();
       });
       ro.observe(chartBox);
       S.redrawChart = draw;
-      S.cleanups.push(function () { ro.disconnect(); });
+      (cleanups || S.cleanups).push(function () { ro.disconnect(); });
     });
     return rows;
   }
@@ -1154,12 +1253,13 @@
       case 'created':
         return name ? ['Новая заявка: ', b(name), has(MODE_LC, lead.mode) ? ', ' + MODE_LC[lead.mode] : ''] : ['Новая заявка'];
       case 'status':
-        return [b(who), ' ' + verb(who, 'перевёл', 'перевела') + ' заявку ', ref ? [ref, ' '] : '', 'в “' + lab(STATUS, ev.to) + '”'];
+        return [b(who), ' ' + verb(who, 'перевёл', 'перевела') + ' заявку ', ref ? [ref, ' '] : '', 'в «' + lab(STATUS, ev.to) + '»'];
       case 'note':
         return [b(who), ' ' + verb(who, 'оставил', 'оставила') + ' заметку к заявке', ref ? [' ', ref] : ''];
       case 'assign':
+        if (ev.assignee && ev.by && ev.assignee.id === ev.by.id) return [b(who), ' ' + verb(who, 'взял', 'взяла') + ' заявку', ref ? [' ', ref] : '', ' в работу'];
         return ev.assignee
-          ? [b(who), ' ' + verb(who, 'назначил', 'назначила') + ' ответственного за заявку', ref ? [' ', ref] : '', ': ', b(ev.assignee.name)]
+          ? [b(who), ': ответственный за заявку', ref ? [' ', ref] : '', NB + '— ', b(ev.assignee.name)]
           : [b(who), ' ' + verb(who, 'снял', 'сняла') + ' ответственного с заявки', ref ? [' ', ref] : ''];
       case 'erase':
         return [b(who), ' ' + verb(who, 'удалил', 'удалила') + ' персональные данные из заявки'];
@@ -1181,25 +1281,35 @@
     return 'M' + x + ',' + (y + hgt) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
       'H' + (x + w - r) + 'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + 'V' + (y + hgt) + 'Z';
   }
+  // Returns the size it was drawn for; the caller's ResizeObserver redraws
+  // when the box size differs from it.
   function drawChart(box, st, foot, totalWon) {
     clear(box);
-    var series = (st.series || []).map(function (p) { return { from: p.date, to: p.date, leads: p.leads || 0, won: p.won || 0 }; });
-    var W = Math.max(240, Math.floor(box.clientWidth || 600));
-    var H = Math.max(220, Math.min(460, Math.floor(box.clientHeight || 260)));
+    var series = (st.series || []).map(function (p) { return { from: p.date, to: p.date, days: 1, leads: p.leads || 0, won: p.won || 0 }; });
+    var boxW = box.clientWidth;
+    var W = Math.max(240, Math.floor(boxW || 600));
     var padL = 30, padR = 6, padT = 32, padB = 30;
-    var pw = W - padL - padR, ph = H - padT - padB;
+    var pw = W - padL - padR;
     var weekly = false;
     if (series.length > 7 && (pw / series.length) * 0.56 < 10) {
       weekly = true;
       var out = [];
       for (var e = series.length; e > 0; e -= 7) {
         var chunk = series.slice(Math.max(0, e - 7), e);
-        out.unshift({ from: chunk[0].from, to: chunk[chunk.length - 1].to,
+        out.unshift({ from: chunk[0].from, to: chunk[chunk.length - 1].to, days: chunk.length, partial: chunk.length < 7,
           leads: chunk.reduce(function (s, x) { return s + x.leads; }, 0),
           won: chunk.reduce(function (s, x) { return s + x.won; }, 0) });
       }
       series = out;
     }
+    var partialFirst = weekly && series.length && series[0].partial;
+    // The caption goes in first: it takes a line under the chart, so the
+    // height is measured only after it is there (it used to overlap the axis).
+    if (foot) foot.textContent = (weekly ? 'По неделям' : 'По дням') + NB + '· ' + rangeLabel(st.from, st.to) + NB + '· ' + num(totalWon) + NB + plural(totalWon, ['договор', 'договора', 'договоров']) +
+      (partialFirst ? NB + '· первая неделя неполная (' + series[0].days + NB + 'дн.)' : '');
+    var boxH = box.clientHeight;
+    var H = Math.max(220, Math.min(460, Math.floor(boxH || 260)));
+    var ph = H - padT - padB;
     var n = series.length || 1;
     var slot = pw / n;
     var bw = Math.max(4, Math.min(40, slot * 0.58));
@@ -1232,8 +1342,8 @@
       var x = cx(i) - bw / 2;
       if (p.leads > 0) {
         var bh = Math.max(3, (p.leads / top) * ph);
-        add(bars, svg('path', { class: 'bar', d: barPath(x, padT + ph - bh, bw, bh, Math.min(8, bw / 3)) },
-          svg('title', { text: (weekly ? plainDate(p.from) + ' – ' + plainDate(p.to) : plainDate(p.from)) + ': ' + p.leads + ' ' + leadsWord(p.leads) + ', договоров: ' + p.won })));
+        add(bars, svg('path', { class: 'bar' + (p.partial ? ' bar--partial' : ''), d: barPath(x, padT + ph - bh, bw, bh, Math.min(8, bw / 3)) },
+          svg('title', { text: (weekly ? plainDate(p.from) + ' – ' + plainDate(p.to) : plainDate(p.from)) + (p.partial ? ' (неполная неделя, ' + p.days + NB + 'дн.)' : '') + ': ' + p.leads + NB + leadsWord(p.leads) + ', договоров: ' + p.won })));
       } else {
         add(bars, svg('rect', { class: 'bar--zero', x: x, y: padT + ph - 2, width: bw, height: 2, rx: 1 }));
       }
@@ -1277,14 +1387,14 @@
     add(box, root);
 
     // text alternative
-    var table = h('table', { class: 'sr' },
+    var table = h('table', null,
       h('caption', { text: 'Заявки и договоры ' + (weekly ? 'по неделям' : 'по дням') }),
       h('thead', null, h('tr', null, h('th', { scope: 'col', text: weekly ? 'Неделя' : 'Дата' }), h('th', { scope: 'col', text: 'Заявки' }), h('th', { scope: 'col', text: 'Договоры' }))),
       h('tbody', null, series.map(function (p) {
-        return h('tr', null, h('th', { scope: 'row', text: weekly ? plainDate(p.from) + ' – ' + plainDate(p.to) : plainDate(p.from, true) }), h('td', { text: String(p.leads) }), h('td', { text: String(p.won) }));
+        return h('tr', null, h('th', { scope: 'row', text: weekly ? plainDate(p.from) + ' – ' + plainDate(p.to) + (p.partial ? ' (неполная неделя)' : '') : plainDate(p.from, true) }), h('td', { text: String(p.leads) }), h('td', { text: String(p.won) }));
       })));
-    add(box, table);
-    if (foot) foot.textContent = (weekly ? 'По неделям · ' : 'По дням · ') + rangeLabel(st.from, st.to) + ' · ' + num(totalWon) + ' ' + plural(totalWon, ['договор', 'договора', 'договоров']);
+    add(box, h('div', { class: 'sr' }, table));   // a wrapper: a table ignores width:1px and widened the page
+    return { w: boxW, h: boxH };
   }
 
   /* ------------------------------------------------------------------ leads list */
@@ -1294,7 +1404,7 @@
     var o = {};
     LEAD_KEYS.forEach(function (k) { if (p && p[k] !== undefined && p[k] !== null && String(p[k]) !== '') o[k] = String(p[k]); });
     if (o.status === 'all') delete o.status;
-    if (o.status && o.status !== 'open' && o.status !== 'closed' && !has(STATUS, o.status)) delete o.status;
+    if (o.status && o.status !== 'open' && o.status !== 'closed' && o.status !== 'progress' && !has(STATUS, o.status)) delete o.status;
     if (o.sort === 'new' || (o.sort && !has(SORTS, o.sort))) delete o.sort;
     if (o.page && !(parseInt(o.page, 10) > 1)) delete o.page;
     if (o.view !== 'grid') delete o.view;
@@ -1314,14 +1424,19 @@
   function leadHash(id, p) { var s = qsOf(p); return '#/leads/' + encodeURIComponent(id) + (s ? '?' + s : ''); }
   function dataKey(p) { var c = cleanParams(p); delete c.view; return JSON.stringify(c); }
 
+  var teamReq = null;
   function loadTeam() {
     if (S.team) return Promise.resolve(S.team);
-    return api('/team').then(function (d) { S.team = d.items || []; return S.team; });
+    if (!teamReq) {
+      teamReq = api('/team').then(function (d) { S.team = d.items || []; setTeamTints(S.team); teamReq = null; return S.team; },
+        function (e) { teamReq = null; throw e; });
+    }
+    return teamReq;
   }
 
   function viewLeads(root, r, token) {
     var params = cleanParams(r.params);
-    var data = null, ctrl = null, popOpen = false;
+    var data = null, ctrl = null, popOpen = false, popBuilt = false, pagerFocus = false;
 
     var exportBtn = can('export') ? h('button', { class: 'btn btn--primary', type: 'button', onclick: function (e) { exportCsv(params, e.currentTarget); } }, icon('download', 'ico--sm'), 'Экспорт CSV') : null;
     var head = pageHead('Заявки', 'Все обращения с сайта: звонки, сообщения и формы', exportBtn);
@@ -1345,7 +1460,8 @@
     var viewTog = h('div', { class: 'viewtog', role: 'group', 'aria-label': 'Вид' }, vList, vGrid);
     var tools = h('div', { class: 'tools' }, popWrap, sortSel, viewTog);
     var chipsBox = h('div', { class: 'active-filters', hidden: true });
-    var results = h('div', { class: 'results', 'aria-live': 'polite', 'aria-busy': 'true' });
+    // no aria-live here: srStatus below announces the count, not 20 rows
+    var results = h('div', { class: 'results', 'aria-busy': 'true', tabindex: '-1', 'aria-label': 'Список заявок' });
     var srStatus = h('p', { class: 'sr', role: 'status' });
 
     fill(root, head, leadsSearch, h('div', { class: 'tabs-row' }, tabs, tools), chipsBox, srStatus, results);
@@ -1357,6 +1473,11 @@
 
     function go(patch, replace) { setHash(leadsHash(Object.assign({}, params, patch)), !!replace); }
 
+    // tabs scroll sideways on phones: fade the right edge while more is hidden
+    function syncTabsFade() { tabs.classList.toggle('tabs--more', tabs.scrollWidth - tabs.clientWidth - tabs.scrollLeft > 2); }
+    tabs.addEventListener('scroll', syncTabsFade, { passive: true });
+    window.addEventListener('resize', syncTabsFade);
+
     function onDocDown(e) { if (popOpen && !popWrap.contains(e.target)) closePop(false); }
     function onDocKey(e) { if (popOpen && e.key === 'Escape') { e.stopPropagation(); closePop(true); } }
     document.addEventListener('mousedown', onDocDown);
@@ -1364,6 +1485,7 @@
     S.cleanups.push(function () {
       document.removeEventListener('mousedown', onDocDown);
       document.removeEventListener('keydown', onDocKey, true);
+      window.removeEventListener('resize', syncTabsFade);
       if (ctrl) ctrl.abort();
     });
 
@@ -1371,7 +1493,7 @@
       popOpen = true;
       pop.hidden = false;
       filterBtn.setAttribute('aria-expanded', 'true');
-      buildPop();
+      if (popBuilt) syncPop(); else buildPop();
       var f = $('select', pop);
       if (f) f.focus();
     }
@@ -1381,44 +1503,61 @@
       filterBtn.setAttribute('aria-expanded', 'false');
       if (focusBtn) filterBtn.focus();
     }
+    // Stable ids and a popover built once: changing a filter updates the
+    // values in place, so the focused select is never replaced.
     function selectField(label, key, options) {
-      var id = nextId('f');
-      var sel = h('select', { class: 'select', id: id },
+      var id = 'flt-' + key;
+      var sel = h('select', { class: 'select', id: id, data: { key: key } },
         h('option', { value: '', text: 'Любой' }),
         options.map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
       sel.value = params[key] || '';
       sel.addEventListener('change', function () { var p = {}; p[key] = sel.value; p.page = ''; go(p); });
       return h('div', { class: 'field' }, h('label', { class: 'field__label', for: id, text: label }), sel);
     }
+    function assigneeOptions() {
+      return [['none', 'Не назначен']].concat((S.team || []).filter(function (u) { return u.role !== 'viewer' && u.active !== false; }).map(function (u) { return [u.id, u.name]; }));
+    }
+    function syncPop() {
+      $$('select', pop).forEach(function (sel) { var v = params[sel.dataset.key] || ''; if (sel.value !== v) sel.value = v; });
+    }
+    function fillAssignees() {
+      var sel = $('#flt-assignee', pop);
+      if (!sel) return;
+      fill(sel, h('option', { value: '', text: 'Любой' }), assigneeOptions().map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+      sel.value = params.assignee || '';
+    }
     function buildPop() {
-      var team = S.team || [];
+      popBuilt = true;
       fill(pop,
         selectField('Тип обращения', 'mode', Object.keys(MODE).map(function (k) { return [k, MODE[k]]; })),
         selectField('Интерес', 'interest', Object.keys(INTEREST).map(function (k) { return [k, INTEREST[k]]; })),
         selectField('Бюджет', 'budget', Object.keys(BUDGET).map(function (k) { return [k, BUDGET[k]]; })),
-        selectField('Ответственный', 'assignee', [['none', 'Не назначен']].concat(team.filter(function (u) { return u.role !== 'viewer' && u.active !== false; }).map(function (u) { return [u.id, u.name]; }))),
+        selectField('Ответственный', 'assignee', assigneeOptions()),
         h('div', { class: 'pop__foot' },
           h('button', { class: 'btn btn--soft btn--sm', type: 'button', onclick: function () { go({ mode: '', interest: '', budget: '', assignee: '', waiting: '', stale: '', page: '' }); } }, 'Сбросить'),
           h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: function () { closePop(true); } }, 'Готово')));
-      if (!S.team) loadTeam().then(function () { if (popOpen) { var a = document.activeElement; buildPop(); if (a && a.id) { var again = document.getElementById(a.id); if (again) again.focus(); } } }).catch(function () {});
+      if (!S.team) loadTeam().then(fillAssignees).catch(function () {});
     }
 
     function renderControls() {
       var c = data ? data.counts : null;
       var st = params.status || 'all';
-      var defs = [['all', 'Все', c && c.all], ['new', 'Новые', c && c.new], ['open', 'В работе', c && c.open], ['closed', 'Закрытые', c && c.closed]];
+      // «В работе» = contacted + proposal (status=progress), never «Новая»:
+      // the tabs do not overlap and match the dashboard chip
+      var defs = [['all', 'Все', c && c.all], ['new', 'Новые', c && c.new], ['progress', 'В работе', c && c.progress], ['closed', 'Закрытые', c && c.closed]];
       fill(tabs, defs.map(function (d) {
         var p = Object.assign({}, params, { status: d[0], page: '' });
         return h('a', { class: 'tab', href: leadsHash(p), 'aria-current': st === d[0] ? 'true' : null },
-          d[1], d[2] !== undefined && d[2] !== null ? h('span', { class: 'tab__count', text: num(d[2]) }) : null);
+          d[1], d[2] !== undefined && d[2] !== null ? h('span', { class: 'tab__count', text: num(d[2]) }) : h('span', { class: 'tab__count skel-num', 'aria-hidden': 'true' }));
       }));
+      syncTabsFade();
       sortSel.value = params.sort || 'new';
       vList.setAttribute('aria-pressed', String(params.view !== 'grid'));
       vGrid.setAttribute('aria-pressed', String(params.view === 'grid'));
       var nf = ['mode', 'interest', 'budget', 'assignee', 'waiting', 'stale'].filter(function (k) { return params[k]; }).length;
       filterBadge.textContent = String(nf);
       filterBadge.hidden = !nf;
-      if (popOpen) buildPop();
+      if (popBuilt) syncPop();
       if (document.activeElement !== ls) ls.value = params.q || '';
       // active filter chips
       var chips = [];
@@ -1427,6 +1566,7 @@
           h('button', { type: 'button', 'aria-label': 'Убрать фильтр: ' + text, onclick: function () { go(Object.assign({ page: '' }, patch)); } }, icon('close', 'ico--xs'))));
       }
       if (params.status && has(STATUS, params.status)) chip('Статус: ' + STATUS[params.status], { status: '' });
+      if (params.status === 'open') chip('Открытые: новые и в работе', { status: '' });   // from «Требует внимания», not a tab
       if (params.q) chip('Поиск: ' + params.q, { q: '' });
       if (params.mode) chip(MODE[params.mode], { mode: '' });
       if (params.interest) chip('Интерес: ' + INTEREST[params.interest], { interest: '' });
@@ -1436,7 +1576,7 @@
         chip(params.assignee === 'none' ? 'Без ответственного' : 'Ответственный: ' + (u ? u.name : '…'), { assignee: '' });
       }
       if (params.waiting) chip('Без ответа больше часа', { waiting: '' });
-      if (params.stale) chip('Без движения больше 3 дней', { stale: '' });
+      if (params.stale) chip('Без движения больше 3' + NB + 'дней', { stale: '' });
       fill(chipsBox, chips);
       chipsBox.hidden = !chips.length;
       if (params.assignee && params.assignee !== 'none' && !S.team) loadTeam().then(renderControls).catch(function () {});
@@ -1466,7 +1606,11 @@
       qs.set('limit', String(PAGE_SIZE));
       qs.set('offset', String((page - 1) * PAGE_SIZE));
       if (!quiet) { fill(results, skeleton()); results.setAttribute('aria-busy', 'true'); }
-      return api('/leads?' + qs, { signal: my.signal }).then(function (d) {
+      return Promise.all([
+        api('/leads?' + qs, { signal: my.signal }),
+        loadTeam().catch(function () { return null; })   // avatar tints
+      ]).then(function (res) {
+        var d = res[0];
         if (!alive(token) || my !== ctrl) return;
         data = d;
         results.removeAttribute('aria-busy');
@@ -1474,9 +1618,17 @@
         renderControls();
         renderResults(quiet);
         srStatus.textContent = d.total ? 'Найдено: ' + num(d.total) + ' ' + leadsWord(d.total) : 'Ничего не найдено';
+        if (pagerFocus) {
+          // the pager was re-rendered: keep keyboard users on it and bring the list into view
+          pagerFocus = false;
+          var curPg = $('.pg[aria-current="page"]', results);
+          results.scrollIntoView({ block: 'start', behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+          if (curPg) curPg.focus({ preventScroll: true }); else results.focus({ preventScroll: true });
+        }
       }, function (e) {
         if (!alive(token) || my !== ctrl || e.code === 'abort' || e.code === 'auth') return;
         results.removeAttribute('aria-busy');
+        pagerFocus = false;
         if (quiet) { toast(errText(e), 'alert', 'error'); return; }
         fill(results, errorCard(e, function () { load(); }));
       });
@@ -1492,11 +1644,12 @@
             h('h2', { class: 'empty__title', text: 'Заявок пока нет' }),
             h('p', { class: 'empty__text', text: 'Как только кто-то оставит заявку на сайте, она появится здесь.' })));
         } else {
+          var onlyQ = !!params.q && !['status', 'mode', 'interest', 'budget', 'assignee', 'waiting', 'stale'].some(function (k) { return params[k]; });
           fill(results, h('div', { class: 'empty fade' },
             h('span', { class: 'empty__art' }, icon('search')),
             h('h2', { class: 'empty__title', text: 'Ничего не нашлось' }),
-            h('p', { class: 'empty__text', text: 'Попробуйте изменить запрос или снять часть фильтров.' }),
-            h('a', { class: 'btn btn--primary', href: '#/leads' + (params.view === 'grid' ? '?view=grid' : '') }, 'Сбросить фильтры')));
+            h('p', { class: 'empty__text', text: onlyQ ? 'По запросу «' + params.q + '» заявок нет. Проверьте написание или ищите по телефону, почте, номеру заявки.' : 'Попробуйте изменить запрос или снять часть фильтров.' }),
+            h('a', { class: 'btn btn--primary', href: onlyQ ? leadsHash(Object.assign({}, params, { q: '', page: '' })) : '#/leads' + (params.view === 'grid' ? '?view=grid' : '') }, onlyQ ? 'Очистить поиск' : 'Сбросить фильтры')));
         }
         return;
       }
@@ -1523,7 +1676,7 @@
         var el = h('button', { class: 'pg', type: 'button', 'aria-label': label || 'Страница ' + p, disabled: p < 1 || p > pages ? true : null },
           ico ? icon(ico, 'ico--sm') : String(p));
         if (!ico && p === page) el.setAttribute('aria-current', 'page');
-        el.addEventListener('click', function () { if (p !== page) { go({ page: String(p) }); } });
+        el.addEventListener('click', function () { if (p !== page) { pagerFocus = true; go({ page: String(p) }); } });
         return el;
       }
       add(nums, btn(page - 1, 'Предыдущая страница', 'chevron-left'));
@@ -1575,7 +1728,7 @@
   }
   function whoCell(cls, a) {
     return h('div', { class: 'cell ' + cls }, h('span', { class: 'cell__k', text: 'Ответственный' }),
-      a ? h('span', { class: 'who-cell' }, avatar(a, 'sm'), h('span', { class: 'cell__v', text: a.name })) : h('span', { class: 'cell__v cell__v--muted', text: '—' }));
+      a ? h('span', { class: 'who-cell' }, avatar(a, 'sm'), h('span', { class: 'cell__v', text: a.name, title: a.name })) : h('span', { class: 'cell__v cell__v--muted', text: '—' }));
   }
   function leadRow(it, params) {
     return h('a', { class: 'row', href: leadHash(it.id, params), data: { id: it.id } },
@@ -1589,16 +1742,16 @@
       h('span', { class: 'row__go', 'aria-hidden': 'true' }, icon('chevron-right', 'ico--sm')));
   }
   function leadCard(it, params) {
-    var third = it.mode === 'form' ? ['Бюджет', lab(BUDGET, it.budget), !it.budget] : ['Интересует', lab(INTEREST, it.interest), !it.interest];
+    // fixed slots, so labels line up from card to card: contact | interest, assignee | budget
     return h('a', { class: 'lcard', href: leadHash(it.id, params), data: { id: it.id } },
       h('div', { class: 'lcard__head' },
         h('div', { class: 'lcard__title' }, h('span', { class: 'row__name' + (it.erased ? ' row__name--erased' : ''), text: leadName(it) }), leadMeta(it)),
         statusPill(it.status)),
       h('div', { class: 'lcard__pairs' },
         cell('', lab(KIND, it.contactKind, 'Контакт'), it.erased ? '—' : (it.contact || '—'), it.erased || !it.contact),
-        cell('', third[0], third[1], third[2]),
+        cell('', 'Интересует', lab(INTEREST, it.interest), !it.interest),
         whoCell('', it.assignee),
-        cell('', 'Тип', lab(MODE, it.mode))),
+        cell('', 'Бюджет', lab(BUDGET, it.budget), !it.budget)),
       it.preview && !it.erased ? h('p', { class: 'lcard__preview', text: it.preview }) : null,
       h('div', { class: 'lcard__foot' }, h('span', { text: 'Получена ' + listTime(it.time) }), icon('arrow-up-right', 'ico--sm')));
   }
@@ -1626,6 +1779,7 @@
     S.layers = [];
     clear(E.layers);
     S.drawer = null;
+    document.body.classList.remove('has-drawer');
   }
   function leave(el, cb) {
     if (!el) { if (cb) cb(); return; }
@@ -1670,7 +1824,8 @@
     return new Promise(function (resolve) {
       var tid = nextId('dlg'), did = nextId('dlgd');
       var prevFocus = document.activeElement;
-      var overlay = h('div', { class: 'overlay' });
+      // above the drawer: its own scrim dims the drawer too
+      var overlay = h('div', { class: 'overlay overlay--top' });
       var cancel = h('button', { class: 'btn btn--soft', type: 'button', text: opt.cancel || 'Отмена' });
       var ok = h('button', { class: 'btn ' + (opt.danger ? 'btn--danger-solid' : 'btn--primary'), type: 'button', text: opt.ok || 'Подтвердить' });
       var el = h('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': tid, 'aria-describedby': did },
@@ -1711,6 +1866,7 @@
       layer.close = function () { closeDrawer(true); };
       overlay.addEventListener('click', requestCloseDrawer);
       S.drawer = { id: id, el: el, overlay: overlay, layer: layer, opener: opener && opener !== document.body ? opener : null, token: 0 };
+      document.body.classList.add('has-drawer');
       pushLayer(layer);
       E.layers.appendChild(overlay);
       E.layers.appendChild(el);
@@ -1728,6 +1884,7 @@
     var d = S.drawer;
     if (!d) return;
     S.drawer = null;
+    document.body.classList.remove('has-drawer');
     popLayer(d.layer);
     leave(d.overlay);
     leave(d.el);
@@ -1794,7 +1951,7 @@
       h('div', { class: 'drawer__top' }, title, closeBtn()),
       h('div', { class: 'drawer__meta' },
         statusPill(L.status),
-        h('span', { class: 'drawer__id', text: '№ ' + (L.id || '') + ' · получена ' + fullTime(L.time) })));
+        h('span', { class: 'drawer__id', text: '№' + NB + (L.id || '') + ' · получена ' + fullTime(L.time) })));
 
     var body = h('div', { class: 'drawer__body' });
 
@@ -1823,14 +1980,20 @@
     }
 
     // details
-    function item(k, v) { return h('div', { class: 'details__item' }, h('dt', { class: 'details__k', text: k }), h('dd', { class: 'details__v', text: v })); }
-    add(body, section('Детали', h('dl', { class: 'details' },
+    // only the fields this lead has; the empty ones are named once at the end
+    function item(k, v, cls) { return h('div', { class: 'details__item' + (cls ? ' ' + cls : '') }, h('dt', { class: 'details__k', text: k }), h('dd', { class: 'details__v', text: v })); }
+    var missing = [];
+    function opt(k, map, v) { if (has(map, v)) return item(k, map[v]); missing.push(k.toLowerCase()); return null; }
+    var detailItems = [
       item('Тип обращения', lab(MODE, L.mode)),
       item('Источник', lab(SOURCE, L.source)),
-      item('Когда позвонить', lab(WHEN, L.when)),
-      item('Интересует', lab(INTEREST, L.interest)),
-      item('Бюджет', lab(BUDGET, L.budget)),
-      item('Согласие на обработку данных', L.consent ? 'дано' : 'не дано'))));
+      L.mode === 'call' ? opt('Когда позвонить', WHEN, L.when) : null,
+      opt('Интересует', INTEREST, L.interest),
+      opt('Бюджет', BUDGET, L.budget),
+      item('Согласие на обработку данных', L.consent ? 'дано' : 'не дано')
+    ].filter(Boolean);
+    if (missing.length) detailItems.push(item('Не указано', missing.join(', '), 'details__item--muted'));
+    add(body, section('Детали', h('dl', { class: 'details' }, detailItems)));
 
     // message
     if (!L.erased && L.message) add(body, section('Сообщение', h('p', { class: 'msg', text: L.message })));
@@ -1890,7 +2053,7 @@
       addBtn.addEventListener('click', submit);
       work.push(h('div', { class: 'field composer' },
         h('label', { class: 'field__label', for: 'lead-note', text: 'Заметка для команды' }), ta,
-        h('div', { class: 'composer__foot' }, h('span', { class: 'composer__hint', text: (isMac ? '⌘' : 'Ctrl') + ' + Enter — добавить' }), addBtn)));
+        h('div', { class: 'composer__foot' }, h('span', { class: 'composer__hint', text: (isMac ? '⌘' : 'Ctrl') + ' + Enter\u00A0— добавить' }), addBtn)));
     }
     add(body, section('Работа с заявкой', work, editable ? null : h('span', { class: 'ro-hint' }, icon('eye', 'ico--xs'), 'Только просмотр')));
 
@@ -1903,7 +2066,7 @@
     // danger zone
     if (can('erase') && !L.erased) {
       add(body, section('Персональные данные', [
-        h('p', { text: 'По запросу человека (152-ФЗ) можно стереть его имя, телефон, контакты, сообщение и тексты заметок. Статусы и история останутся.' }),
+        h('p', { text: 'По запросу человека (152\u2011ФЗ) можно стереть его имя, телефон, контакты, сообщение и тексты заметок. Статусы и история останутся.' }),
         h('div', null, h('button', { class: 'btn btn--danger btn--sm', type: 'button', 'data-focus-key': 'erase', onclick: eraseLead }, icon('trash', 'ico--sm'), 'Удалить персональные данные'))
       ], null, 'danger'));
     }
@@ -2020,18 +2183,19 @@
       role: 'combobox', 'aria-expanded': 'true', 'aria-controls': listId, 'aria-autocomplete': 'list', 'aria-label': 'Поиск по заявкам', enterkeyhint: 'go' });
     input.value = initial || '';
     var body = h('div', { class: 'palette__body', id: listId, role: 'listbox', 'aria-label': 'Результаты' });
+    var foot = h('div', { class: 'palette__foot', 'aria-hidden': 'true' },
+      h('span', null, h('span', { class: 'kbd', text: '↑' }), h('span', { class: 'kbd', text: '↓' }), 'выбор'),
+      h('span', null, h('span', { class: 'kbd', text: 'Enter' }), 'открыть'),
+      h('span', null, h('span', { class: 'kbd', text: 'Esc' }), 'закрыть'));
     var el = h('div', { class: 'palette', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Поиск' },
       h('div', { class: 'palette__bar' }, icon('search'), input,
         h('button', { class: 'icon-btn icon-btn--flat icon-btn--sm', type: 'button', 'aria-label': 'Закрыть поиск', onclick: function () { closePalette(); } }, icon('close', 'ico--sm'))),
-      body,
-      h('div', { class: 'palette__foot', 'aria-hidden': 'true' },
-        h('span', null, h('span', { class: 'kbd', text: '↑' }), h('span', { class: 'kbd', text: '↓' }), 'выбор'),
-        h('span', null, h('span', { class: 'kbd', text: 'Enter' }), 'открыть'),
-        h('span', null, h('span', { class: 'kbd', text: 'Esc' }), 'закрыть')));
+      body, foot);
     var layer = { el: el, overlay: overlay };
     var options = [], active = -1, ctrl = null, seq = 0;
 
     function setActive(i, scroll) {
+      foot.hidden = !options.length;   // no ↑↓ / Enter hints when there is nothing to pick
       if (!options.length) { active = -1; input.removeAttribute('aria-activedescendant'); return; }
       active = (i + options.length) % options.length;
       options.forEach(function (o, k) {
@@ -2084,25 +2248,40 @@
         var items = d.items || [];
         var allHash = leadsHash({ q: q });
         if (!items.length) {
-          fill(body, h('p', { class: 'palette__empty' }, 'Ничего не нашлось по запросу «', q, '»'));
+          fill(body, h('div', { class: 'palette__empty', role: 'presentation' },
+            h('span', { class: 'palette__empty-ico' }, icon('search')),
+            h('p', { class: 'palette__empty-title' }, 'Ничего не нашлось по запросу «', q, '»'),
+            h('p', { class: 'palette__empty-hint', text: 'Ищите по имени, телефону, почте или номеру заявки' })));
           setActive(-1);
           return;
         }
+        var ql = q.toLowerCase();
         fill(body,
-          h('div', { class: 'palette__group', role: 'presentation' }, h('span', { text: 'Заявки' }), h('span', { class: 'tab__count', text: num(d.total) + ' ' + plural(d.total, ['результат', 'результата', 'результатов']) })),
+          h('div', { class: 'palette__group', role: 'presentation' }, h('span', { text: 'Заявки' }),
+            // a mouse shortcut; the same action is the last option of the list
+            h('a', { class: 'palette__group-all', href: allHash, tabindex: '-1', 'aria-hidden': 'true' }, 'Все ' + num(d.total) + ' ', icon('arrow-right', 'ico--xs'))),
           items.map(function (it) {
             var sub = [it.erased ? '' : it.contact, lab(MODE, it.mode, ''), listTime(it.time)].filter(Boolean).join(' · ');
+            // found by the message text: show that bit, so the row explains itself
+            var inName = String(it.name || '').toLowerCase().indexOf(ql) >= 0 || String(it.contact || '').toLowerCase().indexOf(ql) >= 0 || String(it.id || '').toLowerCase().indexOf(ql) >= 0;
+            var pv = String(it.preview || ''), at = pv.toLowerCase().indexOf(ql);
+            if (!it.erased && !inName && at >= 0) {
+              var from = Math.max(0, at - 24);
+              if (from) { var sp = pv.lastIndexOf(' ', from); from = sp >= 0 && at - sp < 40 ? sp + 1 : from; }   // start on a word
+              sub = '«' + (from ? '…' : '') + pv.slice(from, at + ql.length + 40).trim() + (at + ql.length + 40 < pv.length ? '…' : '') + '»';
+            }
             return option(h('div', { class: 'presult' },
               it.erased ? h('span', { class: 'av av--visitor', 'aria-hidden': 'true' }, icon('shield', 'ico--sm')) : avatar({ id: it.id, name: it.name }),
               h('span', { class: 'presult__text' }, h('span', { class: 'presult__name', text: leadName(it) }), h('span', { class: 'presult__sub', text: sub })),
               statusPill(it.status)), nav(leadHash(it.id, { q: q })));
           }),
-          option(h('div', { class: 'palette__all' }, h('span', { text: 'Показать все результаты' }), icon('arrow-right', 'ico--sm')), nav(allHash)));
+          option(h('div', { class: 'palette__all' }, h('span', { text: 'Показать все результаты (' + num(d.total) + ')' }), icon('arrow-right', 'ico--sm')), nav(allHash)));
         setActive(0, false);
       }, function (e) {
         if (my !== seq || !S.palette || e.code === 'abort' || e.code === 'auth') return;
         options = [];
         fill(body, h('p', { class: 'palette__empty', text: errText(e) }));
+        setActive(-1);
       });
     }, 150);
 
@@ -2142,10 +2321,7 @@
     popLayer(p.layer);
     leave(p.overlay);
     p.el.remove();
-    if (!noFocus && p.prevFocus && p.prevFocus.isConnected) {
-      if (p.prevFocus === E.search) E.suppressFocus = true;
-      p.prevFocus.focus({ preventScroll: true });
-    }
+    if (!noFocus && p.prevFocus && p.prevFocus.isConnected) p.prevFocus.focus({ preventScroll: true });
   }
 
   /* ------------------------------------------------------------------ team */
@@ -2162,12 +2338,14 @@
     var list = h('div', { class: 'team', 'aria-busy': 'true' }, [0, 1, 2, 3].map(function () {
       return h('div', { class: 'card member' }, h('div', { class: 'member__head' }, h('span', { class: 'av av--xl skel' }), h('div', { class: 'member__text' }, h('div', { class: 'skel skel--line' }), h('div', { class: 'skel skel--line', vars: { width: '60%' } })))) ;
     }));
-    var cmd = 'axiomantic-leads admin user add';
+    // the real syntax of admincli.go; the password is generated and printed once
+    var wsId = (S.ws && S.ws.id) || 'ID';
+    var cmd = 'axiomantic-leads admin user add -config admin.json -workspace ' + wsId + ' -login ЛОГИН -name "Имя Фамилия" -role manager';
     var cli = h('div', { class: 'cli' },
       h('span', { class: 'cli__ico', 'aria-hidden': 'true' }, icon('terminal')),
       h('div', { class: 'cli__text' },
-        h('p', { text: 'Новых участников добавляет владелец через консоль сервера:' }),
-        h('div', { class: 'code' }, h('code', { class: 'code__text', text: cmd + ' …' }),
+        h('p', { text: 'Новых участников добавляет владелец через консоль сервера. Пароль генерируется и показывается один раз; роль\u00A0— owner, manager или viewer.' }),
+        h('div', { class: 'code' }, h('code', { class: 'code__text', text: cmd }),
           h('button', { class: 'btn btn--sm btn--ghost', type: 'button', onclick: function () { copyText(cmd); } }, icon('copy', 'ico--sm'), 'Скопировать'))));
     fill(root, pageHead('Команда', 'Кто работает с заявками и с какими правами'), list, cli);
 
@@ -2175,6 +2353,7 @@
       api('/team').then(function (d) {
         if (!alive(token)) return;
         S.team = d.items || [];
+        setTeamTints(S.team);
         list.removeAttribute('aria-busy');
         if (!S.team.length) { fill(list, h('p', { class: 'muted', text: 'В команде пока никого нет.' })); return; }
         fill(list, S.team.map(function (u, i) {
@@ -2183,12 +2362,14 @@
           return rise(h('article', { class: 'card member' + (me ? ' member--me' : '') },
             h('div', { class: 'member__head' }, avatar(u, 'xl'),
               h('div', { class: 'member__text' },
-                h('h2', { class: 'member__name', text: u.name }),
-                h('p', { class: 'member__login', text: u.login || '' })),
-              h('span', { class: 'pill pill--plain role--' + (has(ROLE, u.role) ? u.role : 'viewer'), text: lab(ROLE, u.role, u.role) })),
+                h('h2', { class: 'member__name', text: u.name, title: u.name }),
+                h('p', { class: 'member__login', text: u.login || '', title: u.login || null }))),
+            // the role sits in the foot, so the login line gets the full width
             h('div', { class: 'member__foot' },
               h('span', { class: 'online' + (seen.on ? ' online--on' : ''), text: u.active === false ? 'Доступ отключён' : seen.text }),
-              me ? h('span', { class: 'pill pill--plain st--new', text: 'Это вы' }) : null)), i);
+              h('span', { class: 'member__pills' },
+                me ? h('span', { class: 'pill pill--plain st--new', text: 'Это вы' }) : null,
+                h('span', { class: 'pill pill--plain role--' + (has(ROLE, u.role) ? u.role : 'viewer'), text: lab(ROLE, u.role, u.role) })))), i);
         }));
       }, function (e) {
         if (!alive(token) || e.code === 'auth') return;
@@ -2225,22 +2406,28 @@
         var tg = !!(d.notifications && d.notifications.telegram);
         var zone = validTz(ws.tz) ? ws.tz : tz();
         var nowLocal = fmt({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }, zone).format(new Date());
-        fill(grid,
+        // two columns that stack independently: no gaps between unequal cards
+        var colA = h('div', { class: 'settings__col' }), colB = h('div', { class: 'settings__col' });
+        fill(grid, colA, colB);
+        add(colA,
           setCard('globe', 'Рабочее пространство', h('dl', { class: 'kv' },
             kv('Название', ws.name || '—'),
             kv('Фирменный цвет', accent ? [h('span', { class: 'swatch', 'aria-hidden': 'true' }), h('span', { class: 'num', text: accent.toUpperCase() })] : '—'),
             kv('Часовой пояс', [h('span', { text: zone }), h('span', { class: 'muted', text: 'сейчас ' + nowLocal })]),
-            kv('Сайты', origins.length ? origins.map(function (o) { return h('span', { class: 'origin', text: o }); }) : '—')), 0),
+            kv('Сайты', origins.length ? origins.map(function (o) { return h('span', { class: 'origin', text: o }); }) : '—')), 0));
+        add(colB,
           setCard('bell', 'Уведомления', [
             h('dl', { class: 'kv' }, kv('Telegram', h('span', { class: 'state ' + (tg ? 'state--on' : 'state--off'), text: tg ? 'подключены' : 'не настроены' }))),
             h('div', { class: 'set-text' }, h('p', { text: tg
               ? 'Каждая новая заявка приходит в рабочий чат. Ключ бота хранится только на сервере и в браузер не передаётся.'
-              : 'Чтобы получать заявки в Telegram, владелец указывает чат в конфигурации сервера. Ключ бота в браузер не передаётся.' }))], 1),
+              : 'Чтобы получать заявки в Telegram, владелец указывает чат в конфигурации сервера. Ключ бота в браузер не передаётся.' }))], 1));
+        add(colA,
           setCard('database', 'Данные', [
             h('div', { class: 'set-text' },
               h('p', { text: 'Заявки хранятся в файле на сервере, который может читать только сервис админки. В браузере ничего не сохраняется.' }),
-              h('p', { text: 'По запросу человека (152-ФЗ) его персональные данные удаляются из карточки заявки: откройте заявку → «Удалить персональные данные». Удаление необратимо, история статусов остаётся.' })),
-            can('export') ? h('div', { class: 'set-actions' }, h('button', { class: 'btn btn--primary', type: 'button', onclick: function (e) { exportCsv({}, e.currentTarget); } }, icon('download', 'ico--sm'), 'Экспорт CSV')) : null], 2),
+              h('p', { text: 'По запросу человека (152\u2011ФЗ) его персональные данные удаляются из карточки заявки: откройте заявку → «Удалить персональные данные». Удаление необратимо, история статусов остаётся.' })),
+            can('export') ? h('div', { class: 'set-actions' }, h('button', { class: 'btn btn--primary', type: 'button', onclick: function (e) { exportCsv({}, e.currentTarget); } }, icon('download', 'ico--sm'), 'Экспорт CSV')) : null], 2));
+        add(colB,
           setCard('key', 'Сеанс', [
             h('dl', { class: 'kv' },
               kv('Пользователь', S.user.name),
