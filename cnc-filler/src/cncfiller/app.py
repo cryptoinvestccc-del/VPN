@@ -7,8 +7,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QApplication, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
-                               QLineEdit, QMainWindow, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-                               QTextEdit, QVBoxLayout, QWidget)
+                               QLineEdit, QMainWindow, QMessageBox, QProgressDialog, QPushButton,
+                               QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine import Engine, read_table, fill_rows, write_result, write_cards  # noqa: E402
@@ -34,7 +34,7 @@ QLabel.caption {{ color: #5a6762; font-size: 8pt; font-weight: 600; }}
 
 class SiteWorker(QThread):
     """Скачивает карточки с cnc1.ru в фоне (не чаще 1 запроса в секунду)."""
-    progress = Signal(str)
+    progress = Signal(int, int, str)   # i, всего, текст
     done = Signal(list, list)
 
     def __init__(self, queries, full_scan=False):
@@ -43,13 +43,17 @@ class SiteWorker(QThread):
 
     def run(self):
         cards, missed = [], []
+        n = len(self.queries)
         try:
             urls = cnc1_parser.load_index()
         except Exception as ex:  # noqa: BLE001
             self.done.emit([], [f"Карта сайта не загрузилась: {ex}"])
             return
         for i, q in enumerate(self.queries, 1):
-            self.progress.emit(f"cnc1.ru: {i}/{len(self.queries)} — {q}")
+            if self.isInterruptionRequested():
+                missed.append("отменено пользователем")
+                break
+            self.progress.emit(i, n, f"{i}/{n} — {q}")
             try:
                 got = cnc1_parser.fetch(q, urls=urls, full_scan=self.full_scan)
             except Exception as ex:  # noqa: BLE001
@@ -59,6 +63,26 @@ class SiteWorker(QThread):
             else:
                 missed.append(f"{q}: не найден на сайте")
         self.done.emit(cards, missed)
+
+
+class FillWorker(QThread):
+    """Заполнение из каталога в фоне — чтобы окно не подвисало на больших выгрузках."""
+    progress = Signal(int, int, str)
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, engine, headers, rows, sort_by):
+        super().__init__()
+        self.engine, self.headers, self.rows, self.sort_by = engine, headers, rows, sort_by
+
+    def run(self):
+        try:
+            res = fill_rows(self.engine, self.headers, self.rows, self.sort_by,
+                            progress=lambda i, n: self.progress.emit(i, n, f"{i}/{n}"))
+        except Exception as ex:  # noqa: BLE001
+            self.failed.emit(str(ex))
+            return
+        self.done.emit(res)
 
 
 class Main(QMainWindow):
@@ -190,14 +214,42 @@ class Main(QMainWindow):
                                     "зато потом коды будут в кэше.") == QMessageBox.Yes if any(cnc1_parser.is_code(q) for q in queries) else False
         self.stats.setText(f"Парсю cnc1.ru: {len(queries)} запрос(ов)…")
         self.worker = SiteWorker(queries, full)
-        self.worker.progress.connect(self.stats.setText)
+        self.dlg = self._progress("Парсинг cnc1.ru", len(queries), self.worker.requestInterruption)
+        self.worker.progress.connect(self._progress_update)
         self.worker.done.connect(self.site_done)
         self.worker.start()
 
+    def _progress(self, title, maximum, on_cancel):
+        """Модальное окно прогресса с кнопкой «Отмена»."""
+        dlg = QProgressDialog(title, "Отмена", 0, maximum, self)
+        dlg.setWindowTitle(title)
+        dlg.setWindowModality(Qt.WindowModal)
+        dlg.setMinimumWidth(380)
+        dlg.setAutoClose(False)
+        dlg.setAutoReset(False)
+        dlg.setValue(0)
+        dlg.canceled.connect(on_cancel)
+        dlg.show()
+        return dlg
+
+    def _progress_update(self, i, n, text):
+        if getattr(self, "dlg", None):
+            self.dlg.setMaximum(n)
+            self.dlg.setValue(i)
+            self.dlg.setLabelText(text)
+
+    def _close_dlg(self):
+        if getattr(self, "dlg", None):
+            self.dlg.close()
+            self.dlg = None
+
     def site_done(self, cards, missed):
+        self._close_dlg()
         if not cards:
             self.stats.setText("С сайта ничего не получено.")
             self.source.setPlainText("\n".join(missed))
+            QMessageBox.warning(self, "cnc1.ru — ничего не найдено",
+                                "Карточки не получены.\n\n" + "\n".join(missed[:15]))
             return
         self.headers, self.rows = cnc1_parser.cards_to_rows(cards)
         self.path = str(Path.home() / "cnc1_выгрузка.xlsx")
@@ -207,6 +259,10 @@ class Main(QMainWindow):
         self.save_btn.setEnabled(True)
         self.stats.setText(f"Спарсено с cnc1.ru: {len(cards)} карточек. Нажмите «Сохранить Excel для 1С».")
         self.source.setPlainText("\n".join([c["url"] for c in cards] + missed))
+        msg = f"Спарсено карточек: {len(cards)}."
+        if missed:
+            msg += f"\nНе найдено: {len(missed)} (подробности внизу окна)."
+        QMessageBox.information(self, "Готово", msg + "\n\nНажмите «Сохранить Excel для 1С».")
 
     # ----- ПОИСК ПО КАТАЛОГАМ -----
     def attach_catalog_file(self):
@@ -250,18 +306,30 @@ class Main(QMainWindow):
 
     def fill(self):
         if not self.headers:
-            QMessageBox.information(self, "Нет файла", "Сначала перетащите Excel-выгрузку.")
+            QMessageBox.information(self, "Нет данных", "Сначала введите артикул или прикрепите файл-выгрузку.")
             return
-        sort_by = {1: "L, мм", 2: "d, мм"}.get(self.sort.currentIndex())
-        self.sort_by = sort_by
+        self.sort_by = {1: "L, мм", 2: "d, мм"}.get(self.sort.currentIndex())
+        self.stats.setText(f"Заполняю из каталогов: {len(self.rows)} строк(и)…")
+        self.fworker = FillWorker(self.engine, self.headers, self.rows, self.sort_by)
+        self.dlg = self._progress("Заполнение из каталогов", len(self.rows), self.fworker.requestInterruption)
+        self.fworker.progress.connect(self._progress_update)
+        self.fworker.done.connect(self.fill_done)
+        self.fworker.failed.connect(self.fill_failed)
+        self.fworker.start()
+
+    def fill_failed(self, msg):
+        self._close_dlg()
+        self.stats.setText("Ошибка при заполнении.")
+        QMessageBox.critical(self, "Ошибка заполнения", msg)
+
+    def fill_done(self, r):
+        self._close_dlg()
         self.last = "fill"
-        self.result = fill_rows(self.engine, self.headers, self.rows, sort_by)
-        r = self.result
+        self.result = r
         self.stats.setText(f"Найдено в каталогах: <b>{r.found}</b> · заполнено ячеек: <b>{r.filled_cells}</b> · "
                            f"расхождений: <b>{len(r.conflicts)}</b> · с пустыми колонками: <b>{len(r.not_found)}</b>")
-        cols = ["Артикул", "_Код товара"] + [h for h in self.headers if h and h not in ("Артикул", "_Код товара")
-                                            and any(h in x["filled"] for x in r.rows)]
-        if sort_by:
+        cols = ["Артикул", "_Код товара"] + sorted({h for x in r.rows for h in x["filled"]} - {"Артикул", "_Код товара"})
+        if self.sort_by:
             cols.append("_SEO_Sort")
         self.table.clear()
         self.table.setColumnCount(len(cols))
@@ -277,6 +345,15 @@ class Main(QMainWindow):
                     it.setBackground(QColor("#D9E8FB"))
                 self.table.setItem(i, j, it)
         self.save_btn.setEnabled(True)
+        if r.filled_cells == 0:
+            QMessageBox.warning(self, "Заполнять нечего",
+                                f"Найдено в каталогах: {r.found} из {len(r.rows)}.\n"
+                                "Заполнено 0 ячеек — либо эти позиции не в базе каталогов, либо колонки уже заполнены.\n"
+                                "Проверьте лист «Не найдено».")
+        else:
+            QMessageBox.information(self, "Готово",
+                                    f"Заполнено ячеек: {r.filled_cells}.\nНайдено в каталогах: {r.found} из {len(r.rows)}.\n"
+                                    f"Расхождений с сайтом: {len(r.conflicts)}.\n\nНажмите «Сохранить Excel для 1С».")
 
     def show_source(self):
         if not self.result:
@@ -301,11 +378,20 @@ class Main(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Сохранить", default, "Excel (*.xlsx)")
         if not path:
             return
-        if self.last == "site":
-            write_cards(self.headers, self.rows, path)   # карточки сайта как есть
-        else:
-            write_result(self.result, self.headers, path, self.sort_by)
+        try:
+            if self.last == "site":
+                write_cards(self.headers, self.rows, path)   # карточки сайта как есть
+            else:
+                write_result(self.result, self.headers, path, self.sort_by)
+        except PermissionError:
+            QMessageBox.critical(self, "Файл занят",
+                                 "Не удалось сохранить: файл открыт в Excel. Закройте его и повторите.")
+            return
+        except Exception as ex:  # noqa: BLE001
+            QMessageBox.critical(self, "Ошибка сохранения", str(ex))
+            return
         self.stats.setText(f"Сохранено: {path}")
+        QMessageBox.information(self, "Сохранено", f"Файл сохранён:\n{path}")
 
 
 def main():

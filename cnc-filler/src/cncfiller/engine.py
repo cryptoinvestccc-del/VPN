@@ -93,7 +93,8 @@ class Match:
 
 class Engine:
     def __init__(self, db_path):
-        self.con = sqlite3.connect(db_path)
+        # check_same_thread=False: заполнение идёт в рабочем потоке (модальный прогресс), только чтение, без записи.
+        self.con = sqlite3.connect(db_path, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
         for r in self.con.execute("SELECT code, title FROM catalog"):
             CATALOG_TITLE[r["code"]] = r["title"]
@@ -203,10 +204,13 @@ class FillResult:
     sources: list
 
 
-def fill_rows(engine: Engine, headers, rows, seo_sort_by: str | None = None) -> FillResult:
+def fill_rows(engine: Engine, headers, rows, seo_sort_by: str | None = None, progress=None) -> FillResult:
     out, conflicts, not_found, sources = [], [], [], []
     found = filled = 0
-    for r in rows:
+    total = len(rows)
+    for idx, r in enumerate(rows, 1):
+        if progress and (idx % 25 == 0 or idx == total):
+            progress(idx, total)
         art = str(r["Артикул"]).strip()
         brand = r.get("Бренд")
         vals, src, m = engine.site_values(art, brand)
