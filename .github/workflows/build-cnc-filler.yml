@@ -53,6 +53,8 @@ jobs:
           if-no-files-found: warn
 
       - name: Test on the live card
+        env:
+          CNC1_CARD: live_check/cnc1_card_MCKNL2020K12.html
         run: python -m pytest tests/test_cnc1_real.py -v
 
       - name: Build exe

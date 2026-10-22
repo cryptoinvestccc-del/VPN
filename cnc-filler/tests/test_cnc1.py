@@ -68,3 +68,26 @@ def test_parse_card_markup_robust():
 
 def cp_parse(html):
     return parse_card(html, URLS[1])
+
+def test_parse_card_properties_group_and_template():
+    """Разметка живого сайта: properties-group__name/__value, JS-шаблон <template> с #PROP_TITLE#, подсказка того же тега."""
+    html = ('<h1>MCKNL2020K12 Державка</h1><span class="code_text">Код товара: </span><span class="code">00059015</span>'
+            '<div class="properties__item"><div class="properties__title">Длина резца, мм</div>'
+            '<div class="properties__value">125</div></div>'
+            '<div class="properties-group__item"><div class="properties-group__name-wrap">'
+            '<span itemprop="name" class="properties-group__name muted">Бренд</span></div>'
+            '<div class="properties-group__value-wrap"><div class="properties-group__value color_dark" itemprop="value"> Sant </div></div></div>'
+            '<div class="properties-group__item"><div class="properties-group__name">e, мм<div class="hint"><div class="tooltip">?</div></div></div>'
+            '<div class="properties-group__value"> 28 </div></div>'
+            '<template class="props-template"><div class="properties__item"><div class="properties__title"> #PROP_TITLE# </div>'
+            '<div class="properties__value">#PROP_VALUE#</div></div></template>'
+            '<script>var t = "<div class=\\"properties__title\\">X</div>";</script>')
+    c = parse_card(html, URLS[1])
+    assert c["code"] == "00059015" and c["brand"] == "Sant"
+    assert c["props"] == {"Длина резца, мм": "125", "Бренд": "Sant", "e, мм": "28"}
+
+def test_parse_card_drops_hash_placeholders():
+    """Шаблон «#…#» вне <template> (например, в разметке без тега template) тоже отбрасывается."""
+    html = ('<h1>X1</h1><div class="properties__title">#PROP_TITLE#</div><div class="properties__value">#PROP_VALUE#</div>'
+            '<div class="properties__title">L, мм</div><div class="properties__value">125</div>')
+    assert parse_card(html, URLS[1])["props"] == {"L, мм": "125"}

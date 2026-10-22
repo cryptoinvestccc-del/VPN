@@ -93,9 +93,12 @@ def find_urls(article: str, urls: list[str]) -> list[str]:
 
 
 # ---------- разбор карточки (Aspro Max) ----------
-NAME_CLS = ("char_name", "properties__title", "props_item_name")
-VALUE_CLS = ("char_value", "properties__value", "props_item_value")
+# Живая карточка (22.10.2026): полная таблица — properties-group__name/__value (15 свойств, в т.ч. Бренд),
+# краткий список вверху — properties__title/__value; char_name/char_value — прежний шаблон Aspro Max.
+NAME_CLS = ("properties-group__name", "char_name", "properties__title", "props_item_name")
+VALUE_CLS = ("properties-group__value", "char_value", "properties__value", "props_item_value")
 SKIP_CLS = ("hint", "tooltip")   # подсказки «?» у названий свойств — не часть названия
+SKIP_TAGS = {"script", "style", "template"}   # код и JS-шаблоны (<template> с #PROP_TITLE#) — не текст карточки
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 
 
@@ -126,20 +129,21 @@ class _Card(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in VOID:
             return
-        cls = dict(attrs).get("class", "") or ""
-        if tag == "h1":
-            self.h1_depth += 1
-            if self.title_pos is None:
-                self.title_pos = len(self.text)
         if self.skip_tag:
             if tag == self.skip_tag:
                 self.skip_depth += 1
             return
+        cls = dict(attrs).get("class", "") or ""
+        if tag in SKIP_TAGS or (self.cur and _has(cls, SKIP_CLS)):
+            self.skip_tag, self.skip_depth = tag, 0
+            return
+        if tag == "h1":
+            self.h1_depth += 1
+            if self.title_pos is None:
+                self.title_pos = len(self.text)
         if self.cur:
             if tag == self.cur_tag:
                 self.cur_depth += 1
-            if _has(cls, SKIP_CLS):
-                self.skip_tag, self.skip_depth = tag, 0
             return
         if _has(cls, NAME_CLS):
             self.cur, self.cur_tag, self.cur_depth, self.buf = "name", tag, 0, []
@@ -147,8 +151,6 @@ class _Card(HTMLParser):
             self.cur, self.cur_tag, self.cur_depth, self.buf = "value", tag, 0, []
 
     def handle_endtag(self, tag):
-        if tag == "h1" and self.h1_depth:
-            self.h1_depth -= 1
         if self.skip_tag:
             if tag == self.skip_tag:
                 if self.skip_depth:
@@ -156,6 +158,8 @@ class _Card(HTMLParser):
                 else:
                     self.skip_tag = None
             return
+        if tag == "h1" and self.h1_depth:
+            self.h1_depth -= 1
         if not self.cur or tag != self.cur_tag:
             return
         if self.cur_depth:
@@ -170,9 +174,11 @@ class _Card(HTMLParser):
         self.cur = None
 
     def handle_data(self, data):
+        if self.skip_tag:
+            return
         if self.h1_depth:
             self.h1.append(data)
-        if self.cur and not self.skip_tag:
+        if self.cur:
             self.buf.append(data)
         self.text.append(data)
 
@@ -187,6 +193,8 @@ def parse_card(html: str, url: str = "") -> dict:
     code = re.search(r"Код товара:?\s*(\d{5,8})", text)
     props = {}
     for k, v in p.props:          # полная таблица идёт после краткой — берём первое непустое
+        if k.startswith("#"):     # незаполненный шаблон вроде #PROP_TITLE#: #PROP_VALUE#
+            continue
         if k and v and k not in props:
             props[k] = v
     article = title.split(" ")[0] if title else ""

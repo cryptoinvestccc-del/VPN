@@ -2,8 +2,8 @@
 
 1. Карта сайта → карточки артикула MCKNL2020K12 (на сайте их две: 00059015 и 00115826).
 2. Поиск сайта по коду 00059015.
-3. HTML карточки и страницы поиска — в live_check/ (artifact прогона); карточка — ещё и в tests/fixtures/cnc1_card.html,
-   по ней следующим шагом идёт tests/test_cnc1_real.py.
+3. HTML карточки и страницы поиска — в live_check/ (artifact прогона); по свежей карточке следующим шагом идёт
+   tests/test_cnc1_real.py (CNC1_CARD=live_check/…). Сохранённая карточка tests/fixtures/cnc1_card.html не перезаписывается.
 4. Код выхода 1, если parse_card не достал код 00059015, бренд Sant и «e, мм» = 28.
    Поиск по коду не найден — предупреждение в прогоне, сборку не останавливает.
 В лог печатаются куски разметки вокруг заголовка, кода и характеристик — по ним правится парсер.
@@ -20,7 +20,6 @@ import cnc1_parser as cp  # noqa: E402
 ARTICLE, CODE = "MCKNL2020K12", "00059015"
 KNOWN_URL = "https://cnc1.ru/catalog/reztsy_derzhavki_tokarnye/reztsy_prokhodnye/mcknr_mcknl/mcknl2020k12/"
 OUT = ROOT / "live_check"
-FIXTURE = ROOT / "tests" / "fixtures" / "cnc1_card.html"
 
 
 def snippet(html: str, marker: str, width=900) -> str:
@@ -50,8 +49,7 @@ def main() -> int:
     card_url = next((u for u in found if u.rstrip("/").endswith(ARTICLE.lower())), KNOWN_URL)
     html = cp.http_get(card_url)
     (OUT / f"cnc1_card_{ARTICLE}.html").write_text(html, encoding="utf-8")
-    FIXTURE.write_text(html, encoding="utf-8")
-    print(f"Карточка {card_url}: {len(html)} символов → {FIXTURE.relative_to(ROOT)}")
+    print(f"Карточка {card_url}: {len(html)} символов → live_check/cnc1_card_{ARTICLE}.html")
 
     print("\nРазметка (классы в карточке):")
     for cls in cp.NAME_CLS + cp.VALUE_CLS + ("props_list", "properties__item", "itemprop=\"name\"", "itemprop=\"value\""):
