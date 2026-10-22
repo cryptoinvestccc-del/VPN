@@ -32,6 +32,15 @@ jobs:
           git init -q && git checkout -q -b cnc-filler-live
           git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "live html $GITHUB_RUN_ID"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" cnc-filler-live
-      - run: pyinstaller --noconfirm --onefile --windowed --name cnc-filler --paths src/cncfiller --add-data "data/catalog.db;data" src/cncfiller/app.py
+      # --onedir (не --onefile): exe не распаковывает себя в %TEMP% при каждом запуске —
+      # меньше ложных срабатываний антивирусов. Манифест asInvoker (без --uac-admin): прав админа не просит.
+      # --version-file: у exe есть имя, версия и разработчик (файл без них антивирусы считают подозрительным).
+      - run: pyinstaller --noconfirm --onedir --windowed --name cnc-filler --paths src/cncfiller --add-data "data/catalog.db;data" --version-file packaging/version.txt src/cncfiller/app.py
+      - name: Проверить, что exe не просит прав администратора
+        shell: bash
+        run: |
+          if grep -qi "requireAdministrator\|highestAvailable" dist/cnc-filler/cnc-filler.exe; then
+            echo "манифест требует повышения прав"; exit 1; fi
+          echo "манифест asInvoker — прав админа не просит"
       - uses: actions/upload-artifact@v4
-        with: { name: cnc-filler-exe, path: cnc-filler/dist/cnc-filler.exe }
+        with: { name: cnc-filler-exe, path: cnc-filler/dist/cnc-filler }
