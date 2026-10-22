@@ -1,0 +1,13 @@
+catalogs/*.pdf
+data/catalog.db
+dist/
+build/
+__pycache__/
+*.spec
+.env
+# репозиторий публичный: выгрузки Битрикса/1С и готовые файлы загрузки не публикуются
+data/samples/
+examples_output/
+.venv/
+data/cnc1_*.json
+live_check/

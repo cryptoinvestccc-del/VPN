@@ -1,0 +1,79 @@
+name: cnc-filler
+
+# Заполнитель свойств CNC (cnc-filler/): тесты, проверка парсера на живом cnc1.ru, сборка Windows-exe.
+on:
+  push:
+    paths:
+      - "cnc-filler/**"
+      - ".github/workflows/build-cnc-filler.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: cnc-filler
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"   # иначе print кириллицы в лог падает на cp1252
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cnc-filler/requirements.txt
+
+      - name: Install
+        run: python -m pip install -r requirements.txt pytest
+
+      - name: Build catalog.db
+        run: python src/cncfiller/build_db.py
+
+      - name: Tests (offline)
+        run: python -m pytest tests -v
+
+      # Раннер GitHub ходит в интернет: карточка MCKNL2020K12 и поиск по коду 00059015 с живого сайта.
+      # Падает, если parse_card не достал код 00059015, бренд Sant и «e, мм» = 28.
+      - name: Live check cnc1.ru
+        run: python tools/check_cnc1_live.py
+
+      - name: Upload cnc1.ru HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cnc1-live-html
+          path: cnc-filler/live_check/
+          if-no-files-found: warn
+
+      - name: Test on the live card
+        run: python -m pytest tests/test_cnc1_real.py -v
+
+      - name: Build exe
+        run: pyinstaller --noconfirm --onefile --windowed --name cnc-filler --paths src/cncfiller --add-data "data/catalog.db;data" src/cncfiller/app.py
+
+      # Окно открывается и сразу закрывается (CNCFILLER_SMOKE): exe распаковывается, база и Qt находятся.
+      - name: Smoke-run exe
+        env:
+          CNCFILLER_SMOKE: "1"
+        run: |
+          $p = Start-Process -FilePath dist\cnc-filler.exe -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw "exe не завершился за 3 минуты (окно ошибки Qt?)" }
+          if ($p.ExitCode -ne 0) { throw "exe завершился с кодом $($p.ExitCode)" }
+          "exe запустился и закрылся, код 0"
+
+      - name: Secret scan (sources + exe)
+        run: python tools/secret_scan.py src tools tests data db docs legacy_scripts dist/cnc-filler.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cnc-filler-exe
+          path: cnc-filler/dist/cnc-filler.exe
+          if-no-files-found: error

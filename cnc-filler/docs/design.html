@@ -1,0 +1,264 @@
+<title>Заполнитель свойств CNC</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@500;600&display=swap">
+<style>
+/* Layout: technical spec sheet — one reading column, wide blocks for schema, flow and app mockup */
+:root{
+  --bg:#f2f4f3; --panel:#ffffff; --ink:#18201d; --muted:#5a6762; --line:#d6ddd9;
+  --accent:#0d6b5c; --accent-weak:#dcefe9; --hit:#fff2a8; --chg:#d9e8fb; --warn:#a85b00; --bad:#b3261e;
+  --display:"Unbounded","Segoe UI",system-ui,sans-serif;
+  --body:"Golos Text","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111614; --panel:#19201d; --ink:#e3ebe7; --muted:#97a69f; --line:#2b3531;
+  --accent:#5cc4ae; --accent-weak:#16302a; --hit:#4d4413; --chg:#1d2d44; --warn:#e2a24f; --bad:#f08a82; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111614; --panel:#19201d; --ink:#e3ebe7; --muted:#97a69f; --line:#2b3531;
+  --accent:#5cc4ae; --accent-weak:#16302a; --hit:#4d4413; --chg:#1d2d44; --warn:#e2a24f; --bad:#f08a82; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:44px}
+h1{font-family:var(--display);font-weight:600;font-size:clamp(24px,4vw,36px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-family:var(--display);font-weight:500;font-size:clamp(18px,2.4vw,22px);margin:0 0 6px;text-wrap:balance}
+h3{font-size:16px;margin:0;font-weight:600}
+p{margin:0;max-width:70ch}
+.lead{color:var(--muted);font-size:17px;margin-top:10px}
+section{display:flex;flex-direction:column;gap:16px;min-width:0}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:500 13px var(--body);padding:4px 10px;border-radius:999px;background:var(--accent-weak);color:var(--ink)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}
+th{font:600 12px var(--body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-top:0;background:color-mix(in srgb,var(--accent-weak) 45%,var(--panel))}
+td.k{font-family:var(--mono);white-space:nowrap;color:var(--accent)}
+td.n{font-variant-numeric:tabular-nums}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;counter-reset:s}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.step b{font:600 12px var(--mono);color:var(--accent)}
+.step span{font-size:14px;color:var(--muted)}
+.mer{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
+/* app mockup */
+.win{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);box-shadow:0 10px 30px color-mix(in srgb,var(--ink) 10%,transparent);min-width:0}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px;background:color-mix(in srgb,var(--bg) 70%,var(--panel))}
+.bar i{font-style:normal;color:var(--muted);letter-spacing:6px}
+.app{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:420px}
+.side{border-right:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:14px;font-size:14px}
+.lbl{font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.inp{border:1.5px solid var(--line);border-radius:6px;padding:8px 10px;font:500 15px var(--mono);background:var(--bg)}
+.drop{border:1.5px dashed var(--accent);border-radius:8px;padding:16px;text-align:center;color:var(--muted);font-size:13px;background:color-mix(in srgb,var(--accent-weak) 40%,transparent)}
+.drop b{display:block;color:var(--ink);font-size:14px}
+.sel{display:flex;justify-content:space-between;border:1px solid var(--line);border-radius:6px;padding:7px 10px;background:var(--bg)}
+.btn{background:var(--accent);color:var(--panel);border:0;border-radius:6px;padding:10px 12px;font:600 14px var(--body);text-align:center}
+.btn.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.main{padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.stats{display:flex;flex-wrap:wrap;gap:8px;font-size:13px}
+.st{padding:4px 10px;border-radius:6px;border:1px solid var(--line)}
+.st.ok{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.st.y{background:var(--hit)}
+.st.r{background:color-mix(in srgb,var(--bad) 16%,transparent)}
+.res{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+.res table{font-size:13px}
+.res td{font-family:var(--mono);white-space:nowrap}
+.res td.y{background:var(--hit)} .res td.b{background:var(--chg)}
+.tag{font:600 11px var(--body);padding:2px 7px;border-radius:999px}
+.t-ok{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.t-no{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.t-part{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.note{font-size:13px;color:var(--muted)}
+.src{display:flex;gap:12px;align-items:flex-start;border-top:1px solid var(--line);padding-top:10px;font-size:13px}
+.thumb{width:120px;flex:none;aspect-ratio:1.46;max-width:100%;border:1px solid var(--line);border-radius:4px;background:repeating-linear-gradient(0deg,var(--bg) 0 9px,var(--line) 9px 10px)}
+@media (max-width:720px){.app{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line)}}
+.callout{border-left:4px solid var(--warn);background:var(--panel);border-radius:0 10px 10px 0;padding:14px 18px;display:flex;flex-direction:column;gap:6px}
+.ok-list li::marker{color:var(--accent)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Проект · на согласование</div>
+    <h1>Заполнитель свойств CNC</h1>
+    <p class="lead">Программа для Windows: вы даёте один артикул или Excel со списком, она находит товары в базе каталогов и отдаёт Excel в формате выгрузки Битрикса с заполненными свойствами. Работает офлайн и берёт значения только из каталога или из самого артикула.</p>
+  </header>
+
+  <section>
+    <div class="eyebrow">Как это работает</div>
+    <h2>Путь от артикула до Excel</h2>
+    <div class="flow">
+      <div class="step"><b>1 · Ввод</b>Артикул или Excel<span>Excel из 1С/Битрикса с колонками «Артикул», «_Код товара», «Бренд» и свойствами</span></div>
+      <div class="step"><b>2 · Нормализация</b>Чистка артикула<span>S40T-MSKNR12, S40TMSKNR12 и «s40t msknr 12» дают один ключ; O/0, I/1 при OCR</span></div>
+      <div class="step"><b>3 · Поиск</b>База каталогов<span>Точное совпадение → R/L в одной строке каталога → серия + размер. Бренд учитывается</span></div>
+      <div class="step"><b>4 · Расшифровка</b>Правила ISO<span>Буква длины (M=150), ISO 1832 для пластин, S = A − d/2 для PTHK</span></div>
+      <div class="step"><b>5 · Шаблон</b>Колонки сайта<span>Параметры каталога раскладываются в колонки Битрикса: d → «Ø25», Dmin → две колонки</span></div>
+      <div class="step"><b>6 · Вывод</b>Excel для 1С<span>Только пустые ячейки, код текстом с нулями, без пустот, листы «Источники» и «Не найдено»</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">База данных</div>
+    <h2>Структура базы</h2>
+    <p>Один файл SQLite рядом с программой. Обновить базу можно заменой файла, установка не нужна. Каталоги, их страницы, товары и параметры лежат отдельно от того, как они выглядят на сайте. Поэтому при смене колонок сайта меняется только шаблон, а база остаётся прежней.</p>
+    <div class="mer"><pre class="mermaid">
+erDiagram
+  BRAND ||--o{ CATALOG : издаёт
+  CATALOG ||--o{ PAGE : содержит
+  CATALOG ||--o{ SERIES : описывает
+  PRODUCT_GROUP ||--o{ SERIES : относится
+  SERIES ||--o{ ITEM : "типоразмеры"
+  PAGE ||--o{ ITEM : "где напечатан"
+  ITEM ||--o{ ITEM_PARAM : значения
+  PARAM ||--o{ ITEM_PARAM : "что это"
+  BRAND ||--o{ GRADE : сплавы
+  ITEM ||--o{ GRADE_AVAIL : "★ / ☆"
+  GRADE ||--o{ GRADE_AVAIL : ""
+  PRODUCT_GROUP ||--o{ SITE_TEMPLATE : "шаблон выгрузки"
+  SITE_TEMPLATE ||--o{ SITE_COLUMN : колонки
+  PARAM ||--o{ SITE_COLUMN : "источник"
+  SITE_COLUMN ||--o{ DICT_VALUE : "допустимые значения"
+  BRAND ||--o{ BRAND_ALIAS : "kkdaoku = MetalCraft"
+  RULE }o--|| PRODUCT_GROUP : "расшифровка"
+    </pre></div>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Таблица</th><th>Что хранит</th><th>Пример</th></tr></thead>
+      <tbody>
+        <tr><td class="k">brand</td><td>Производитель и бренд на сайте</td><td>MetalCraft; Huareal; Sant</td></tr>
+        <tr><td class="k">brand_alias</td><td>Другие имена того же производителя и правило бренда для 1С</td><td>kkdaoku, Wenling Youyi → MetalCraft; Hadsto (HS*) → в 1С Huareal</td></tr>
+        <tr><td class="k">catalog</td><td>Файл каталога: год, язык, число страниц, правило «страница каталога → страница PDF»</td><td>Youyiqie: стр. c → PDF (c+5)//2</td></tr>
+        <tr><td class="k">page</td><td>Текст каждой страницы (OCR) с полнотекстовым поиском FTS5</td><td>для поиска серии, когда товара ещё нет в item</td></tr>
+        <tr><td class="k">product_group</td><td>Группа товара: свой набор параметров и свой шаблон сайта</td><td>расточные резцы, резьбовые державки, пластины, свёрла</td></tr>
+        <tr><td class="k">series</td><td>Серия на странице каталога: углы, тип пластины, крепление</td><td>MSKN, 75°, SN..1204, прижим M</td></tr>
+        <tr><td class="k">item</td><td>Конкретный типоразмер: нормализованный артикул, исполнение R/L, страница, отметка «сверено с картинкой»</td><td>S40T-MSKNR12, R, Youyiqie стр. 36</td></tr>
+        <tr><td class="k">param</td><td>Справочник параметров с единицами: один код на одно понятие во всех каталогах</td><td>d, h, b, L, L1, H, f, Dmin, LE, IC, S, DI, RE</td></tr>
+        <tr><td class="k">item_param</td><td>Значение параметра у товара и его происхождение</td><td>Dmin = 50; источник: каталог / артикул / формула</td></tr>
+        <tr><td class="k">grade</td><td>Сплав: покрытие, состав, группы ISO, страница</td><td>HR7225: PVD, AlTiSiN+TiSiN, M</td></tr>
+        <tr><td class="k">grade_avail</td><td>Какие сплавы есть у пластины</td><td>DCMT11T304-TF × HR9205 = ★</td></tr>
+        <tr><td class="k">site_template</td><td>Шаблон выгрузки для группы: порядок колонок как в Битриксе</td><td>«Резцы расточные» — 13 колонок</td></tr>
+        <tr><td class="k">site_column</td><td>Колонка сайта и как её заполнить: параметр, формат, константа</td><td>«Сечение резца, мм» = «Ø{d}»; «Тип державки» = «S (стальная)»</td></tr>
+        <tr><td class="k">dict_value</td><td>Значения справочников 1С: программа не выдаст значение, которого нет в справочнике</td><td>Тип пластины: Керамическая / Металлокерамическая / Твердосплавная</td></tr>
+        <tr><td class="k">rule</td><td>Правила расшифровки артикула и пересчёта</td><td>буква длины K=125; ISO 1832; PTHK: S = A − d/2</td></tr>
+        <tr><td class="k">conflict</td><td>Расхождения между каталогами и с сайтом</td><td>SNR0016Q16: L1 на сайте 40, в каталоге 25</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Правила заполнения</div>
+    <h2>Что программа делает и чего не делает</h2>
+    <div class="grid2">
+      <div class="panel"><h3>Делает</h3><ul class="ok-list">
+        <li>Заполняет только пустые ячейки. Значения из 1С не трогает, расхождения выносит на отдельный лист.</li>
+        <li>Выдаёт файл без пустых ячеек, чтобы загрузка не стёрла данные в 1С.</li>
+        <li>Пишет код товара текстом с нулями (00122573).</li>
+        <li>Указывает у каждого значения источник: каталог и страницу, артикул или формулу.</li>
+        <li>Пересчитывает _SEO_Sort шагом 10 по выбранному полю (например, по L).</li>
+        <li>Подставляет значения только из справочников 1С.</li>
+      </ul></div>
+      <div class="panel"><h3>Не делает</h3><ul>
+        <li>Не берёт значения от соседнего размера и не угадывает. Если в каталоге нет, ячейка попадает в «Не найдено» с причиной.</li>
+        <li>Не ходит в интернет и не отправляет данные никуда.</li>
+        <li>Не меняет 1С напрямую: выдаёт Excel, который вы загружаете сами.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Дизайн приложения</div>
+    <h2>Окно программы</h2>
+    <p>Одно окно. Слева ввод, справа результат. Пример ниже: загружен Excel с резьбовыми державками, это реальные позиции из нашей работы.</p>
+    <div class="win" role="img" aria-label="Макет окна программы">
+      <div class="bar"><span>Заполнитель свойств CNC — база от 22.10.2026, 18 каталогов</span><i>– □ ×</i></div>
+      <div class="app">
+        <div class="side">
+          <div><div class="lbl">Один артикул</div><div class="inp" style="margin-top:6px">S40T-MSKNR12</div></div>
+          <div class="drop"><b>Перетащите Excel</b>или нажмите, чтобы выбрать файл<br>резьбовые_SNR.xlsx · 91 строка</div>
+          <div><div class="lbl">Шаблон выгрузки</div><div class="sel" style="margin-top:6px"><span>Резцы резьбовые</span><span>▾</span></div><div class="note" style="margin-top:4px">определён по колонкам файла</div></div>
+          <div><div class="lbl">Сортировка _SEO_Sort</div><div class="sel" style="margin-top:6px"><span>по L, затем Dmin, шаг 10</span><span>▾</span></div></div>
+          <div><div class="lbl">Бренд, если пусто</div><div class="sel" style="margin-top:6px"><span>как в файле</span><span>▾</span></div></div>
+          <div class="btn">Заполнить</div>
+          <div class="btn ghost">Сохранить Excel для 1С</div>
+        </div>
+        <div class="main">
+          <div class="stats"><span class="st ok">найдено 85</span><span class="st y">заполнено ячеек 409</span><span class="st">расхождений 66</span><span class="st r">не найдено 6</span></div>
+          <div class="res"><table>
+            <thead><tr><th>Статус</th><th>Артикул</th><th>Код</th><th>L</th><th>Dmin</th><th>d</th><th>H</th><th>S</th><th>L1</th><th>Источник</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag t-ok">найден</span></td><td>SNR0032T16</td><td>00122578</td><td class="y">300</td><td class="y">36</td><td class="y">32</td><td class="y">30</td><td class="y">18.5</td><td class="y">38</td><td>MetalCraft · с. 117</td></tr>
+              <tr><td><span class="tag t-ok">найден</span></td><td>SNL0050U22</td><td>00122566</td><td class="y">350</td><td class="y">58</td><td class="y">50</td><td class="y">47</td><td class="y">32</td><td class="y">50</td><td>MetalCraft · с. 117</td></tr>
+              <tr><td><span class="tag t-part">частично</span></td><td>SNR0016Q16</td><td>00217286</td><td>180</td><td>20</td><td>16</td><td>15.5</td><td>12</td><td class="y">25</td><td>есть расхождения</td></tr>
+              <tr><td><span class="tag t-no">нет</span></td><td>S40U-SVUCR16</td><td>00121150</td><td class="b">350</td><td>—</td><td class="b">40</td><td>—</td><td>—</td><td>—</td><td>только из артикула</td></tr>
+            </tbody>
+          </table></div>
+          <div class="note">Жёлтые ячейки взяты из каталога, голубые из артикула. При клике на строку внизу открывается источник.</div>
+          <div class="src"><div class="thumb" aria-hidden="true"></div><div><b>SNR0032T16 · MetalCraft (kkdaoku), стр. 117 каталога / 68 PDF</b><br>Строка таблицы SN□: Dmin 36, Φd 32, L 300, L1 38, H 30, F 18.5 → колонки сайта: Dmin, Мин. диаметр растачивания, d, Диаметр хвостовика, b, Сечение «Ø32», L, Длина резца, L1, H, h, S.<br><span class="note">Кнопка «Открыть страницу» показывает картинку страницы каталога.</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="panel"><h3>Excel на выходе</h3><p class="note">Лист «Загрузка» с колонками вашего шаблона. Лист «Источники» с каталогом и страницей у каждой ячейки. Лист «Расходится с каталогом». Лист «Не найдено» с причиной.</p></div>
+      <div class="panel"><h3>Один артикул</h3><p class="note">Карточка со всеми параметрами, каталогом и страницей. Кнопка «Копировать строку» копирует данные для вставки в Excel.</p></div>
+      <div class="panel"><h3>Управление базой</h3><p class="note">Вкладка «Каталоги»: список, сколько товаров разобрано, когда обновлено. Сюда же добавляются новые шаблоны сайта по выгрузке-образцу.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Наполнение базы</div>
+    <h2>Самая большая часть работы</h2>
+    <div class="callout"><b>Программа быстро станет рабочей, а наполнение базы займёт время.</b>
+      <p>Почти все каталоги сканированные, около 2 000 страниц таблиц. Надёжно извлечь цифры из скана можно только так: я разбираю таблицу и сверяю её с картинкой страницы. Так уже сделаны MetalCraft (расточные и резьбовые), PTHK и Huareal (пластины). Автоматический OCR без сверки даёт ошибки в цифрах, а с такими данными программа будет «выдумывать».</p></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Каталог</th><th>Стр.</th><th>Текст</th><th>Что уже разобрано в таблицы</th></tr></thead>
+      <tbody>
+        <tr><td>MetalCraft (kkdaoku)</td><td class="n">112</td><td>скан</td><td>расточные S-тип, M-тип, резьбовые SN</td></tr>
+        <tr><td>Youyiqie</td><td class="n">37</td><td>скан</td><td>расточные M-тип и часть S-типа</td></tr>
+        <tr><td>PTHK / Weiding</td><td class="n">149</td><td>скан</td><td>твердосплавные оправки SCLC, SDQC, SDUC, SVUC</td></tr>
+        <tr><td>SANT 2022 / 2024</td><td class="n">218</td><td>скан</td><td>частично, по запросам</td></tr>
+        <tr><td>Huareal (4 больших + 4 малых)</td><td class="n">~900</td><td>текст / скан</td><td>DCMT, DCGT, CCGT, сплавы</td></tr>
+        <tr><td>Hadsto</td><td class="n">76</td><td>скан</td><td>сплавы HS*, DCMT/SCMT</td></tr>
+        <tr><td>ZZJG</td><td class="n">79</td><td>скан</td><td>—</td></tr>
+        <tr><td>Bright-Tools</td><td class="n">714</td><td>текст</td><td>— (текстовый слой: разбор быстрее)</td></tr>
+        <tr><td>A-ONE, Maki Bishi</td><td class="n">37</td><td>текст / скан</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+    <p>Предлагаю наполнять базу по группам товаров в порядке ваших задач. Первая очередь — все токарные державки MetalCraft, Youyiqie, SANT и PTHK, затем пластины, свёрла и фрезы, оснастка. Каждая группа приходит обновлённым файлом базы, программу переустанавливать не нужно.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Технологии</div>
+    <h2>Из чего собрано</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Часть</th><th>Решение</th><th>Почему</th></tr></thead>
+      <tbody>
+        <tr><td>Язык</td><td>Python 3.12</td><td>Те же скрипты, которыми я уже заполнял ваши файлы</td></tr>
+        <tr><td>База</td><td>SQLite + FTS5, один файл catalog.db</td><td>Офлайн, без сервера, обновляется заменой файла</td></tr>
+        <tr><td>Интерфейс</td><td>PySide6 (Qt)</td><td>Нативное окно Windows, таблица, перетаскивание файлов</td></tr>
+        <tr><td>Excel</td><td>openpyxl</td><td>Коды текстом, цвета ячеек, несколько листов</td></tr>
+        <tr><td>Сборка .exe</td><td>PyInstaller в GitHub Actions</td><td>GitHub собирает .exe сам, вы скачиваете готовый файл</td></tr>
+        <tr><td>Безопасность</td><td>Нет ключей, паролей и сетевых запросов</td><td>Секретов в репозитории и в .exe нет, проверка перед каждым выпуском</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Дальше</div>
+    <h2>Этапы после вашего согласия</h2>
+    <div class="flow">
+      <div class="step"><b>Этап 1 · MVP</b>Программа + база державок<span>Окно, ввод артикула и Excel, шаблоны «Резцы расточные» и «Резцы резьбовые», всё уже разобранное</span></div>
+      <div class="step"><b>Этап 2</b>Все токарные державки<span>MetalCraft, Youyiqie, SANT, PTHK полностью; шаблоны проходных и отрезных</span></div>
+      <div class="step"><b>Этап 3</b>Пластины<span>Huareal, Hadsto, ZZJG, SANT; сплавы и справочники 1С</span></div>
+      <div class="step"><b>Этап 4</b>Свёрла, фрезы, оснастка<span>По мере поступления каталогов на YG10, T32 и других</span></div>
+    </div>
+    <div class="panel"><h3>Что нужно от вас для MVP</h3><ul>
+      <li>Аккаунт GitHub (или создадим новый). Туда ляжет код и оттуда скачивается .exe.</li>
+      <li>По одной выгрузке Битрикса на каждую группу товаров. Это образец колонок шаблона, как iblock_element_admin по свёрлам.</li>
+      <li>Справочники 1С по полям со списками: тип пластины, покрытие, материал, вид обработки, тип державки.</li>
+      <li>Ваше «ок» или правки по структуре и окну на этой странице.</li>
+    </ul></div>
+  </section>
+</div>
