@@ -11,7 +11,9 @@
 Разметку карточки надо один раз сверить на живом сайте (tests/fixtures/cnc1_card.html) — см. CLAUDE.md.
 """
 import json
+import os
 import re
+import sys
 import time
 import urllib.request
 from html import unescape
@@ -22,7 +24,19 @@ from articles import norm
 
 BASE = "https://cnc1.ru"
 UA = "cnc-filler/1.0 (internal catalog tool)"
-CACHE = Path(__file__).resolve().parents[2] / "data" / "cnc1_urls.json"
+def _cache_dir() -> Path:
+    """Папка кэша для записи. В собранном exe (onedir/onefile) каталог приложения только для чтения,
+    поэтому кэш кладём в %LOCALAPPDATA%\\cnc-filler (или домой). В обычном запуске — data/ проекта."""
+    if getattr(sys, "frozen", False):
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
+        d = Path(base) / "cnc-filler"
+    else:
+        d = Path(__file__).resolve().parents[2] / "data"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+CACHE = _cache_dir() / "cnc1_urls.json"
 _last = [0.0]
 
 
@@ -56,7 +70,10 @@ def load_index(refresh=False, get=http_get) -> list[str]:
     if CACHE.exists() and not refresh:
         return json.loads(CACHE.read_text(encoding="utf-8"))
     urls = product_urls_from_sitemaps(get)
-    CACHE.write_text(json.dumps(urls, ensure_ascii=False), encoding="utf-8")
+    try:
+        CACHE.write_text(json.dumps(urls, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass   # кэш не критичен — при неудаче просто не сохраняем
     return urls
 
 
@@ -157,7 +174,10 @@ def _remember(card: dict):
         c.setdefault(card["code"], [])
         if card["url"] not in c[card["code"]]:
             c[card["code"]].append(card["url"])
-        CODES_CACHE.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+        try:
+            CODES_CACHE.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
 
 
 def is_code(q: str) -> bool:
