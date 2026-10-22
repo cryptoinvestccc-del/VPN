@@ -226,7 +226,9 @@ def fill_rows(engine: Engine, headers, rows, seo_sort_by: str | None = None) -> 
                 conflicts.append([art, _code(r.get("_Код товара", "")), "L", f"буква длины = {dec['L']}",
                                   fmt_num(m.params["L"]), m.source])
         final, fl = {}, set()
-        for h in headers:
+        # Колонки свойств из шаблона добавляем, даже если их нет в файле (голый список «артикул + код»).
+        eff_headers = list(headers) + [c for c in sorted(TEMPLATE_COLUMNS) if c and c not in headers]
+        for h in eff_headers:
             if not h:
                 continue
             cur = r.get(h)
@@ -271,6 +273,10 @@ TEMPLATE_COLUMNS |= {"Исполнение"}
 def write_result(res: FillResult, headers, path, seo_sort_by=None):
     """Листы загрузки без пустых ячеек: строки группируются по набору заполненных колонок."""
     wanted = [h for h in headers if h and (h in TEMPLATE_COLUMNS or h in ("_Код товара", "Артикул"))]
+    # Колонки, заполненные из шаблона, но отсутствовавшие в исходном файле (голый список).
+    for c in sorted({h for x in res.rows for h in (x["filled"] | x["changed"])}):
+        if c and c not in wanted:
+            wanted.append(c)
     if seo_sort_by and "_SEO_Sort" not in wanted:
         wanted.append("_SEO_Sort")
     groups = {}
@@ -317,6 +323,31 @@ def _style(ws, cols, wide=False):
     for i, c in enumerate(cols, 1):
         ws.column_dimensions[get_column_letter(i)].width = 16 if i <= 2 else (60 if wide and i >= 3 else 12)
     ws.freeze_panes = "B2"
+
+
+def write_cards(headers, rows, path):
+    """Прямой экспорт карточек, взятых с cnc1.ru, в Excel-выгрузку (без заполнения из каталога).
+
+    Один лист «Выгрузка с сайта»: Артикул, _Код товара (текст, 8 знаков), затем все свойства карточек
+    в том порядке, как их отдал сайт. Пустые значения («-») остаются пустыми. Лист «Ссылки» — URL карточек.
+    """
+    cols = ["Артикул", "_Код товара"] + [h for h in headers if h not in ("Артикул", "_Код товара", "_URL")]
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("Выгрузка с сайта")
+    ws.append(cols)
+    for r in rows:
+        ws.append([r.get(c) for c in cols])
+        ws.cell(ws.max_row, 2).number_format = "@"   # код — текстом, ведущие нули сохраняются
+    _style(ws, cols)
+    if any(r.get("_URL") for r in rows):
+        ws2 = wb.create_sheet("Ссылки")
+        ws2.append(["Артикул", "_Код товара", "URL карточки"])
+        for r in rows:
+            ws2.append([r.get("Артикул"), r.get("_Код товара"), r.get("_URL")])
+            ws2.cell(ws2.max_row, 2).number_format = "@"
+        _style(ws2, ["Артикул", "_Код товара", "URL карточки"], wide=True)
+    wb.save(path)
 
 
 def process_file(engine, in_path, out_path, seo_sort_by=None) -> FillResult:

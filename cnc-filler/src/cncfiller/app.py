@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QFileDialog, QFrame, QHB
                                QTextEdit, QVBoxLayout, QWidget)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from engine import Engine, read_table, fill_rows, write_result, fmt_num  # noqa: E402
+from engine import Engine, read_table, fill_rows, write_result, write_cards, fmt_num  # noqa: E402
 from articles import decode  # noqa: E402
 import cnc1_parser  # noqa: E402
 
@@ -94,6 +94,7 @@ class Main(QMainWindow):
         super().__init__()
         self.engine = engine
         self.headers = self.result = None
+        self.last = None   # 'site' — взято с cnc1.ru (сохраняем как есть) | 'fill' — заполнено из каталога
         n_cat = engine.con.execute("SELECT count(*) FROM catalog").fetchone()[0]
         n_items = engine.con.execute("SELECT count(*) FROM item").fetchone()[0]
         self.setWindowTitle(f"Заполнитель свойств CNC — {n_cat} каталогов, {n_items} разобранных позиций")
@@ -220,9 +221,26 @@ class Main(QMainWindow):
             return
         self.headers, self.rows = cnc1_parser.cards_to_rows(cards)
         self.path = str(Path.home() / "cnc1_выгрузка.xlsx")
+        self.last = "site"
+        self.result = None
+        self._show_rows(self.headers, self.rows)
+        self.save_btn.setEnabled(True)
         self.drop.label.setText(f"<b>Взято с cnc1.ru</b><br>{len(self.rows)} карточек")
-        self.stats.setText(f"С сайта: {len(cards)} карточек. Нажмите «Заполнить».")
+        self.stats.setText(f"С сайта: {len(cards)} карточек. Нажмите «Сохранить Excel для 1С» — "
+                           f"выгрузка со свойствами сайта. Или «Заполнить» — дописать пустые из каталога.")
         self.source.setPlainText("\n".join([c["url"] for c in cards] + missed))
+
+    def _show_rows(self, headers, rows):
+        """Показать карточки с сайта в таблице (без заполнения)."""
+        cols = ["Артикул", "_Код товара"] + [h for h in headers if h not in ("Артикул", "_Код товара", "_URL")]
+        self.table.clear()
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.setRowCount(len(rows))
+        for i, r in enumerate(rows):
+            for j, c in enumerate(cols):
+                v = r.get(c)
+                self.table.setItem(i, j, QTableWidgetItem("" if v is None else str(v)))
 
     # ----- Excel -----
     def load_file(self, path):
@@ -232,6 +250,9 @@ class Main(QMainWindow):
             QMessageBox.warning(self, "Файл не прочитан", str(ex))
             return
         self.path = path
+        self.last = None
+        self.result = None
+        self.save_btn.setEnabled(False)
         self.drop.label.setText(f"<b>{Path(path).name}</b><br>{len(self.rows)} строк")
         self.stats.setText("Файл загружен. Нажмите «Заполнить».")
 
@@ -241,6 +262,7 @@ class Main(QMainWindow):
             return
         sort_by = {1: "L, мм", 2: "d, мм"}.get(self.sort.currentIndex())
         self.sort_by = sort_by
+        self.last = "fill"
         self.result = fill_rows(self.engine, self.headers, self.rows, sort_by)
         r = self.result
         self.stats.setText(f"Найдено в каталогах: <b>{r.found}</b> · заполнено ячеек: <b>{r.filled_cells}</b> · "
@@ -277,13 +299,21 @@ class Main(QMainWindow):
         self.source.setPlainText("\n".join(lines) or "Для этой строки ничего не менялось.")
 
     def save(self):
-        if not self.result:
+        if self.last == "site":
+            suffix, ok = "_сайт", bool(self.rows)
+        else:
+            suffix, ok = "_заполнено", bool(self.result)
+        if not ok:
             return
-        default = str(Path(self.path).with_name(Path(self.path).stem + "_заполнено.xlsx"))
+        default = str(Path(self.path).with_name(Path(self.path).stem + suffix + ".xlsx"))
         path, _ = QFileDialog.getSaveFileName(self, "Сохранить", default, "Excel (*.xlsx)")
-        if path:
+        if not path:
+            return
+        if self.last == "site":
+            write_cards(self.headers, self.rows, path)   # карточки сайта как есть
+        else:
             write_result(self.result, self.headers, path, self.sort_by)
-            self.stats.setText(f"Сохранено: {path}")
+        self.stats.setText(f"Сохранено: {path}")
 
 
 def main():
