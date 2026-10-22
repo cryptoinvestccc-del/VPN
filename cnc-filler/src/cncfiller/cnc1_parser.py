@@ -155,8 +155,27 @@ def parse_card(html: str, url: str = "") -> dict:
 
 
 def fetch_article(article: str, urls: list[str] | None = None, get=http_get) -> list[dict]:
+    """Карточки по артикулу: сначала совпадение по адресу страницы (быстро), иначе — поиск сайта."""
     urls = urls if urls is not None else load_index(get=get)
-    return [parse_card(get(u), u) for u in find_urls(article, urls)]
+    cards = [parse_card(get(u), u) for u in find_urls(article, urls)]
+    if cards:
+        return cards
+    # запасной путь: строка поиска сайта (артикул на сайте может быть записан иначе, чем в адресе)
+    key = norm(article)
+    for tpl in SEARCH_URLS:
+        try:
+            html = get(BASE + tpl.format(q=article))
+        except Exception:  # noqa: BLE001
+            continue
+        links = sorted(set(re.findall(r'href="(/catalog/[^"?#]+/)"', html)))
+        for path in [p for p in links if p.count("/") >= 5][:20]:
+            c = parse_card(get(BASE + path), BASE + path)
+            _remember(c)
+            if key in (norm(c["article"]), norm(c["title"].split(" ")[0] if c["title"] else "")) or key in norm(c["title"]):
+                cards.append(c)
+        if cards:
+            break
+    return cards
 
 
 # ---------- поиск по коду товара ----------
