@@ -5,14 +5,13 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont
-from PySide6.QtWidgets import (QApplication, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (QApplication, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
                                QLineEdit, QMainWindow, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
                                QTextEdit, QVBoxLayout, QWidget)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from engine import Engine, read_table, fill_rows, write_result, write_cards, fmt_num  # noqa: E402
-from articles import decode  # noqa: E402
+from engine import Engine, read_table, fill_rows, write_result, write_cards  # noqa: E402
 import cnc1_parser  # noqa: E402
 
 
@@ -31,33 +30,6 @@ QPushButton#ghost {{ color: {ACCENT}; border: 1.5px solid {ACCENT}; background: 
 QFrame#drop {{ border: 2px dashed {ACCENT}; border-radius: 8px; background: #eef7f4; }}
 QLabel.caption {{ color: #5a6762; font-size: 8pt; font-weight: 600; }}
 """
-
-
-class DropZone(QFrame):
-    def __init__(self, on_file):
-        super().__init__()
-        self.setObjectName("drop")
-        self.on_file = on_file
-        self.setAcceptDrops(True)
-        lay = QVBoxLayout(self)
-        self.label = QLabel("<b>Перетащите Excel</b><br>или нажмите, чтобы выбрать файл")
-        self.label.setAlignment(Qt.AlignCenter)
-        lay.addWidget(self.label)
-        self.setMinimumHeight(90)
-
-    def mousePressEvent(self, e):
-        path, _ = QFileDialog.getOpenFileName(self, "Выберите выгрузку", "", "Excel (*.xlsx *.xlsm)")
-        if path:
-            self.on_file(path)
-
-    def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls():
-            e.acceptProposedAction()
-
-    def dropEvent(self, e):
-        for u in e.mimeData().urls():
-            self.on_file(u.toLocalFile())
-            break
 
 
 class SiteWorker(QThread):
@@ -105,43 +77,53 @@ class Main(QMainWindow):
         side = QVBoxLayout()
         h.addLayout(side, 0)
 
-        side.addWidget(self._cap("ОДИН АРТИКУЛ"))
-        self.article = QLineEdit()
-        self.article.setPlaceholderText("например S40T-MSKNR12")
-        self.article.returnPressed.connect(self.lookup)
-        side.addWidget(self.article)
-        self.brand = QComboBox()
-        self.brand.addItems(["Любой бренд", "MetalCraft", "Sant"])
-        side.addWidget(self.brand)
-        b = QPushButton("Найти")
-        b.setObjectName("primary")
-        b.clicked.connect(self.lookup)
-        side.addWidget(b)
+        # ---- ПАРСЕР CNC1.RU: свойства тянутся с сайта ----
+        side.addWidget(self._cap("ПАРСЕР CNC1.RU"))
+        self.p_field = QLineEdit()
+        self.p_field.setPlaceholderText("артикул или код товара (через запятую)")
+        self.p_field.returnPressed.connect(self.run_parser)
+        side.addWidget(self.p_field)
+        pf = QPushButton("Прикрепить файл со списком")
+        pf.setObjectName("ghost")
+        pf.clicked.connect(self.attach_parser_file)
+        side.addWidget(pf)
+        self.p_file_lbl = self._cap("")
+        side.addWidget(self.p_file_lbl)
+        pb = QPushButton("Спарсить → Excel")
+        pb.setObjectName("primary")
+        pb.clicked.connect(self.run_parser)
+        side.addWidget(pb)
 
-        site = QPushButton("Взять с cnc1.ru (артикул или код)")
-        site.setObjectName("ghost")
-        site.clicked.connect(self.from_site)
-        side.addWidget(site)
-
-        side.addSpacing(12)
-        side.addWidget(self._cap("EXCEL-ВЫГРУЗКА"))
-        self.drop = DropZone(self.load_file)
-        side.addWidget(self.drop)
+        side.addSpacing(16)
+        # ---- ПОИСК ПО КАТАЛОГАМ: свойства из локальной базы ----
+        side.addWidget(self._cap("ПОИСК ПО КАТАЛОГАМ"))
+        self.c_field = QLineEdit()
+        self.c_field.setPlaceholderText("артикул (или код) через запятую")
+        self.c_field.returnPressed.connect(self.run_catalog)
+        side.addWidget(self.c_field)
+        cf = QPushButton("Прикрепить файл (выгрузка Битрикса)")
+        cf.setObjectName("ghost")
+        cf.clicked.connect(self.attach_catalog_file)
+        side.addWidget(cf)
+        self.c_file_lbl = self._cap("")
+        side.addWidget(self.c_file_lbl)
         side.addWidget(self._cap("СОРТИРОВКА _SEO_SORT"))
         self.sort = QComboBox()
         self.sort.addItems(["Не менять", "по L, затем Dmin, шаг 10", "по d, затем L, шаг 10"])
         side.addWidget(self.sort)
-        self.fill_btn = QPushButton("Заполнить")
-        self.fill_btn.setObjectName("primary")
-        self.fill_btn.clicked.connect(self.fill)
-        side.addWidget(self.fill_btn)
+        cb = QPushButton("Заполнить → Excel")
+        cb.setObjectName("primary")
+        cb.clicked.connect(self.run_catalog)
+        side.addWidget(cb)
+
+        side.addSpacing(16)
         self.save_btn = QPushButton("Сохранить Excel для 1С")
         self.save_btn.setObjectName("ghost")
         self.save_btn.clicked.connect(self.save)
         self.save_btn.setEnabled(False)
         side.addWidget(self.save_btn)
         side.addStretch(1)
-        side_w = QWidget()
+        self.parser_file = self.catalog_file = None
 
         main = QVBoxLayout()
         h.addLayout(main, 1)
@@ -165,50 +147,48 @@ class Main(QMainWindow):
         l.setProperty("class", "caption")
         return l
 
-    # ----- один артикул -----
-    def lookup(self):
-        art = self.article.text().strip()
-        if not art:
-            return
-        brand = None if self.brand.currentIndex() == 0 else self.brand.currentText()
-        vals, src, m = self.engine.site_values(art, brand)
-        self.table.clear()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Колонка сайта", "Значение", "Источник"])
-        self.table.setRowCount(len(vals))
-        for i, (k, v) in enumerate(vals.items()):
-            for j, x in enumerate((k, fmt_num(v) if isinstance(v, float) else v, src.get(k, ""))):
-                it = QTableWidgetItem(str(x))
-                if j == 1:
-                    it.setBackground(QColor("#FFF2A8") if m else QColor("#D9E8FB"))
-                self.table.setItem(i, j, it)
-        if m:
-            self.stats.setText(f"<b>{art}</b> найден: {m.source}")
-            self.source.setPlainText("Параметры каталога: " + ", ".join(f"{k} = {fmt_num(v)}" for k, v in m.params.items()))
-        else:
-            hint = self.engine.series_hint(art)
-            self.stats.setText(f"<b>{art}</b> нет в разобранной базе. Показано только то, что видно из артикула.")
-            self.source.setPlainText("Серия встречается в каталогах: " + ("; ".join(hint) if hint else "нет") +
-                                     "\nРасшифровка артикула: " + str(decode(art)))
+    # ----- ПАРСЕР CNC1.RU -----
+    def _queries_from_file(self, path):
+        """Список артикулов/кодов из файла: колонка _Код товара или Артикул, иначе первый непустой столбец."""
+        headers, rows = read_table(path)
+        qs = []
+        for r in rows:
+            q = r.get("_Код товара") or r.get("Артикул")
+            if not q:
+                for h in headers:
+                    if r.get(h):
+                        q = r.get(h)
+                        break
+            if q:
+                qs.append(str(q).strip())
+        return qs
 
-    # ----- cnc1.ru -----
-    def from_site(self):
-        """Поле артикула (можно несколько через запятую/пробел) или колонка Артикул/_Код товара из загруженного Excel."""
-        text = self.article.text().strip()
+    def attach_parser_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Файл со списком артикулов/кодов", "", "Excel (*.xlsx *.xlsm)")
+        if path:
+            self.parser_file = path
+            self.p_file_lbl.setText(f"файл: {Path(path).name}")
+
+    def run_parser(self):
+        text = self.p_field.text().strip()
         if text:
             queries = [q for q in re.split(r"[,;\s]+", text) if q]
-        elif self.headers:
-            queries = []
-            for r in self.rows:
-                q = r.get("_Код товара") or r.get("Артикул")
-                if q:
-                    queries.append(str(q).strip())
+        elif self.parser_file:
+            try:
+                queries = self._queries_from_file(self.parser_file)
+            except Exception as ex:  # noqa: BLE001
+                QMessageBox.warning(self, "Файл не прочитан", str(ex))
+                return
         else:
-            QMessageBox.information(self, "Нечего искать", "Введите артикул/код или загрузите Excel со списком.")
+            QMessageBox.information(self, "Нечего парсить", "Введите артикул/код или прикрепите файл со списком.")
+            return
+        if not queries:
+            QMessageBox.information(self, "Пусто", "В файле не нашлось артикулов/кодов.")
             return
         full = QMessageBox.question(self, "Поиск по коду",
                                     "Если код не найдётся поиском сайта — обойти все карточки сайта? Это долго (1 карточка в секунду), "
                                     "зато потом коды будут в кэше.") == QMessageBox.Yes if any(cnc1_parser.is_code(q) for q in queries) else False
+        self.stats.setText(f"Парсю cnc1.ru: {len(queries)} запрос(ов)…")
         self.worker = SiteWorker(queries, full)
         self.worker.progress.connect(self.stats.setText)
         self.worker.done.connect(self.site_done)
@@ -225,10 +205,36 @@ class Main(QMainWindow):
         self.result = None
         self._show_rows(self.headers, self.rows)
         self.save_btn.setEnabled(True)
-        self.drop.label.setText(f"<b>Взято с cnc1.ru</b><br>{len(self.rows)} карточек")
-        self.stats.setText(f"С сайта: {len(cards)} карточек. Нажмите «Сохранить Excel для 1С» — "
-                           f"выгрузка со свойствами сайта. Или «Заполнить» — дописать пустые из каталога.")
+        self.stats.setText(f"Спарсено с cnc1.ru: {len(cards)} карточек. Нажмите «Сохранить Excel для 1С».")
         self.source.setPlainText("\n".join([c["url"] for c in cards] + missed))
+
+    # ----- ПОИСК ПО КАТАЛОГАМ -----
+    def attach_catalog_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Выгрузка Битрикса/1С", "", "Excel (*.xlsx *.xlsm)")
+        if path:
+            self.catalog_file = path
+            self.c_file_lbl.setText(f"файл: {Path(path).name}")
+
+    def run_catalog(self):
+        text = self.c_field.text().strip()
+        if text:
+            qs = [q for q in re.split(r"[,;\s]+", text) if q]
+            self.headers = ["Артикул", "_Код товара"]
+            self.rows = [{"Артикул": "" if cnc1_parser.is_code(q) else q,
+                          "_Код товара": q if cnc1_parser.is_code(q) else ""} for q in qs]
+        elif self.catalog_file:
+            try:
+                self.headers, self.rows = read_table(self.catalog_file)
+            except Exception as ex:  # noqa: BLE001
+                QMessageBox.warning(self, "Файл не прочитан", str(ex))
+                return
+            self.path = self.catalog_file
+        else:
+            QMessageBox.information(self, "Нечего заполнять", "Введите артикул или прикрепите файл-выгрузку.")
+            return
+        if text:
+            self.path = str(Path.home() / "каталог_выгрузка.xlsx")
+        self.fill()
 
     def _show_rows(self, headers, rows):
         """Показать карточки с сайта в таблице (без заполнения)."""
@@ -241,20 +247,6 @@ class Main(QMainWindow):
             for j, c in enumerate(cols):
                 v = r.get(c)
                 self.table.setItem(i, j, QTableWidgetItem("" if v is None else str(v)))
-
-    # ----- Excel -----
-    def load_file(self, path):
-        try:
-            self.headers, self.rows = read_table(path)
-        except Exception as ex:  # noqa: BLE001
-            QMessageBox.warning(self, "Файл не прочитан", str(ex))
-            return
-        self.path = path
-        self.last = None
-        self.result = None
-        self.save_btn.setEnabled(False)
-        self.drop.label.setText(f"<b>{Path(path).name}</b><br>{len(self.rows)} строк")
-        self.stats.setText("Файл загружен. Нажмите «Заполнить».")
 
     def fill(self):
         if not self.headers:
