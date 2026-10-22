@@ -1,0 +1,29 @@
+name: cnc-filler
+on:
+  push:
+    branches: [cnc-filler]
+    paths: ['cnc-filler/**', '.github/workflows/cnc-filler.yml']
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cnc-filler
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements.txt pytest
+      - run: python src/cncfiller/build_db.py
+      - run: python -m pytest -q tests
+      - name: Живая проверка cnc1.ru
+        id: live
+        continue-on-error: true
+        run: python tools/check_cnc1_live.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: cnc1-live-html, path: cnc-filler/live_html, if-no-files-found: ignore }
+      - run: pyinstaller --noconfirm --onefile --windowed --name cnc-filler --paths src/cncfiller --add-data "data/catalog.db;data" src/cncfiller/app.py
+      - uses: actions/upload-artifact@v4
+        with: { name: cnc-filler-exe, path: cnc-filler/dist/cnc-filler.exe }

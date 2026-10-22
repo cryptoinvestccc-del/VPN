@@ -1,0 +1,11 @@
+*.spec
+.env
+__pycache__/
+build/
+catalogs/*.pdf
+data/catalog.db
+data/cnc1_*.json
+data/samples/*.xls*
+dist/
+examples_output/
+live_html/

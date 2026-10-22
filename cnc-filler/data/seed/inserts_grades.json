@@ -1,0 +1,44 @@
+{
+ "_note": "Сверено с картинками страниц. Huareal 2026-2027 (A12-A14 сплавы, A50 DCMT-TF/TM/HQ, A130 DCGT-FF), 2024-2025 CN (A44, A55, A122, A126), Kylin 2025 (стр. 3, 22), HADSTO 2024-2025 (стр. 4, 18). В 1С бренд HS*-позиций = Huareal.",
+ "insert_dims": {
+  "CCGT0602": {"LE":6.4,"IC":6.35,"S":2.38,"DI":2.8},
+  "DCGT0702": {"LE":7.8,"IC":6.35,"S":2.38,"DI":2.8}, "DCMT0702": {"LE":7.8,"IC":6.35,"S":2.38,"DI":2.8},
+  "DCGT11T3": {"LE":11.6,"IC":9.525,"S":3.97,"DI":4.4}, "DCMT11T3": {"LE":11.6,"IC":9.525,"S":3.97,"DI":4.4},
+  "SCMT09T3": {"LE":9.525,"IC":9.525,"S":3.97,"DI":4.4}
+ },
+ "chipbreakers": {
+  "Huareal": {
+   "XF": {"proc":"сверхчистовая","recommended":["HR1135","HR7125"],"available":["HRC10"],"holders":"S-SCLC**-06","page":"2024-25 A122"},
+   "PU": {"proc":"чистовая","recommended":["HR1135","HR7125"],"available":["HRC10"],"holders":"SDJC/SDNC/S-SDUC 07,11","page":"2024-25 A126"},
+   "FF": {"proc":"чистовая","recommended":["HR7125"],"available":[],"holders":"SDJC/SDNC/S-SDUC 07,11","page":"2026-27 A130","sizes":["070201","070202","070204","11T301","11T302","11T304"]},
+   "TF": {"proc":"чистовая","recommended":["HR8115","HR8225","HR7225","HR9205"],"available":["HR8125","HR7125","HR9215"],"page":"2026-27 A50","sizes":["070202","070204","070208","11T302","11T304","11T308"],"kylin_extra":{"11T304":["HR7115","HR9205","HR9215"],"11T308":["HR7115","HR9205","HR9215"]}},
+   "TM": {"proc":"получистовая","recommended":["HR8115","HR8225","HR7225"],"available":["HR8125","HR7125"],"page":"2026-27 A50","sizes":["070204","070208","11T304","11T308","11T312"]},
+   "HQ": {"proc":"чистовая-получистовая, кермет","recommended":["HRC10"],"available":["HR115C"],"page":"2026-27 A50","sizes":["070202","070204","070208","11T302","11T304","11T308"]}
+  },
+  "Hadsto": {
+   "MP": {"proc":"чистовая","recommended":["HS8115","HS8215","HS8125","HS8225","HS7125","HS7225"],"page":"HADSTO стр.18","items":["DCMT070204","DCMT11T304","DCMT11T308","SCMT09T304","SCMT09T308"]},
+   "TM": {"proc":"получистовая","recommended":["HS8115","HS8215","HS8125","HS8225","HS6115","HS7125","HS7225"],"page":"HADSTO стр.18","items":["DCMT070204","DCMT070208","DCMT11T304","DCMT11T308","DCMT11T312","SCMT09T304","SCMT09T308","SCMT120404","SCMT120408","SCMT120412"]}
+  }
+ },
+ "grades": {
+  "HR1135": {"iso":"P M","site_material":"P,M (Сталь, Нержавеющая сталь)","coating":"PVD","type":"Твердосплавная"},
+  "HR7115": {"iso":"M S","site_material":"M, S. (Нержавеющая сталь, Жаропрочные сплавы)","coating":"PVD","type":"Твердосплавная"},
+  "HR7125": {"iso":"M","site_material":"M (Нержавеющая сталь)","coating":"PVD","type":"Твердосплавная"},
+  "HR7225": {"iso":"M","site_material":"M (Нержавеющая сталь)","coating":"PVD","composition":"AlTiSiN+TiSiN","type":"Твердосплавная"},
+  "HR8115": {"iso":"P","coating":"CVD","composition":"TiN+MT-TiCN+Al2O3","type":"Твердосплавная"},
+  "HR8225": {"iso":"P","site_material":"P (Сталь)","coating":"CVD","composition":"TiN+MT-TiCN+Al2O3","type":"Твердосплавная"},
+  "HR9205": {"iso":"S","site_material":"S (Жаропрочные сплавы)","coating":"PVD","note":"Kylin 2025, высокая износостойкость","type":"Твердосплавная"},
+  "HR9215": {"iso":"S","site_material":"S (Жаропрочные сплавы)","coating":"PVD","composition":"AlTiN+TiSiN+AlCrN","type":"Твердосплавная"},
+  "HRC10": {"iso":"P","site_material":"P (Сталь)","coating":"Без покрытия (кермет)","type":"Металлокерамическая"},
+  "HR115C": {"iso":"P","site_material":"P (Сталь)","coating":"PVD (Металлокерамическое покрытие)","composition":"AlTiSiN+TiSiN","type":"Металлокерамическая"},
+  "HS8115": {"iso":"P10-P20","coating":"CVD","composition":"TiN+MT-TiCN+Al2O3+TiN","type":"Твердосплавная","brand":"Hadsto"},
+  "HS8215": {"iso":"P05-P20","coating":"CVD","type":"Твердосплавная","brand":"Hadsto"},
+  "HS8125": {"iso":"P15-P30","site_material":"P (Сталь)","coating":"CVD","type":"Твердосплавная","brand":"Hadsto"},
+  "HS8225": {"iso":"P15-P35","coating":"CVD","type":"Твердосплавная","brand":"Hadsto"},
+  "HS7120": {"iso":"M15-M30","coating":"CVD","type":"Твердосплавная","brand":"Hadsto"},
+  "HS7125": {"iso":"P M K","site_material":"M (Нержавеющая сталь)","coating":"PVD","composition":"AlTiN","type":"Твердосплавная","brand":"Hadsto"},
+  "HS7225": {"iso":"P M","coating":"PVD","composition":"TiAlSiN","type":"Твердосплавная","brand":"Hadsto"},
+  "HS6115": {"iso":"K10-K20","site_material":"K (Чугун)","coating":"CVD","type":"Твердосплавная","brand":"Hadsto"},
+  "HS6120": {"iso":"K10-K20","coating":"CVD","type":"Твердосплавная","brand":"Hadsto"}
+ }
+}
