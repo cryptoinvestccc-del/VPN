@@ -4,6 +4,8 @@ on:
     branches: [cnc-filler]
     paths: ['cnc-filler/**', '.github/workflows/cnc-filler.yml']
   workflow_dispatch: {}
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -21,9 +23,15 @@ jobs:
         id: live
         continue-on-error: true
         run: python tools/check_cnc1_live.py
-      - uses: actions/upload-artifact@v4
+      - name: Сохранить HTML cnc1.ru в ветку cnc-filler-live (для разбора разметки)
         if: always()
-        with: { name: cnc1-live-html, path: cnc-filler/live_html, if-no-files-found: ignore }
+        shell: bash
+        run: |
+          [ -d live_html ] || exit 0
+          cd live_html
+          git init -q && git checkout -q -b cnc-filler-live
+          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "live html $GITHUB_RUN_ID"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" cnc-filler-live
       - run: pyinstaller --noconfirm --onefile --windowed --name cnc-filler --paths src/cncfiller --add-data "data/catalog.db;data" src/cncfiller/app.py
       - uses: actions/upload-artifact@v4
         with: { name: cnc-filler-exe, path: cnc-filler/dist/cnc-filler.exe }
