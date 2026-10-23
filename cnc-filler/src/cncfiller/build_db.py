@@ -36,9 +36,13 @@ CATALOGS = [
     ("BRIGHT", "Bright-Tools", "Bright-Tools", "Bright-Tools 2025", ""),
     ("AONE", "A-ONE", "A-ONE", "A-ONE WEDM", ""),
     ("MAKI", "Maki Bishi", "Maki Bishi", "MAKI BISHI EDM", ""),
+    ("DAOQIN", "DaoQin", "DaoQin", "DaoQin 2025 (道勤) — осн. каталог", ""),
+    ("DAOQIN_TAPS", "DaoQin", "DaoQin", "DaoQin метчики 2025", ""),
+    ("DAOQIN_2024", "DaoQin", "DaoQin", "DaoQin 2024 (道勤)", ""),
 ]
 ALIASES = {"kkdaoku": "MetalCraft", "wenling youyi": "MetalCraft", "metalcraft": "MetalCraft",
-           "hadsto": "Hadsto", "huareal": "Huareal", "sant": "Sant", "pthk": "PTHK", "weiding": "PTHK"}
+           "hadsto": "Hadsto", "huareal": "Huareal", "sant": "Sant", "pthk": "PTHK", "weiding": "PTHK",
+           "daoqin": "DaoQin", "道勤": "DaoQin", "cncm": "DaoQin"}
 
 
 def build(db_path: Path = DB) -> dict:

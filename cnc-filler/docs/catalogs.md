@@ -17,6 +17,11 @@
 | BRIGHT | Bright-Tools 2025 | 2026-4-18_Bright-tools1.pdf | 714 | текст | оснастка A–Q |
 | AONE | A-ONE WEDM | A-ONE_02_WEDM_MACHNING.pdf | 24 | текст | оснастка электроэрозии 3A- |
 | MAKI | MAKI BISHI EDM | wire_cut_consumables_catalog_-MAKI_BISHI_EDM.pdf | 13 | текст | проволока, фильтры, запчасти |
+| DAOQIN | DaoQin (道勤, поставщик CNCM) — осн. каталог | Новый каталог 2025-9-15.pdf (10 МБ) | 228 (идх 223) | **текст** | резьбофрезы P001–042; резьбовые пластины/державки P043–114 (ISO/MJ/W/BSPT/UN/UNJ/NPT/TR/ACME/STUB ACME/RD/ABUT/SAGE/Pg, PEN/MTTR/TT/TTX/GE/TKFT); API P115–130; фрезер. канавок P131–154 (FS/TT43/TGF32/MP); отрезка/канавки P155–219 (TGF32,DBA43,T11/T16,PEN,TDG,GS,GK,GE,VC,SPDR,TKF,AB,THC42,MGGN/MGMN,N123,GDM,GX,TD) |
+| DAOQIN_TAPS | DaoQin метчики | Taps 2025-9-19.pdf (3 МБ) | 48 (идх 44) | **текст** | метчики |
+| DAOQIN_2024 | DaoQin издание 2024 | 17_1_道勤样本2024-4-1.pdf (9 МБ) | 212 (идх 207) | **текст** | то же, старое издание |
+
+DaoQin: PDF цифровые (текстовый слой — OCR не нужен). Прайс `DaoQin new prices2025-9-15.xlsx` (листы по стандартам резьбы + отрезные/фрезы/резцы) и `Quantity in package.xlsx` — положить в catalogs/ рядом. Другие издания осн. каталога (道勤样本 2025-1/2/8) почти идентичны — индексируется только новейшее.
 
 Каталогов на свёрла YG10 и фрезы T32 (MetalCraft) нет.
 Онлайн-поиск по индексу: артефакт «Поиск по каталогам инструмента» https://claude.ai/artifact/PvEoMwCCs1G6XHkc4phfcx
