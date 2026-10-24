@@ -33,6 +33,8 @@ import content as C  # noqa: E402
 import legal  # noqa: E402
 
 S = C.SITE
+T = C.TEXTS
+IMG = C.IMAGES
 MANIFEST = {}
 MISSING = set()
 
@@ -119,9 +121,9 @@ def asset_version(*parts):
 MEDIA = None
 
 
-def media_picture(p, mid, alt, sizes, cls, eager):
-    """A picture uploaded in the panel: JPEG at several widths, made and
-    described in AXM_MEDIA/manifest.json by the panel. The files used are
+def media_entry(mid):
+    """A picture uploaded in the panel, as AXM_MEDIA/manifest.json describes
+    it (JPEG at several widths, and square PNGs for an icon). The files are
     copied next to the pages."""
     global MEDIA
     if MEDIA is None:
@@ -130,19 +132,90 @@ def media_picture(p, mid, alt, sizes, cls, eager):
         if mp and os.path.exists(mp):
             with open(mp, encoding='utf-8') as f:
                 MEDIA = json.load(f)
-    m = MEDIA.get(mid)
+    m = MEDIA.get(mid) if mid else None
     if not m:
         return None
     os.makedirs(os.path.join(OUT, 'assets', 'media'), exist_ok=True)
-    for _, name in m['jpg']:
+    for _, name in m.get('jpg', []) + m.get('png', []):
         dst = os.path.join(OUT, 'assets', 'media', name)
         if not os.path.exists(dst):
             shutil.copyfile(os.path.join(MEDIA_DIR, name), dst)
+    return m
+
+
+def media_picture(p, mid, alt, sizes, cls, eager):
+    m = media_entry(mid)
+    if not m or not m.get('jpg'):
+        return None
     srcset = ', '.join(f'{p.u("assets/media/" + name)} {w}w' for w, name in m['jpg'])
     load = 'loading="eager" fetchpriority="high"' if eager else 'loading="lazy"'
     alt_attr = f'alt="{e(alt)}"' if alt else 'alt="" aria-hidden="true"'
     return (f'<picture class="{cls}"><img src="{p.u("assets/media/" + m["jpg"][-1][1])}" srcset="{srcset}" sizes="{sizes}" '
             f'width="{m["w"]}" height="{m["h"]}" {alt_attr} {load} decoding="async"></picture>')
+
+
+def slot(p, aid, alt='', sizes='100vw', cls='', eager=False):
+    """A picture of the design: the one uploaded in the panel for this place
+    (IMAGES), else the 3D render."""
+    if IMG.get(aid):
+        out = media_picture(p, IMG[aid], alt, sizes, cls, eager)
+        if out:
+            return out
+    return picture(p, aid, alt=alt, sizes=sizes, cls=cls, eager=eager)
+
+
+def post_picture(p, a, sizes='100vw', eager=False):
+    if a.get('cover'):
+        out = media_picture(p, a['cover'], '', sizes, '', eager)
+        if out:
+            return out
+    return slot(p, 'cover-' + a['cat'], sizes=sizes, eager=eager)
+
+
+def favicon_links(p):
+    m = media_entry(IMG.get('favicon'))
+    if m and m.get('png'):
+        icons = dict((w, name) for w, name in m['png'])
+        small = icons.get(32) or m['png'][0][1]
+        big = icons.get(180) or m['png'][-1][1]
+        return (f'<link rel="icon" href="{p.u("assets/media/" + small)}" type="image/png" sizes="32x32">\n'
+                f'<link rel="apple-touch-icon" href="{p.u("assets/media/" + big)}">')
+    return (f'<link rel="icon" href="{p.u("assets/favicon.svg")}" type="image/svg+xml">\n'
+            f'<link rel="apple-touch-icon" href="{p.u("assets/apple-touch-icon.png")}">')
+
+
+def favicon_path():
+    m = media_entry(IMG.get('favicon'))
+    if m and m.get('png'):
+        return 'assets/media/' + m['png'][-1][1]
+    return 'assets/favicon.svg'
+
+
+def og_image():
+    """Address, width and height of the link-preview picture."""
+    m = media_entry(IMG.get('og'))
+    if m and m.get('jpg'):
+        w, name = m['jpg'][-1]
+        return f'{S["url"]}/assets/media/{name}', w, round(m['h'] * w / m['w'])
+    return f'{S["url"]}/assets/og.jpg', 1200, 630
+
+
+def home_label():
+    return next((label for key, label, _ in C.NAV if key == 'home'), 'Главная')
+
+
+def prose_blocks(body):
+    out = []
+    for kind, val in body:
+        if kind == 'p':
+            out.append(f'<p>{e(val)}</p>')
+        elif kind == 'h2':
+            out.append(f'<h2>{e(val)}</h2>')
+        elif kind == 'ul':
+            out.append('<ul>' + ''.join(f'<li>{e(x)}</li>' for x in val) + '</ul>')
+        elif kind == 'quote':
+            out.append(f'<blockquote><p>{e(val)}</p></blockquote>')
+    return ''.join(out)
 
 
 def case_picture(p, c, alt='', sizes='100vw', eager=False):
@@ -181,8 +254,24 @@ def words(text, cls='w'):
 # ---------------------------------------------------------------- frame
 
 def logo(p, cls=''):
+    m = media_entry(IMG.get('logo'))
+    if m and m.get('jpg'):
+        w, name = m['jpg'][0]
+        return (f'<a class="logo {cls}" href="{p.u()}"><img class="logo__img" src="{p.u("assets/media/" + name)}" '
+                f'width="{w}" height="{round(m["h"] * w / m["w"])}" alt="{e(S["name"])} — на главную"></a>')
     return (f'<a class="logo {cls}" href="{p.u()}" aria-label="{e(S["name"])} — на главную">{LOGO_MARK}'
             f'<span class="logo__word">аксиомантик</span></a>')
+
+
+def nav_items():
+    """The menu: NAV, then «О студии» and landing pages marked for it."""
+    items = list(C.NAV)
+    if C.ABOUT.get('show') and C.ABOUT.get('nav'):
+        items.append(('about', C.ABOUT['title'], 'about/'))
+    for x in C.LANDINGS:
+        if x.get('show', True) and x.get('nav'):
+            items.append(('l-' + x['slug'], x.get('menu') or x['title'], x['slug'] + '/'))
+    return items
 
 
 def nav_links(p, active):
@@ -193,7 +282,7 @@ def nav_links(p, active):
         if key != active:
             return ''
         return ' aria-current="page"' if href == p.path else ' aria-current="true"'
-    return ''.join(f'<a href="{p.u(href)}"{cur(key, href)}>{e(label)}</a>' for key, label, href in C.NAV)
+    return ''.join(f'<a href="{p.u(href)}"{cur(key, href)}>{e(label)}</a>' for key, label, href in nav_items())
 
 
 def header(p, active):
@@ -203,14 +292,14 @@ def header(p, active):
 {logo(p)}
 <nav class="nav" aria-label="Основное меню">{links}</nav>
 <div class="hdr__act">
-<a class="btn btn--glass hdr__cta" href="{p.u("contacts/")}" data-order>Заказать</a>
+<a class="btn btn--glass hdr__cta" href="{p.u("contacts/")}" data-order>{e(T["header"]["cta"])}</a>
 <button class="burger" type="button" aria-expanded="false" aria-controls="menu" data-burger><span></span><span></span><span class="sr">Меню</span></button>
 </div>
 </div>
 <div class="menu" id="menu" hidden>
 <nav class="menu__nav" aria-label="Мобильное меню">{links}</nav>
 <div class="menu__foot">
-<a class="btn btn--white btn--lg btn--block" href="{p.u("contacts/")}" data-order>Обсудить проект</a>
+<a class="btn btn--white btn--lg btn--block" href="{p.u("contacts/")}" data-order>{e(T["header"]["menu_cta"])}</a>
 <a class="menu__contact" href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a>
 <a class="menu__contact" href="mailto:{e(S["email"])}">{e(S["email"])}</a>
 </div>
@@ -226,8 +315,9 @@ def socials(cls='soc'):
 
 
 def footer(p):
-    nav = ''.join(f'<li><a href="{p.u(href)}">{e(label)}</a></li>' for _, label, href in C.NAV)
-    nav += f'<li><a href="{p.u("#tariffs")}">Тарифы</a></li><li><a href="{p.u("#faq")}">Вопросы и ответы</a></li>'
+    nav = ''.join(f'<li><a href="{p.u(href)}">{e(label)}</a></li>' for _, label, href in nav_items())
+    F = T['footer']
+    nav += f'<li><a href="{p.u("#tariffs")}">{e(F["tariffs"])}</a></li><li><a href="{p.u("#faq")}">{e(F["faq"])}</a></li>'
     services = ''.join(
         f'<li><a href="{p.u("#tariffs")}">{e(t["name"])}{" · " + e(t["sub"]) if t["id"] != "landing" else ""}</a></li>'
         for t in C.TARIFFS)
@@ -236,12 +326,12 @@ def footer(p):
 <div class="ftr__top">
 <div class="ftr__brand">
 {logo(p, "logo--footer")}
-<p>{e(C.HERO["caption"])} Маркетолог, разработчик и UX/UI-дизайнер в связке с AI.</p>
-<a class="btn btn--white" href="{p.u("contacts/")}" data-order>Обсудить проект {icon("arrow")}</a>
+<p>{e(C.HERO["caption"])} {e(F["about"])}</p>
+<a class="btn btn--white" href="{p.u("contacts/")}" data-order>{e(F["button"])} {icon("arrow")}</a>
 </div>
-<div class="ftr__col"><h2 class="ftr__h">Разделы</h2><ul>{nav}</ul></div>
-<div class="ftr__col"><h2 class="ftr__h">Услуги</h2><ul>{services}</ul></div>
-<div class="ftr__col"><h2 class="ftr__h">Контакты</h2><ul>
+<div class="ftr__col"><h2 class="ftr__h">{e(F["nav"])}</h2><ul>{nav}</ul></div>
+<div class="ftr__col"><h2 class="ftr__h">{e(F["services"])}</h2><ul>{services}</ul></div>
+<div class="ftr__col"><h2 class="ftr__h">{e(F["contacts"])}</h2><ul>
 <li><a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a></li>
 <li><a href="mailto:{e(S["email"])}">{e(S["email"])}</a></li>
 <li class="ftr__muted">{e(S["hours"])}</li>
@@ -250,8 +340,8 @@ def footer(p):
 <p class="ftr__word" aria-hidden="true">аксиомантик</p>
 <div class="ftr__bottom">
 <span>© {S["year"]} {e(S["name"])}</span>
-<a href="{p.u("privacy/")}">Политика обработки персональных данных</a>
-<a href="{p.u("consent/")}">Согласие на обработку данных</a>
+<a href="{p.u("privacy/")}">{e(F["privacy"])}</a>
+<a href="{p.u("consent/")}">{e(F["consent"])}</a>
 </div>
 </div>
 </footer>'''
@@ -280,7 +370,7 @@ def field(uid, name, label, *, kind='input', type_='text', required=True, placeh
     if inputmode:
         attrs += f' inputmode="{inputmode}"'
     attrs += extra
-    opt = ' <span class="field__opt">необязательно</span>' if optional_note else ''
+    opt = f' <span class="field__opt">{e(T["consent"]["optional"])}</span>' if optional_note else ''
     if kind == 'textarea':
         control = f'<textarea rows="3"{attrs}></textarea>'
     else:
@@ -290,9 +380,10 @@ def field(uid, name, label, *, kind='input', type_='text', required=True, placeh
 
 
 def consent(p, uid):
+    K = T['consent']
     return (f'<label class="consent"><input type="checkbox" name="consent" required aria-describedby="{uid}-consent-err">'
-            f'<span>Даю <a href="{p.u("consent/")}" target="_blank">согласие на обработку персональных данных</a> '
-            f'на условиях <a href="{p.u("privacy/")}" target="_blank">политики</a></span></label>'
+            f'<span>{e(K["before"])} <a href="{p.u("consent/")}" target="_blank">{e(K["link"])}</a> '
+            f'{e(K["middle"])} <a href="{p.u("privacy/")}" target="_blank">{e(K["policy"])}</a></span></label>'
             f'<p class="field__err" id="{uid}-consent-err"></p>')
 
 
@@ -301,8 +392,8 @@ def consent(p, uid):
 # the static page would answer 405/501 and drop what the visitor typed. The
 # <noscript> note says how to reach us instead.
 def nojs_note():
-    return (f'<noscript><p class="lead__status">Чтобы отправить форму, включите JavaScript — или напишите на '
-            f'<a href="mailto:{e(S["email"])}">{e(S["email"])}</a>, позвоните '
+    return (f'<noscript><p class="lead__status">{e(T["errors"]["nojs"])} '
+            f'<a href="mailto:{e(S["email"])}">{e(S["email"])}</a>, {e(T["errors"]["nojs_call"])} '
             f'<a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a>.</p></noscript>')
 
 
@@ -310,11 +401,60 @@ HONEYPOT = ('<div class="hp" aria-hidden="true"><label>Не заполняйте
             '<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>')
 
 
-def done_block(title='Заявка отправлена'):
+def done_block():
+    D = T['done']
     return (f'<div class="lead__done" hidden tabindex="-1">'
             f'<span class="lead__done-ico">{icon("check")}</span>'
-            f'<h3 class="lead__done-title">{e(title)}</h3><p class="lead__done-text" data-done-text></p>'
-            f'<button type="button" class="btn btn--ghost" data-again>Отправить ещё одну</button></div>')
+            f'<h3 class="lead__done-title">{e(D["title"])}</h3><p class="lead__done-text" data-done-text></p>'
+            f'<button type="button" class="btn btn--ghost" data-again>{e(D["again"])}</button></div>')
+
+
+def project_form(p, uid, source):
+    """The full lead form: on the contacts page and, when switched on, at
+    the bottom of the home page. Both post as the contacts form."""
+    K = T['contacts']
+    return f'''<form class="lead" method="dialog" data-lead data-source="{source}" novalidate>
+<input type="hidden" name="mode" value="form">
+<div class="lead__form">
+<div class="fields fields--2">
+{field(uid, "name", K["name"], placeholder=K["name_ph"], autocomplete="name", maxlength=80)}
+{field(uid, "contact", K["contact"], placeholder=K["contact_ph"], autocomplete="email", maxlength=120)}
+</div>
+<div class="fields">
+<fieldset class="field"><legend class="field__label">{e(K["budget"])}</legend>{picks("budget", C.BUDGETS, "unknown")}</fieldset>
+{field(uid, "message", K["message"], kind="textarea", placeholder=K["message_ph"], maxlength=3000)}
+{HONEYPOT}
+{consent(p, uid)}
+</div>
+<button class="btn btn--dark btn--lg lead__submit" type="submit" data-submit><span data-submit-label>{e(K["submit"])}</span>{icon("send")}</button>
+<p class="lead__status" role="status" aria-live="polite"></p>
+{nojs_note()}
+</div>
+{done_block()}
+</form>'''
+
+
+def body_data():
+    """What main.js needs besides markup: its messages, and the counter."""
+    msg = {'errors': T['errors'], 'done': T['done'],
+           'submit_call': T['modal']['submit_call'], 'submit_write': T['modal']['submit_write']}
+    out = f" data-msg='{e(json.dumps(msg, ensure_ascii=False, separators=(',', ':')))}'"
+    if C.CONNECT.get('metrika'):
+        out += f' data-metrika="{e(C.CONNECT["metrika"])}"'
+        if C.CONNECT.get('webvisor'):
+            out += ' data-webvisor'
+    return out
+
+
+def cookie_banner(p):
+    """Shown only with a counter: Metrika starts after «Принять»."""
+    K = C.CONNECT
+    if not K.get('metrika'):
+        return ''
+    return (f'<div class="cookie" role="region" aria-label="cookie" data-cookie hidden><p>{e(K["cookie_text"])} '
+            f'<a href="{p.u("privacy/")}">{e(K["cookie_more"])}</a></p><div class="cookie__act">'
+            f'<button type="button" class="btn btn--dark btn--sm" data-cookie-yes>{e(K["cookie_accept"])}</button>'
+            f'<button type="button" class="btn btn--outline btn--sm" data-cookie-no>{e(K["cookie_decline"])}</button></div></div>')
 
 
 def modal(p):
@@ -325,39 +465,40 @@ def modal(p):
         f'<span>{e(name)}</span></label>'
         for i, (v, name, lbl, ph, t, ac) in enumerate(C.CHANNELS))
     first = C.CHANNELS[0]
+    M = T['modal']
     return f'''<dialog class="modal" id="order" aria-labelledby="order-title">
 <button class="modal__close" type="button" data-close aria-label="Закрыть">{icon("close")}</button>
 <div class="modal__box">
 <form class="lead" method="dialog" data-lead data-source="modal" novalidate>
 <div class="lead__form">
 <div class="modal__head">
-<h2 class="modal__title" id="order-title">Обсудим проект</h2>
-<p class="modal__sub">Выберите, как удобнее связаться. Ответим в рабочее время: {e(S["hours"])}.</p>
+<h2 class="modal__title" id="order-title">{e(M["title"])}</h2>
+<p class="modal__sub">{e(M["sub"].replace("{hours}", S["hours"]))}</p>
 </div>
 <fieldset class="switch">
 <legend class="sr">Как с вами связаться</legend>
 <label class="switch__opt"><input type="radio" name="mode" value="call" checked>
-<span class="switch__tile"><span class="switch__ico">{icon("phone")}</span><span class="switch__txt"><b>Позвонить</b><small>Перезвоним в удобное время</small></span></span></label>
+<span class="switch__tile"><span class="switch__ico">{icon("phone")}</span><span class="switch__txt"><b>{e(M["call"])}</b><small>{e(M["call_sub"])}</small></span></span></label>
 <label class="switch__opt"><input type="radio" name="mode" value="write">
-<span class="switch__tile"><span class="switch__ico">{icon("chat")}</span><span class="switch__txt"><b>Написать</b><small>Ответим в мессенджере или на почту</small></span></span></label>
+<span class="switch__tile"><span class="switch__ico">{icon("chat")}</span><span class="switch__txt"><b>{e(M["write"])}</b><small>{e(M["write_sub"])}</small></span></span></label>
 </fieldset>
 <div class="fields">
-{field(uid, "name", "Как к вам обращаться", placeholder="Имя", autocomplete="name", maxlength=80)}
+{field(uid, "name", M["name"], placeholder=M["name_ph"], autocomplete="name", maxlength=80)}
 <fieldset class="fields__group" data-mode-fields="call">
-{field(uid, "phone", "Телефон", type_="tel", placeholder="+7 (900) 000-00-00", autocomplete="tel", inputmode="tel", maxlength=24, extra=" data-phone")}
-<fieldset class="field"><legend class="field__label">Когда удобно</legend>{picks("when", C.CALL_TIMES, "hour")}</fieldset>
+{field(uid, "phone", M["phone"], type_="tel", placeholder="+7 (900) 000-00-00", autocomplete="tel", inputmode="tel", maxlength=24, extra=" data-phone")}
+<fieldset class="field"><legend class="field__label">{e(M["when"])}</legend>{picks("when", C.CALL_TIMES, "hour")}</fieldset>
 </fieldset>
 <fieldset class="fields__group" data-mode-fields="write" hidden disabled>
-<fieldset class="field"><legend class="field__label">Куда ответить</legend><div class="picks" data-channels>{channels}</div></fieldset>
+<fieldset class="field"><legend class="field__label">{e(M["where"])}</legend><div class="picks" data-channels>{channels}</div></fieldset>
 {field(uid, "contact", first[2], placeholder=first[3], autocomplete=first[5], extra=" data-contact")}
-{field(uid, "message", "Коротко о задаче", kind="textarea", required=False, placeholder="Например: лендинг для запуска курса, нужен к марту", maxlength=3000, optional_note=True)}
+{field(uid, "message", M["message"], kind="textarea", required=False, placeholder=M["message_ph"], maxlength=3000, optional_note=True)}
 </fieldset>
-<fieldset class="field"><legend class="field__label">Что интересует</legend>{picks("interest", C.INTERESTS, "unknown")}</fieldset>
+<fieldset class="field"><legend class="field__label">{e(M["interest"])}</legend>{picks("interest", C.INTERESTS, "unknown")}</fieldset>
 {HONEYPOT}
 {consent(p, uid)}
 </div>
 <button class="btn btn--dark btn--lg btn--block lead__submit" type="submit" data-submit>
-<span data-submit-label>Жду звонка</span>{icon("arrow")}</button>
+<span data-submit-label>{e(M["submit_call"])}</span>{icon("arrow")}</button>
 <p class="lead__status" role="status" aria-live="polite"></p>
 </div>
 {done_block()}
@@ -369,8 +510,7 @@ def modal(p):
 def demo_badge():
     if not S.get('demo'):
         return ''
-    return ('<p class="demo" role="note" data-demo><b>Демо</b><span>Цены, кейсы, отзывы, цифры и контакты — '
-            'примеры. Заменить перед запуском.</span>'
+    return (f'<p class="demo" role="note" data-demo><b>{e(T["demo"]["b"])}</b><span>{e(T["demo"]["text"])}</span>'
             f'<button class="demo__x" type="button" aria-label="Скрыть пометку" data-demo-close>{icon("close")}</button></p>')
 
 
@@ -393,7 +533,13 @@ WRITTEN = set()  # index.html files this run wrote; anything else is stale
 def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', index=True, preload=''):
     url = S['url'] + '/' + p.path
     full_title = title if title.startswith(S['name']) else f'{title} — {S["name"]}'
-    robots = '' if index else '<meta name="robots" content="noindex">\n'
+    robots = '' if index and C.SEO.get('index', True) else '<meta name="robots" content="noindex">\n'
+    og_src, og_w, og_h = og_image()
+    verify = ''
+    if C.SEO.get('yandex_verification'):
+        verify += f'<meta name="yandex-verification" content="{e(C.SEO["yandex_verification"])}">\n'
+    if C.SEO.get('google_verification'):
+        verify += f'<meta name="google-site-verification" content="{e(C.SEO["google_verification"])}">\n'
     js = lambda name: f'<script src="{p.u("assets/js/" + name)}?v={VERSIONS["js"]}" defer></script>'  # noqa: E731
     doc = f'''<!doctype html>
 <html lang="ru">
@@ -409,15 +555,14 @@ def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', i
 <meta property="og:title" content="{e(full_title)}">
 <meta property="og:description" content="{e(desc)}">
 <meta property="og:url" content="{e(url)}">
-<meta property="og:image" content="{e(S["url"])}/assets/og.jpg">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image" content="{e(og_src)}">
+<meta property="og:image:width" content="{og_w}">
+<meta property="og:image:height" content="{og_h}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0B0E33">
+<meta name="theme-color" content="{e(C.SEO.get("theme_color") or "#0B0E33")}">
 <meta name="color-scheme" content="light">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<link rel="icon" href="{p.u("assets/favicon.svg")}" type="image/svg+xml">
-<link rel="apple-touch-icon" href="{p.u("assets/apple-touch-icon.png")}">
+{verify}{favicon_links(p)}
 <link rel="preload" href="{p.u("assets/fonts/inter-cyrillic-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="{p.u("assets/fonts/inter-latin-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
 {preload}<link rel="stylesheet" href="{p.u("assets/css/main.css")}?v={VERSIONS["css"]}">
@@ -426,7 +571,7 @@ def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', i
 {js("motion.js")}
 {"".join(ld(j) for j in jsonld)}
 </head>
-<body data-endpoint="{e(S["endpoint"])}">
+<body data-endpoint="{e(S["endpoint"])}"{body_data()}>
 <a class="skip" href="#main">Перейти к содержанию</a>
 {header(p, active)}
 <main id="main">
@@ -434,7 +579,7 @@ def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', i
 </main>
 {footer(p)}
 {modal(p)}
-{demo_badge()}
+{demo_badge()}{cookie_banner(p)}
 </body>
 </html>
 '''
@@ -486,29 +631,30 @@ def post_card(p, a, cls='', sizes='(min-width: 1824px) 531px, (min-width: 1024px
               h=3, eager=False):
     """The default sizes are for "Читайте также" under an article (.section--soft)."""
     return f'''<a class="post {cls}" href="{p.u("blog/" + a["slug"] + "/")}" data-cat="{a["cat"]}" data-reveal>
-<div class="post__media">{picture(p, "cover-" + a["cat"], sizes=sizes, eager=eager)}</div>
+<div class="post__media">{post_picture(p, a, sizes=sizes, eager=eager)}</div>
 <div class="post__body">
 <div class="post__meta"><span class="tag">{e(C.BLOG_CATEGORIES[a["cat"]])}</span><time datetime="{a["date"]}">{date_ru(a["date"])}</time></div>
 <h{h} class="post__title">{e(a["title"])}</h{h}>
 <p class="post__desc">{e(a["desc"])}</p>
-<span class="post__read">{icon("clock")}{a["read"]} мин чтения</span>
+<span class="post__read">{icon("clock")}{a["read"]} {e(T["blog"]["read"])}</span>
 </div>
 </a>'''
 
 
 def cta_scene(p):
+    K = T['cta']
     return f'''<section class="scene scene--cta" aria-labelledby="cta-title">
 <div class="wrap cta">
 <div class="cta__text">
-<p class="eyebrow eyebrow--dark" data-reveal>{icon("diamond")}Новый проект</p>
-<h2 class="h2 h2--light" id="cta-title" data-split>{words("Обсудим ваш")} <span class="tone">{words("сайт?")}</span></h2>
-<p class="cta__lead" data-reveal>Расскажите о задаче — предложим формат, сроки и стоимость в течение рабочего дня. Базовое SEO уже в цене.</p>
+<p class="eyebrow eyebrow--dark" data-reveal>{icon("diamond")}{e(K["eyebrow"])}</p>
+<h2 class="h2 h2--light" id="cta-title" data-split>{words(K["title"])} <span class="tone">{words(K["tone"])}</span></h2>
+<p class="cta__lead" data-reveal>{e(K["lead"])}</p>
 <div class="cta__act" data-reveal>
-<a class="btn btn--white btn--lg" href="{p.u("contacts/")}" data-order data-mode="call">{icon("phone")}Позвонить</a>
-<a class="btn btn--glass btn--lg" href="{p.u("contacts/")}" data-order data-mode="write">{icon("chat")}Написать</a>
+<a class="btn btn--white btn--lg" href="{p.u("contacts/")}" data-order data-mode="call">{icon("phone")}{e(K["call"])}</a>
+<a class="btn btn--glass btn--lg" href="{p.u("contacts/")}" data-order data-mode="write">{icon("chat")}{e(K["write"])}</a>
 </div>
 </div>
-<div class="cta__art" data-parallax>{picture(p, "hero", sizes="(min-width: 1280px) 460px, (min-width: 1024px) 40vw, (min-width: 508px) 360px, 72vw")}</div>
+<div class="cta__art" data-parallax>{slot(p, "hero", sizes="(min-width: 1280px) 460px, (min-width: 1024px) 40vw, (min-width: 508px) 360px, 72vw")}</div>
 </div>
 </section>'''
 
@@ -527,8 +673,8 @@ def page_hero(p, crumbs, title, lead='', meta=''):
 </section>'''
 
 
-def filters(label, options, total_counts):
-    btns = [f'<button type="button" class="filter" data-filter="all" aria-pressed="true">Все<sup>{sum(total_counts.values())}</sup></button>']
+def filters(label, options, total_counts, all_label):
+    btns = [f'<button type="button" class="filter" data-filter="all" aria-pressed="true">{e(all_label)}<sup>{sum(total_counts.values())}</sup></button>']
     for key, name in options.items():
         btns.append(f'<button type="button" class="filter" data-filter="{key}" aria-pressed="false">{e(name)}<sup>{total_counts.get(key, 0)}</sup></button>')
     return f'<div class="filters" role="group" aria-label="{e(label)}" data-filters>{"".join(btns)}</div>'
@@ -538,13 +684,136 @@ def hero_media(p):
     """The 3D «а»: poster picture first (it is the LCP), the loop on top of it
     once it can play. motion.js picks the size and never plays it for
     reduced motion or Save-Data."""
-    poster = picture(p, 'hero', alt='Объёмная буква «а» из логотипа студии', sizes='(min-width: 1024px) 46vw, 92vw',
-                     cls='hero__poster', eager=True)
+    poster = slot(p, 'hero', alt=T['hero']['art_alt'], sizes='(min-width: 1024px) 46vw, 92vw',
+                  cls='hero__poster', eager=True)
+    if IMG.get('hero') or not IMG.get('hero_video', True):
+        return f'<div class="hero__media">{poster}</div>'
     v = lambda n: p.u(f'assets/video/hero-loop-{n}')  # noqa: E731
     return (f'<div class="hero__media" data-hero-media>{poster}'
             f'<video class="hero__video" muted playsinline loop preload="none" aria-hidden="true" tabindex="-1" '
             f'data-webm="{v("960.webm")}" data-mp4="{v("960.mp4")}" data-webm-sm="{v("640.webm")}" data-mp4-sm="{v("640.mp4")}"></video>'
             f'</div>')
+
+
+def problems_sec(p):
+    K = C.PROBLEMS
+    if not K.get('show'):
+        return ''
+    cards = ''.join(f'<li class="plain-card" data-reveal><span class="plain-card__n">{i + 1:02d}</span>'
+                    f'<h3 class="plain-card__t">{e(t)}</h3><p class="plain-card__x">{e(x)}</p></li>'
+                    for i, (t, x) in enumerate(K['items']))
+    return (f'<section class="section" id="problems"><div class="wrap">{shead(K["eyebrow"], K["title"], tone=K["tone"])}'
+            f'<ul class="plain-grid">{cards}</ul></div></section>')
+
+
+def terms_sec(p):
+    K = C.TERMS
+    if not K.get('show'):
+        return ''
+    cards = ''.join(f'<li class="plain-card plain-card--soft" data-reveal><span class="plain-card__ico">{icon("check")}</span>'
+                    f'<h3 class="plain-card__t">{e(t)}</h3><p class="plain-card__x">{e(x)}</p></li>'
+                    for t, x in K['items'])
+    return (f'<section class="section" id="terms"><div class="wrap">{shead(K["eyebrow"], K["title"], tone=K["tone"])}'
+            f'<ul class="plain-grid">{cards}</ul></div></section>')
+
+
+def compare_sec(p):
+    K = C.COMPARE
+    if not K.get('show'):
+        return ''
+    rows = ''.join(f'<tr><th scope="row">{e(a)}</th><td>{e(b)}</td><td class="cmp__us">{e(c)}</td></tr>' for a, b, c in K['rows'])
+    return (f'<section class="section section--soft" id="compare"><div class="wrap">{shead(K["eyebrow"], K["title"], tone=K["tone"])}'
+            f'<div class="cmp" data-reveal><table><thead><tr><td></td><th scope="col">{e(K["left"])}</th>'
+            f'<th scope="col" class="cmp__us">{e(K["right"])}</th></tr></thead><tbody>{rows}</tbody></table></div></div></section>')
+
+
+def home_form(p):
+    K = C.HOME_FORM
+    if not K.get('show'):
+        return ''
+    return (f'<section class="section" id="order-form"><div class="wrap"><div class="card card--form card--wide" data-reveal>'
+            f'<h2 class="card__title">{e(K["title"])}</h2><p class="card__sub">{e(K["sub"])}</p>'
+            f'{project_form(p, "h", "contacts")}</div></div></section>')
+
+
+def block_page(p, title, lead, body, cover, active, seo_title, seo_desc, crumbs):
+    cover_html = ''
+    if cover:
+        pic = media_picture(p, cover, '', '(min-width: 960px) 880px, 100vw', '', True)
+        if pic:
+            cover_html = f'<div class="article__cover" data-reveal>{pic}</div>'
+    page = (page_hero(p, crumbs, title, lead)
+            + f'''<div class="sheet">
+<section class="section section--first">
+<div class="wrap">
+<article class="article">
+{cover_html}<div class="prose">{prose_blocks(body)}</div>
+<aside class="article__cta" data-reveal>
+<p><b>{e(T["blog"]["cta_b"])}</b> {e(T["blog"]["cta"])}</p>
+<a class="btn btn--dark" href="{p.u("contacts/")}" data-order>{e(T["blog"]["cta_button"])} {icon("arrow")}</a>
+</aside>
+</article>
+</div>
+</section>
+{cta_scene(p)}
+</div>''')
+    return render(p, title=seo_title or title, desc=seo_desc or lead, body=page, active=active,
+                  jsonld=(breadcrumbs_ld([(name, path) for name, path in crumbs[:-1]] + [(title, p.path)]),))
+
+
+def about():
+    A = C.ABOUT
+    p = Page('about/')
+    return block_page(p, A['title'], A['lead'], A['body'], A.get('cover'), 'about',
+                      C.SEO.get('about_title'), C.SEO.get('about_desc'), [(home_label(), ''), (A['title'], '')])
+
+
+RESERVED = {'projects', 'blog', 'contacts', 'privacy', 'consent', 'about', '404', 'assets', 'api', 'admin'}
+
+
+def landing(x):
+    if x['slug'] in RESERVED:
+        sys.exit(f'Адрес /{x["slug"]}/ занят страницей сайта — выберите другой ключ посадочной страницы')
+    p = Page(x['slug'] + '/')
+    return block_page(p, x['title'], x['lead'], x['body'], x.get('cover'), 'l-' + x['slug'],
+                      x.get('seo_title'), x.get('seo_desc'), [(home_label(), ''), (x['title'], '')])
+
+
+def design_css():
+    """The panel's colours and sizes over the designer's tokens. Nothing is
+    written while every value is empty."""
+    D = C.DESIGN
+    tokens = []
+    rules = []
+    num = lambda k: D.get(k) if isinstance(D.get(k), (int, float)) and not isinstance(D.get(k), bool) else None  # noqa: E731
+    fmt = lambda v: ('%.3f' % v).rstrip('0').rstrip('.')  # noqa: E731
+    if num('section') is not None:
+        n = num('section')
+        tokens.append(f'--section:clamp({fmt(n / 2)}px,{fmt(n / 16)}vw,{fmt(n)}px)')
+    if num('wrap') is not None:
+        tokens.append(f'--wrap:{fmt(num("wrap"))}px')
+    if num('radius') is not None:
+        n = num('radius')
+        tokens.append(f'--r-xl:clamp({fmt(n * .6)}px,3.2vw,{fmt(n)}px);--r-l:{fmt(n * 2 / 3)}px;--r-m:{fmt(n / 2)}px;--r-s:{fmt(n / 3)}px')
+    for key, var in (('accent', '--indigo'), ('accent_dark', '--lilac'), ('ink', '--ink'), ('muted', '--muted'),
+                     ('bg', '--bg'), ('bg_soft', '--bg-2'), ('line', '--line')):
+        if D.get(key):
+            tokens.append(f'{var}:{D[key]}')
+    if D.get('dark'):
+        tokens.append(f'--hero-bg:{D["dark"]};--scene-bg:{D["dark"]};--navy-900:{D["dark"]}')
+    if num('hero_pad') is not None:
+        n = num('hero_pad')
+        rules.append(f'.phero{{padding-top:calc(var(--hdr) + {fmt(n)}px)}}')
+    if num('font_size') is not None:
+        rules.append(f'body{{font-size:{fmt(num("font_size"))}px}}')
+    if num('heading_ls') is not None:
+        rules.append(f'.display,.h1,.h2{{letter-spacing:{fmt(num("heading_ls"))}em}}')
+    if not tokens and not rules:
+        return ''
+    out = '\n/* panel: design settings (generated) */\n'
+    if tokens:
+        out += ':root{' + ';'.join(tokens) + '}\n'
+    return out + '\n'.join(rules) + ('\n' if rules else '')
 
 
 # ---------------------------------------------------------------- pages
@@ -560,8 +829,8 @@ def home():
 <h1 class="display"><span class="line"><span>{e(H["lines"][0])}</span></span> <span class="line line--accent"><span>{e(H["lines"][1])}</span></span></h1>
 <p class="hero__lead" data-intro="2">{e(H["lead"])}</p>
 <div class="hero__cta" data-intro="3">
-<a class="btn btn--white btn--xl" href="{p.u("contacts/")}" data-order>Обсудить проект</a>
-<a class="link-under" href="{p.u("projects/")}">Смотреть проекты</a>
+<a class="btn btn--white btn--xl" href="{p.u("contacts/")}" data-order>{e(T["hero"]["cta"])}</a>
+<a class="link-under" href="{p.u("projects/")}">{e(T["hero"]["link"])}</a>
 </div>
 <p class="hero__caption" data-intro="4">{e(H["caption"])}</p>
 </div>
@@ -575,82 +844,85 @@ def home():
 </section>'''
 
     lead_a, lead_b = C.STATEMENT
-    statement = f'''<section class="section statement" aria-label="О студии" data-statement-section>
+    statement = f'''<section class="section statement" aria-label="{e(S["name"])}" data-statement-section>
 <div class="wrap">
 <p class="statement__text" data-statement><span class="statement__a">{e(lead_a)}</span> <span class="statement__b">{words(lead_b, "sw")}</span></p>
 <ul class="stats">{"".join(f'<li class="stat" data-reveal><b class="stat__n" data-count>{e(n)}</b><span class="stat__l">{e(l)}</span><span class="stat__s">{e(s)}</span></li>' for n, l, s in C.STATS)}</ul>
 </div>
 </section>'''
 
+    A = T['approach']
     roles = ''.join(f'<li{" class=is-ai" if ic == "spark" else ""}>{e(name)}</li>' for ic, name, _ in C.ROLES)
     steps = ''.join(f'''<li class="astep" data-step>
 <span class="astep__n">{i + 1:02d}</span>
 <h3 class="astep__title">{e(title)}</h3>
 <p class="astep__text">{e(text)}</p>
 <dl class="astep__meta">
-<div><dt>{icon("user")}Делает</dt><dd>{e(who)}</dd></div>
-<div><dt>{icon("spark")}AI ускоряет</dt><dd>{e(ai)}</dd></div>
-<div><dt>{icon("clock")}Срок</dt><dd>{e(days)}</dd></div>
+<div><dt>{icon("user")}{e(A["who"])}</dt><dd>{e(who)}</dd></div>
+<div><dt>{icon("spark")}{e(A["ai"])}</dt><dd>{e(ai)}</dd></div>
+<div><dt>{icon("clock")}{e(A["term"])}</dt><dd>{e(days)}</dd></div>
 </dl>
 </li>''' for i, (title, who, text, ai, days) in enumerate(C.STEPS))
     approach = f'''<section class="scene scene--approach" id="approach" aria-labelledby="approach-title">
 <div class="wrap approach">
 <div class="approach__side">
 <div class="approach__sticky">
-<p class="eyebrow eyebrow--dark" data-reveal>{icon("diamond")}Наш подход</p>
-<h2 class="h2 h2--light" id="approach-title" data-split>{words("AI ускоряет рутину.")} <span class="tone">{words("Люди делают продукт.")}</span></h2>
+<p class="eyebrow eyebrow--dark" data-reveal>{icon("diamond")}{e(A["eyebrow"])}</p>
+<h2 class="h2 h2--light" id="approach-title" data-split>{words(A["title"])} <span class="tone">{words(A["tone"])}</span></h2>
 <ul class="formula" aria-label="Команда проекта" data-reveal>{roles}</ul>
-<p class="approach__count" aria-hidden="true">Этап <b data-step-now>01</b> из {len(C.STEPS):02d}</p>
-<div class="approach__art" data-parallax>{picture(p, "approach", sizes="(min-width: 1200px) 500px, (min-width: 1024px) 42vw, (min-width: 473px) 420px, 88.8vw")}</div>
+<p class="approach__count" aria-hidden="true">{e(A["step"])} <b data-step-now>01</b> из {len(C.STEPS):02d}</p>
+<div class="approach__art" data-parallax>{slot(p, "approach", sizes="(min-width: 1200px) 500px, (min-width: 1024px) 42vw, (min-width: 473px) 420px, 88.8vw")}</div>
 </div>
 </div>
 <ol class="approach__steps">{steps}</ol>
 </div>
-<div class="wrap"><p class="approach__total" data-reveal>{icon("clock")}<span><b>10 рабочих дней</b> — путь лендинга от брифа до запуска</span></p></div>
+<div class="wrap"><p class="approach__total" data-reveal>{icon("clock")}<span><b>{e(A["total_b"])}</b> {e(A["total"])}</span></p></div>
 </section>'''
 
+    V = T['services']
     svc_img = {'landing': 'svc-landing', 'multi-base': 'svc-multi', 'multi-custom': 'svc-custom'}
     services = ''.join(f'''<article class="svc" data-reveal>
-<div class="svc__media">{picture(p, svc_img[sid], sizes="(min-width: 1824px) 517px, (min-width: 1024px) 29.6vw, (min-width: 768px) 44.4vw, 88.8vw")}</div>
+<div class="svc__media">{slot(p, svc_img[sid], sizes="(min-width: 1824px) 517px, (min-width: 1024px) 29.6vw, (min-width: 768px) 44.4vw, 88.8vw")}</div>
 <div class="svc__body">
-<span class="badge">{icon("search")}Базовое SEO включено</span>
+<span class="badge">{icon("search")}{e(V["badge"])}</span>
 <h3 class="svc__title">{e(name)}</h3>
 <p class="svc__text">{e(text)}</p>
 <ul class="chips">{"".join(f"<li>{e(t)}</li>" for t in tags)}</ul>
-<a class="link-arrow" href="#tariffs">Тариф и стоимость {icon("arrow")}</a>
+<a class="link-arrow" href="#tariffs">{e(V["link"])} {icon("arrow")}</a>
 </div>
 </article>''' for sid, name, text, tags in C.SERVICES)
     services_sec = f'''<section class="section" id="services">
 <div class="wrap">
-{shead("Услуги", "Что мы делаем", tone="— от страницы до продукта", lead="Три формата под разные задачи. В каждый уже входит работа маркетолога, UX/UI-дизайнера и разработчика, а также базовое SEO.")}
+{shead(V["eyebrow"], V["title"], tone=V["tone"], lead=V["lead"])}
 <div class="svc-grid">{services}</div>
 </div>
 </section>'''
 
     BENTO_SIZES = '(min-width: 1824px) 404px, (min-width: 1280px) 22.8vw, (min-width: 768px) 45.6vw, 92vw'
+    W = T['why']
     seo_list = ''.join(f'<li>{icon("check")}{e(s)}</li>' for s in C.SEO_ITEMS)
     why = f'''<section class="section section--soft" id="why">
 <div class="wrap">
-{shead("Почему мы", "Быстро и качественно —", tone="потому что дизайн делает человек, а рутину берёт AI")}
+{shead(W["eyebrow"], W["title"], tone=W["tone"])}
 <div class="bento">
 <article class="bc bc--human" data-reveal>
-<div class="bc__media">{picture(p, "why-human", sizes="(min-width: 1824px) 808px, (min-width: 768px) 45.6vw, 92vw")}</div>
-<div class="bc__body"><h3 class="bc__title">Дизайн рисует человек, а не нейросеть</h3>
-<p class="bc__text">AI не генерирует макеты. Каждый экран проектирует UX/UI-дизайнер под вашу задачу и аудиторию — поэтому сайт не похож на шаблон и ведёт к заявке.</p></div>
+<div class="bc__media">{slot(p, "why-human", sizes="(min-width: 1824px) 808px, (min-width: 768px) 45.6vw, 92vw")}</div>
+<div class="bc__body"><h3 class="bc__title">{e(W["human_t"])}</h3>
+<p class="bc__text">{e(W["human"])}</p></div>
 </article>
 <article class="bc bc--fast" data-reveal>
-<div class="bc__media">{picture(p, "why-fast", sizes=BENTO_SIZES)}</div>
-<div class="bc__body"><h3 class="bc__title">Быстро</h3>
-<p class="bc__text">AI снимает рутину на каждом этапе — лендинг от 10 рабочих дней вместо 4–6 недель.</p></div>
+<div class="bc__media">{slot(p, "why-fast", sizes=BENTO_SIZES)}</div>
+<div class="bc__body"><h3 class="bc__title">{e(W["fast_t"])}</h3>
+<p class="bc__text">{e(W["fast"])}</p></div>
 </article>
 <article class="bc bc--seo" data-reveal>
-<div class="bc__media">{picture(p, "why-seo", sizes=BENTO_SIZES)}</div>
-<div class="bc__body"><h3 class="bc__title">SEO уже в цене</h3><ul class="ticks">{seo_list}</ul></div>
+<div class="bc__media">{slot(p, "why-seo", sizes=BENTO_SIZES)}</div>
+<div class="bc__body"><h3 class="bc__title">{e(W["seo_t"])}</h3><ul class="ticks">{seo_list}</ul></div>
 </article>
 <article class="bc bc--team" data-reveal>
-<div class="bc__media">{picture(p, "why-team", sizes=BENTO_SIZES)}</div>
-<div class="bc__body"><h3 class="bc__title">Одно окно</h3>
-<p class="bc__text">Маркетолог, дизайнер, разработчик и менеджер проекта — в одном чате с вами. Ревью дизайна и кода людьми, автотесты форм и вёрстки.</p></div>
+<div class="bc__media">{slot(p, "why-team", sizes=BENTO_SIZES)}</div>
+<div class="bc__body"><h3 class="bc__title">{e(W["team_t"])}</h3>
+<p class="bc__text">{e(W["team"])}</p></div>
 </article>
 </div>
 </div>
@@ -659,7 +931,7 @@ def home():
     featured = [c for c in C.CASES if c.get('featured')][:4]
     works = f'''<section class="section" id="works">
 <div class="wrap">
-{shead("Портфолио", "Избранные", tone="проекты", aside=f'<a class="btn btn--outline" href="{p.u("projects/")}">Все проекты {icon("arrow")}</a>')}
+{shead(T["works"]["eyebrow"], T["works"]["title"], tone=T["works"]["tone"], aside=f'<a class="btn btn--outline" href="{p.u("projects/")}">{e(T["works"]["button"])} {icon("arrow")}</a>')}
 <div class="works">{"".join(case_card(p, c) for c in featured)}</div>
 </div>
 </section>'''
@@ -668,18 +940,18 @@ def home():
     for t in C.TARIFFS:
         pop = t.get('popular')
         feats_t = ''.join(f'<li>{icon("check")}{e(f)}</li>' for f in t['features'])
-        badge = '<span class="badge badge--pop">Популярный</span>' if pop else ''
+        badge = f'<span class="badge badge--pop">{e(T["tariffs"]["popular"])}</span>' if pop else ''
         price_cls = '' if t['price'][0].isdigit() else ' tariff__price--text'
         tariffs.append(f'''<article class="tariff{" tariff--pop" if pop else ""}" data-reveal>
 <div class="tariff__head"><h3 class="tariff__name">{e(t["name"])}<span>{e(t["sub"])}</span></h3>{badge}</div>
 <p class="tariff__price{price_cls}"><b>{e(t["price"])}</b><span>{e(t["price_note"])}</span></p>
 <p class="tariff__term">{icon("clock")}{e(t["term"])}</p>
 <ul class="ticks">{feats_t}</ul>
-<a class="btn {"btn--white" if pop else "btn--dark"} btn--lg btn--block" href="{p.u("contacts/")}" data-order data-interest="{t["id"]}">Заказать {icon("arrow")}</a>
+<a class="btn {"btn--white" if pop else "btn--dark"} btn--lg btn--block" href="{p.u("contacts/")}" data-order data-interest="{t["id"]}">{e(T["tariffs"]["button"])} {icon("arrow")}</a>
 </article>''')
     tariffs_sec = f'''<section class="section" id="tariffs">
 <div class="wrap">
-{shead("Тарифы", "Прозрачные цены —", tone="команда и SEO уже внутри")}
+{shead(T["tariffs"]["eyebrow"], T["tariffs"]["title"], tone=T["tariffs"]["tone"])}
 <div class="tariffs">{"".join(tariffs)}</div>
 <p class="note" data-reveal><span class="note__ico">{icon("spark")}</span><span>{e(C.TARIFF_NOTE)}</span></p>
 </div>
@@ -688,11 +960,11 @@ def home():
     reviews = ''.join(f'''<div class="review" data-reveal>
 <blockquote class="review__text">«{e(text)}»</blockquote>
 <p class="review__who"><span class="avatar" aria-hidden="true">{e(name[0])}</span><span><b>{e(name)}</b><small>{e(role)}</small></span></p>
-<a class="link-arrow" href="{p.u("projects/" + slug + "/")}">Смотреть кейс {icon("arrow")}</a>
+<a class="link-arrow" href="{p.u("projects/" + slug + "/")}">{e(T["reviews"]["link"])} {icon("arrow")}</a>
 </div>''' for name, role, slug, text in C.REVIEWS)
     reviews_sec = f'''<section class="section section--soft" id="reviews">
 <div class="wrap">
-{shead("Отзывы", "Что говорят", tone="клиенты")}
+{shead(T["reviews"]["eyebrow"], T["reviews"]["title"], tone=T["reviews"]["tone"])}
 <div class="reviews">{reviews}</div>
 </div>
 </section>'''
@@ -702,22 +974,22 @@ def home():
     faq = f'''<section class="section" id="faq">
 <div class="wrap faq">
 <div class="faq__head">
-<p class="eyebrow" data-reveal>Вопросы и ответы</p>
-<h2 class="h2" data-split>{words("Частые вопросы")}</h2>
-<p class="shead__lead" data-reveal>Не нашли ответ? Напишите — ответим в течение рабочего дня.</p>
-<a class="btn btn--outline" href="{p.u("contacts/")}" data-order data-mode="write" data-reveal>{icon("chat")}Задать вопрос</a>
+<p class="eyebrow" data-reveal>{e(T["faq"]["eyebrow"])}</p>
+<h2 class="h2" data-split>{words(T["faq"]["title"])}</h2>
+<p class="shead__lead" data-reveal>{e(T["faq"]["lead"])}</p>
+<a class="btn btn--outline" href="{p.u("contacts/")}" data-order data-mode="write" data-reveal>{icon("chat")}{e(T["faq"]["button"])}</a>
 </div>
 <div class="faq__list" data-reveal>{qa}</div>
 </div>
 </section>'''
 
-    body = (hero + '<div class="sheet">' + statement + approach + services_sec + why + works
-            + tariffs_sec + reviews_sec + faq + cta_scene(p) + '</div>')
+    body = (hero + '<div class="sheet">' + statement + problems_sec(p) + approach + services_sec + why + compare_sec(p)
+            + works + tariffs_sec + reviews_sec + terms_sec(p) + faq + home_form(p) + cta_scene(p) + '</div>')
     org = {
         '@context': 'https://schema.org', '@type': 'Organization', 'name': S['name'],
-        'alternateName': S['name_lat'], 'url': S['url'], 'logo': S['url'] + '/assets/favicon.svg',
+        'alternateName': S['name_lat'], 'url': S['url'], 'logo': S['url'] + '/' + favicon_path(),
         'email': S['email'], 'telephone': S['phone_href'],
-        'description': 'Студия цифровых продуктов: лендинги, многостраничные сайты и интернет-магазины с базовым SEO.',
+        'description': C.SEO['org_desc'],
     }
     faq_ld = {'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
         {'@type': 'Question', 'name': q, 'acceptedAnswer': {'@type': 'Answer', 'text': a}} for q, a in C.FAQ]}
@@ -726,14 +998,13 @@ def home():
             '@type': 'Service', 'name': t['name'] + ('' if t['id'] == 'landing' else ' · ' + t['sub']),
             'provider': {'@type': 'Organization', 'name': S['name']}}}
         for i, t in enumerate(C.TARIFFS)]}
-    hero_img = MANIFEST.get('hero')
+    hero_img = None if IMG.get('hero') else MANIFEST.get('hero')
     preload = ''
     if hero_img:
         srcset = ', '.join(f'{p.u(src)} {w}w' for w, src in hero_img['avif'])
         preload = (f'<link rel="preload" as="image" type="image/avif" imagesrcset="{srcset}" '
                    f'imagesizes="(min-width: 1024px) 46vw, 92vw" fetchpriority="high">\n')
-    return render(p, title=f'{S["name"]} — сайты, которые двигают бизнес',
-                  desc='Студия «Аксиомантик»: лендинги и многостраничные сайты с индивидуальным дизайном от человека. Маркетолог, разработчик, UX/UI-дизайнер и AI в одной команде. Базовое SEO включено в стоимость.',
+    return render(p, title=C.SEO['home_title'], desc=C.SEO['home_desc'],
                   body=body, active='home', jsonld=(org, faq_ld, offers), preload=preload)
 
 
@@ -744,58 +1015,60 @@ def projects():
         counts[c['type']] = counts.get(c['type'], 0) + 1
     grid = ''.join(case_card(p, c, sizes='(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw', h=2, eager=i == 0)
                    for i, c in enumerate(C.CASES))
-    body = (page_hero(p, [('Главная', ''), ('Проекты', 'projects/')], 'Проекты',
-                      'Лендинги, сайты компаний и интернет-магазины. В каждом кейсе — задача, решение, технологии и результат.')
+    P = T['projects']
+    body = (page_hero(p, [(home_label(), ''), (P['title'], 'projects/')], P['title'], P['lead'])
             + f'''<div class="sheet">
 <section class="section section--first">
 <div class="wrap">
-{filters("Тип проекта", C.CATEGORIES, counts)}
+{filters(P["filter"], C.CATEGORIES, counts, P["all"])}
 <div class="works works--3" data-filter-grid>{grid}</div>
-<p class="empty" hidden data-empty>В этой категории пока нет проектов.</p>
+<p class="empty" hidden data-empty>{e(P["empty"])}</p>
 </div>
 </section>
 {cta_scene(p)}
 </div>''')
-    return render(p, title='Проекты студии', desc='Портфолио студии «Аксиомантик»: лендинги, многостраничные сайты и интернет-магазины — задачи, решения, технологии и результаты.',
-                  body=body, active='projects', jsonld=(breadcrumbs_ld([('Главная', ''), ('Проекты', 'projects/')]),))
+    return render(p, title=C.SEO['projects_title'], desc=C.SEO['projects_desc'],
+                  body=body, active='projects', jsonld=(breadcrumbs_ld([(home_label(), ''), (P['title'], 'projects/')]),))
 
 
 def case_page(i, c):
     p = Page(f'projects/{c["slug"]}/')
     nxt = C.CASES[(i + 1) % len(C.CASES)]
+    K = T['case']
+    P = T['projects']
     meta = (f'<div class="phero__meta" data-intro="1"><span class="tag tag--dark">{e(C.CATEGORIES[c["type"]])}</span>'
             f'<span>{icon("clock")}{e(c["term"])}</span><span>{icon("layers")}{e(c["tariff"])}</span></div>')
     solution = ''.join(f'<li>{e(s)}</li>' for s in c['solution'])
     ai = ''.join(f'<li>{icon("spark")}<span>{e(s)}</span></li>' for s in c['ai'])
     tech = ''.join(f'<li>{e(t)}</li>' for t in c['tech'])
     results = ''.join(f'<div class="kpi" data-reveal><b data-count>{e(n)}</b><span>{e(t)}</span></div>' for n, t in c['results'])
-    body = (page_hero(p, [('Главная', ''), ('Проекты', 'projects/'), (c['title'], '')], c['title'], c['lead'], meta)
+    body = (page_hero(p, [(home_label(), ''), (P['title'], 'projects/'), (c['title'], '')], c['title'], c['lead'], meta)
             + f'''<div class="sheet">
 <div class="section section--first">
 <div class="wrap">
-<div class="case-hero t-{c["slug"]}" data-reveal>{case_picture(p, c, alt="Макет сайта на ноутбуке и телефоне", sizes="(min-width: 1824px) 1600px, 88.8vw", eager=True)}</div>
+<div class="case-hero t-{c["slug"]}" data-reveal>{case_picture(p, c, alt=K["cover_alt"], sizes="(min-width: 1824px) 1600px, 88.8vw", eager=True)}</div>
 <div class="case-grid">
 <aside class="case-facts" data-reveal>
 <dl>
-<div><dt>Клиент</dt><dd>{e(c["client"])}</dd></div>
-<div><dt>Тип проекта</dt><dd>{e(C.CATEGORIES[c["type"]])}</dd></div>
-<div><dt>Срок</dt><dd>{e(c["term"])}</dd></div>
-<div><dt>Тариф</dt><dd>{e(c["tariff"])}</dd></div>
+<div><dt>{e(K["client"])}</dt><dd>{e(c["client"])}</dd></div>
+<div><dt>{e(K["type"])}</dt><dd>{e(C.CATEGORIES[c["type"]])}</dd></div>
+<div><dt>{e(K["term"])}</dt><dd>{e(c["term"])}</dd></div>
+<div><dt>{e(K["tariff"])}</dt><dd>{e(c["tariff"])}</dd></div>
 </dl>
-<h2 class="case-facts__h">Технологии</h2>
+<h2 class="case-facts__h">{e(K["tech"])}</h2>
 <ul class="chips">{tech}</ul>
-<a class="btn btn--dark btn--block" href="{p.u("contacts/")}" data-order>Хочу так же {icon("arrow")}</a>
+<a class="btn btn--dark btn--block" href="{p.u("contacts/")}" data-order>{e(K["button"])} {icon("arrow")}</a>
 </aside>
 <div class="case-body">
-<section class="case-part" data-reveal><h2 class="eyebrow">Задача</h2><p class="case-part__lead">{e(c["task"])}</p></section>
-<section class="case-part" data-reveal><h2 class="eyebrow">Решение</h2><ol class="numlist">{solution}</ol></section>
-<section class="case-part case-part--ai" data-reveal><h2 class="eyebrow">Где помог AI</h2><ul class="ailist">{ai}</ul>
-<p class="case-part__note">{icon("user")}Дизайн и решения — за людьми. AI взял на себя рутину.</p></section>
-<section class="case-part"><h2 class="eyebrow" data-reveal>Результат</h2><div class="kpis">{results}</div></section>
+<section class="case-part" data-reveal><h2 class="eyebrow">{e(K["task"])}</h2><p class="case-part__lead">{e(c["task"])}</p></section>
+<section class="case-part" data-reveal><h2 class="eyebrow">{e(K["solution"])}</h2><ol class="numlist">{solution}</ol></section>
+<section class="case-part case-part--ai" data-reveal><h2 class="eyebrow">{e(K["ai"])}</h2><ul class="ailist">{ai}</ul>
+<p class="case-part__note">{icon("user")}{e(K["ai_note"])}</p></section>
+<section class="case-part"><h2 class="eyebrow" data-reveal>{e(K["results"])}</h2><div class="kpis">{results}</div></section>
 </div>
 </div>
 <a class="next t-{nxt["slug"]}" href="{p.u("projects/" + nxt["slug"] + "/")}" data-reveal>
-<span class="next__label">Следующий проект</span>
+<span class="next__label">{e(K["next"])}</span>
 <span class="next__title">{e(nxt["title"])}</span>
 <span class="go">{icon("arrow-ur")}</span>
 </a>
@@ -804,7 +1077,7 @@ def case_page(i, c):
 {cta_scene(p)}
 </div>''')
     return render(p, title=c['title'], desc=c['lead'], body=body, active='projects', og_type='article',
-                  jsonld=(breadcrumbs_ld([('Главная', ''), ('Проекты', 'projects/'), (c['title'], p.path)]),))
+                  jsonld=(breadcrumbs_ld([(home_label(), ''), (P['title'], 'projects/'), (c['title'], p.path)]),))
 
 
 def blog():
@@ -816,56 +1089,48 @@ def blog():
                               sizes='(min-width: 1024px) 50vw, 100vw' if a.get('featured') else '(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw',
                               h=2, eager=i == 0)
                     for i, a in enumerate(C.ARTICLES))
-    body = (page_hero(p, [('Главная', ''), ('Блог', 'blog/')], 'Блог',
-                      'Пишем о маркетинге, дизайне и разработке — и о том, как AI меняет работу студии.')
+    B = T['blog']
+    body = (page_hero(p, [(home_label(), ''), (B['title'], 'blog/')], B['title'], B['lead'])
             + f'''<div class="sheet">
 <section class="section section--first">
 <div class="wrap">
-{filters("Категория", C.BLOG_CATEGORIES, counts)}
+{filters(B["filter"], C.BLOG_CATEGORIES, counts, T["projects"]["all"])}
 <div class="posts" data-filter-grid>{cards}</div>
-<p class="empty" hidden data-empty>В этой категории пока нет статей.</p>
+<p class="empty" hidden data-empty>{e(B["empty"])}</p>
 </div>
 </section>
 {cta_scene(p)}
 </div>''')
-    return render(p, title='Блог', desc='Статьи студии «Аксиомантик» о маркетинге, дизайне, разработке сайтов и AI в дизайне.',
-                  body=body, active='blog', jsonld=(breadcrumbs_ld([('Главная', ''), ('Блог', 'blog/')]),))
+    return render(p, title=C.SEO['blog_title'], desc=C.SEO['blog_desc'],
+                  body=body, active='blog', jsonld=(breadcrumbs_ld([(home_label(), ''), (B['title'], 'blog/')]),))
 
 
 def article(a):
     p = Page(f'blog/{a["slug"]}/')
-    blocks = []
-    for kind, val in a['body']:
-        if kind == 'p':
-            blocks.append(f'<p>{e(val)}</p>')
-        elif kind == 'h2':
-            blocks.append(f'<h2>{e(val)}</h2>')
-        elif kind == 'ul':
-            blocks.append('<ul>' + ''.join(f'<li>{e(x)}</li>' for x in val) + '</ul>')
-        elif kind == 'quote':
-            blocks.append(f'<blockquote><p>{e(val)}</p></blockquote>')
+    B = T['blog']
+    blocks = prose_blocks(a['body'])
     same = [x for x in C.ARTICLES if x['cat'] == a['cat'] and x is not a]
     rest = [x for x in C.ARTICLES if x['cat'] != a['cat']]
     related = (same + rest)[:3]
     meta = (f'<div class="phero__meta" data-intro="1"><span class="tag tag--dark">{e(C.BLOG_CATEGORIES[a["cat"]])}</span>'
-            f'<span><time datetime="{a["date"]}">{date_ru(a["date"])}</time></span><span>{icon("clock")}{a["read"]} мин чтения</span></div>')
-    body = (page_hero(p, [('Главная', ''), ('Блог', 'blog/'), (a['title'], '')], a['title'], a['desc'], meta)
+            f'<span><time datetime="{a["date"]}">{date_ru(a["date"])}</time></span><span>{icon("clock")}{a["read"]} {e(B["read"])}</span></div>')
+    body = (page_hero(p, [(home_label(), ''), (B['title'], 'blog/'), (a['title'], '')], a['title'], a['desc'], meta)
             + f'''<div class="sheet">
 <section class="section section--first">
 <div class="wrap">
 <article class="article">
-<div class="article__cover" data-reveal>{picture(p, "cover-" + a["cat"], sizes="(min-width: 960px) 880px, 100vw", eager=True)}</div>
-<div class="prose">{"".join(blocks)}</div>
+<div class="article__cover" data-reveal>{post_picture(p, a, sizes="(min-width: 960px) 880px, 100vw", eager=True)}</div>
+<div class="prose">{blocks}</div>
 <aside class="article__cta" data-reveal>
-<p><b>Нужен сайт, который работает на бизнес?</b> Расскажите о задаче — предложим формат и сроки.</p>
-<a class="btn btn--dark" href="{p.u("contacts/")}" data-order>Обсудить проект {icon("arrow")}</a>
+<p><b>{e(B["cta_b"])}</b> {e(B["cta"])}</p>
+<a class="btn btn--dark" href="{p.u("contacts/")}" data-order>{e(B["cta_button"])} {icon("arrow")}</a>
 </aside>
 </article>
 </div>
 </section>
 <section class="section section--soft">
 <div class="wrap">
-{shead("Блог", "Читайте", tone="также", aside=f'<a class="btn btn--outline" href="{p.u("blog/")}">Все статьи {icon("arrow")}</a>')}
+{shead(B["related_eyebrow"], B["related"], tone=B["related_tone"], aside=f'<a class="btn btn--outline" href="{p.u("blog/")}">{e(B["all"])} {icon("arrow")}</a>')}
 <div class="posts">{"".join(post_card(p, x) for x in related)}</div>
 </div>
 </section>
@@ -877,7 +1142,7 @@ def article(a):
         'publisher': {'@type': 'Organization', 'name': S['name']},
     }
     return render(p, title=a['title'], desc=a['desc'], body=body, active='blog', og_type='article',
-                  jsonld=(breadcrumbs_ld([('Главная', ''), ('Блог', 'blog/'), (a['title'], p.path)]), posting))
+                  jsonld=(breadcrumbs_ld([(home_label(), ''), (B['title'], 'blog/'), (a['title'], p.path)]), posting))
 
 
 def contacts():
@@ -885,58 +1150,40 @@ def contacts():
     uid = 'c'
     map_src = f'https://yandex.ru/map-widget/v1/?ll={S["map_ll"]}&z={S["map_z"]}&pt={S["map_ll"]},pm2blm'
     map_link = f'https://yandex.ru/maps/?ll={S["map_ll"]}&z={S["map_z"]}&pt={S["map_ll"]}'
-    body = (page_hero(p, [('Главная', ''), ('Контакты', 'contacts/')], 'Контакты',
-                      'Расскажите о проекте — ответим в течение рабочего дня и предложим формат, сроки и стоимость.')
+    K = T['contacts']
+    body = (page_hero(p, [(home_label(), ''), (K['title'], 'contacts/')], K['title'], K['lead'])
             + f'''<div class="sheet">
 <section class="section section--first">
 <div class="wrap contacts">
 <div class="card card--form" data-reveal>
-<h2 class="card__title">Заявка на проект</h2>
-<p class="card__sub">Заполните форму — маркетолог изучит задачу и свяжется с вами.</p>
-<form class="lead" method="dialog" data-lead data-source="contacts" novalidate>
-<input type="hidden" name="mode" value="form">
-<div class="lead__form">
-<div class="fields fields--2">
-{field(uid, "name", "Имя", placeholder="Как к вам обращаться", autocomplete="name", maxlength=80)}
-{field(uid, "contact", "Email или телефон", placeholder="name@company.ru или +7…", autocomplete="email", maxlength=120)}
-</div>
-<div class="fields">
-<fieldset class="field"><legend class="field__label">Бюджет</legend>{picks("budget", C.BUDGETS, "unknown")}</fieldset>
-{field(uid, "message", "Описание задачи", kind="textarea", placeholder="Что за проект, какие сроки, есть ли сайт сейчас", maxlength=3000)}
-{HONEYPOT}
-{consent(p, uid)}
-</div>
-<button class="btn btn--dark btn--lg lead__submit" type="submit" data-submit><span data-submit-label>Отправить заявку</span>{icon("send")}</button>
-<p class="lead__status" role="status" aria-live="polite"></p>
-{nojs_note()}
-</div>
-{done_block()}
-</form>
+<h2 class="card__title">{e(K["form_title"])}</h2>
+<p class="card__sub">{e(K["form_sub"])}</p>
+{project_form(p, uid, "contacts")}
 </div>
 <div class="contacts__side">
 <div class="card card--info" data-reveal>
 <ul class="info">
-<li><span class="info__ico">{icon("phone")}</span><span><small>Телефон</small><a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a></span></li>
-<li><span class="info__ico">{icon("mail")}</span><span><small>Email</small><a href="mailto:{e(S["email"])}">{e(S["email"])}</a></span></li>
-<li><span class="info__ico">{icon("clock")}</span><span><small>Часы работы</small>{e(S["hours"])}</span></li>
-<li><span class="info__ico">{icon("pin")}</span><span><small>Офис</small>{e(S["address"])}</span></li>
+<li><span class="info__ico">{icon("phone")}</span><span><small>{e(K["phone"])}</small><a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a></span></li>
+<li><span class="info__ico">{icon("mail")}</span><span><small>{e(K["email"])}</small><a href="mailto:{e(S["email"])}">{e(S["email"])}</a></span></li>
+<li><span class="info__ico">{icon("clock")}</span><span><small>{e(K["hours"])}</small>{e(S["hours"])}</span></li>
+<li><span class="info__ico">{icon("pin")}</span><span><small>{e(K["office"])}</small>{e(S["address"])}</span></li>
 </ul>
-<div class="info__soc"><small>Мы в соцсетях</small>{socials()}</div>
+<div class="info__soc"><small>{e(K["socials"])}</small>{socials()}</div>
 </div>
-<div class="map" data-map="{e(map_src)}" data-reveal>
+<div class="map" data-map="{e(map_src)}" data-map-title="{e(K["map_title"])}" data-reveal>
 <div class="map__ph" aria-hidden="true"><i class="map__road map__road--1"></i><i class="map__road map__road--2"></i><i class="map__road map__road--3"></i><i class="map__river"></i><span class="map__pin">{icon("pin")}</span></div>
 <div class="map__act">
-<button type="button" class="btn btn--dark btn--sm" data-map-load>Показать карту</button>
-<a class="map__ext" href="{e(map_link)}" target="_blank" rel="noopener">Открыть в Яндекс Картах {icon("arrow-ur")}</a>
+<button type="button" class="btn btn--dark btn--sm" data-map-load>{e(K["map_button"])}</button>
+<a class="map__ext" href="{e(map_link)}" target="_blank" rel="noopener">{e(K["map_link"])} {icon("arrow-ur")}</a>
 </div>
-<p class="map__note">Карта загружается с серверов Яндекса только после нажатия. Тогда Яндекс может установить свои cookie, в том числе Яндекс Метрики.</p>
+<p class="map__note">{e(K["map_note"])}</p>
 </div>
 </div>
 </div>
 </section>
 </div>''')
-    return render(p, title='Контакты', desc='Свяжитесь со студией «Аксиомантик»: заявка на сайт, телефон, email и соцсети. Ответим в течение рабочего дня.',
-                  body=body, active='contacts', jsonld=(breadcrumbs_ld([('Главная', ''), ('Контакты', 'contacts/')]),))
+    return render(p, title=C.SEO['contacts_title'], desc=C.SEO['contacts_desc'],
+                  body=body, active='contacts', jsonld=(breadcrumbs_ld([(home_label(), ''), (K['title'], 'contacts/')]),))
 
 
 def legal_page(path, title, lead, sections):
@@ -949,7 +1196,7 @@ def legal_page(path, title, lead, sections):
                 blocks.append('<ul>' + ''.join(f'<li>{e(x)}</li>' for x in it) + '</ul>')
             else:
                 blocks.append(f'<p>{e(it)}</p>')
-    body = (page_hero(p, [('Главная', ''), (title, '')], title, lead)
+    body = (page_hero(p, [(home_label(), ''), (title, '')], title, lead)
             + f'''<div class="sheet"><section class="section section--first"><div class="wrap">
 <article class="article"><div class="prose prose--legal">{"".join(blocks)}</div></article>
 </div></section></div>''')
@@ -960,18 +1207,19 @@ def not_found():
     # A fixed address so nginx can serve it for any missing page; links are
     # absolute because the page answers at every depth.
     p = Page('404/', absolute=True)
+    K = T['p404']
     body = f'''<section class="phero phero--404">
 <div class="wrap phero__in p404">
 <div>
-<p class="eyebrow eyebrow--dark" data-intro="1">{icon("diamond")}Ошибка 404</p>
-<h1 class="h1" data-intro-split>{words("Такой страницы нет")}</h1>
-<p class="phero__lead" data-intro="2">Возможно, её переместили. Начните с главной или посмотрите наши проекты.</p>
-<div class="hero__cta" data-intro="3"><a class="btn btn--white btn--lg" href="/">На главную {icon("arrow")}</a><a class="link-under" href="/projects/">Проекты</a></div>
+<p class="eyebrow eyebrow--dark" data-intro="1">{icon("diamond")}{e(K["eyebrow"])}</p>
+<h1 class="h1" data-intro-split>{words(K["title"])}</h1>
+<p class="phero__lead" data-intro="2">{e(K["lead"])}</p>
+<div class="hero__cta" data-intro="3"><a class="btn btn--white btn--lg" href="/">{e(K["home"])} {icon("arrow")}</a><a class="link-under" href="/projects/">{e(K["link"])}</a></div>
 </div>
-<div class="p404__art" data-intro-art><div class="hero__media">{picture(p, "hero", sizes="(min-width: 1024px) 40vw, 80vw")}</div></div>
+<div class="p404__art" data-intro-art><div class="hero__media">{slot(p, "hero", sizes="(min-width: 1024px) 40vw, 80vw")}</div></div>
 </div>
 </section>'''
-    return render(p, title='Страница не найдена', desc='Страница не найдена.', body=body, index=False)
+    return render(p, title=C.SEO['p404_title'], desc=C.SEO['p404_title'] + '.', body=body, index=False)
 
 
 def write_favicon():
@@ -1032,7 +1280,7 @@ def main():
     with open(css_path, encoding='utf-8') as f:
         css = f.read()
     marker = '/* --- case colours (generated) --- */\n'
-    css = css.split(marker)[0].rstrip('\n') + '\n\n' + marker + themes
+    css = css.split(marker)[0].rstrip('\n') + '\n\n' + marker + themes + design_css()
     with open(css_path, 'w', encoding='utf-8') as f:
         f.write(css)
     os.remove(os.path.join(OUT, 'assets', 'css', 'themes.css'))
@@ -1043,10 +1291,12 @@ def main():
     urls.append(blog())
     urls += [article(a) for a in C.ARTICLES]
     urls.append(contacts())
-    urls.append(legal_page('privacy/', 'Политика обработки персональных данных',
-                           'Как студия обрабатывает и защищает данные, которые вы оставляете на сайте.', legal.PRIVACY))
-    urls.append(legal_page('consent/', 'Согласие на обработку персональных данных',
-                           'Текст согласия, которое вы даёте, отправляя форму на сайте.', legal.CONSENT))
+    L = T['legal']
+    if C.ABOUT.get('show'):
+        urls.append(about())
+    urls += [landing(x) for x in C.LANDINGS if x.get('show', True)]
+    urls.append(legal_page('privacy/', L['privacy_title'], L['privacy_lead'], legal.PRIVACY))
+    urls.append(legal_page('consent/', L['consent_title'], L['consent_lead'], legal.CONSENT))
     not_found()
     remove_stale()
     with open(os.path.join(OUT, 'sitemap.xml'), 'w', encoding='utf-8') as f:
@@ -1055,7 +1305,10 @@ def main():
             f.write(f'<url><loc>{e(u)}</loc></url>\n')
         f.write('</urlset>\n')
     with open(os.path.join(OUT, 'robots.txt'), 'w', encoding='utf-8') as f:
-        f.write(f'User-agent: *\nDisallow: /api/\nDisallow: /404/\n\nSitemap: {S["url"]}/sitemap.xml\n')
+        if C.SEO.get('index', True):
+            f.write(f'User-agent: *\nDisallow: /api/\nDisallow: /404/\n\nSitemap: {S["url"]}/sitemap.xml\n')
+        else:
+            f.write('User-agent: *\nDisallow: /\n')
     print(f'{len(urls)} pages in {OUT}')
     if MISSING:
         print('pictures not rendered yet:', ', '.join(sorted(MISSING)))

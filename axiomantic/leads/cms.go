@@ -72,6 +72,14 @@ func (a *Admin) siteRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/site/releases/{id}/restore", a.auth(roleOwner, a.handleRestore))
 	mux.HandleFunc("POST /api/admin/site/media", a.auth(roleManager, a.handleUpload))
 	mux.HandleFunc("GET /api/admin/site/health", a.auth(roleViewer, a.handleHealth))
+	mux.HandleFunc("GET /api/admin/site/media", a.auth(roleViewer, a.handleMediaList))
+	mux.HandleFunc("DELETE /api/admin/site/media/{id}", a.auth(roleManager, a.handleMediaDelete))
+	mux.HandleFunc("GET /api/admin/site/activity", a.auth(roleViewer, a.handleSiteActivity))
+	mux.HandleFunc("GET /api/admin/site/diff", a.auth(roleViewer, a.handleDiff))
+	mux.HandleFunc("PUT /api/admin/site/schedule", a.auth(roleManager, a.handleSchedule))
+	mux.HandleFunc("DELETE /api/admin/site/schedule", a.auth(roleManager, a.handleUnschedule))
+	mux.HandleFunc("GET /api/admin/site/indexing", a.auth(roleViewer, a.handleIndexing))
+	mux.HandleFunc("POST /api/admin/site/indexing", a.auth(roleManager, a.handleIndexNow))
 	mux.HandleFunc("GET /admin/preview/", a.authPage(a.servePreview))
 	mux.HandleFunc("GET /admin/media/{name}", a.authPage(a.serveMedia))
 }
@@ -129,20 +137,8 @@ func (a *Admin) loadDraft(ctx context.Context, sc *SiteConfig) (*draftFile, erro
 		if err := os.MkdirAll(sc.Data, 0o700); err != nil {
 			return nil, err
 		}
-		tmp := filepath.Join(sc.Data, ".export.json")
-		defer os.Remove(tmp)
-		args := append(append([]string{}, sc.Builder[1:]...), "--export-content", tmp)
-		cmd := exec.CommandContext(ctx, sc.Builder[0], args...)
-		cmd.Env = buildEnv(nil)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("export content: %v: %s", err, trimLog(out))
-		}
-		var content map[string]any
-		raw, err := os.ReadFile(tmp)
+		content, err := exportContent(ctx, sc)
 		if err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(raw, &content); err != nil {
 			return nil, err
 		}
 		d := &draftFile{Version: 1, Updated: a.now().UTC(), Content: content}
@@ -155,7 +151,101 @@ func (a *Admin) loadDraft(ctx context.Context, sc *SiteConfig) (*draftFile, erro
 	if err := json.Unmarshal(raw, &d); err != nil {
 		return nil, fmt.Errorf("draft: %v", err)
 	}
+	if err := a.fillNewKeys(ctx, sc, &d); err != nil {
+		return nil, err
+	}
 	return &d, nil
+}
+
+// exportContent asks the generator for everything its sources hold now.
+func exportContent(ctx context.Context, sc *SiteConfig) (map[string]any, error) {
+	tmp := filepath.Join(sc.Data, ".export.json")
+	defer os.Remove(tmp)
+	args := append(append([]string{}, sc.Builder[1:]...), "--export-content", tmp)
+	cmd := exec.CommandContext(ctx, sc.Builder[0], args...)
+	cmd.Env = buildEnv(nil)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("export content: %v: %s", err, trimLog(out))
+	}
+	raw, err := os.ReadFile(tmp)
+	if err != nil {
+		return nil, err
+	}
+	var content map[string]any
+	if err := json.Unmarshal(raw, &content); err != nil {
+		return nil, err
+	}
+	return content, nil
+}
+
+// fillNewKeys brings a draft up to a newer schema: a block or a field the
+// site gained after the draft was made gets the generator's value, so the
+// editor shows it filled in. What the draft has is never touched.
+func (a *Admin) fillNewKeys(ctx context.Context, sc *SiteConfig, d *draftFile) error {
+	schema, err := a.schemaOf(sc)
+	if err != nil {
+		return nil // the editor reports a broken schema itself
+	}
+	missing := func(src map[string]any, f *Field) bool {
+		cur := getPath(src, f.Key)
+		if cur == nil {
+			return true
+		}
+		obj, ok := cur.(map[string]any)
+		if !ok || f.Type != "object" {
+			return false
+		}
+		for _, k := range f.Fields {
+			if _, has := obj[k.Key]; !has {
+				return true
+			}
+		}
+		return false
+	}
+	need := false
+	for _, sec := range schema.Sections {
+		for _, f := range sec.Fields {
+			need = need || missing(d.Content, f)
+		}
+	}
+	if !need {
+		return nil
+	}
+	exp, err := exportContent(ctx, sc)
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, sec := range schema.Sections {
+		for _, f := range sec.Fields {
+			cur, def := getPath(d.Content, f.Key), getPath(exp, f.Key)
+			if def == nil {
+				continue
+			}
+			if cur == nil {
+				setPath(d.Content, f.Key, def)
+				changed = true
+				continue
+			}
+			obj, ok1 := cur.(map[string]any)
+			defObj, ok2 := def.(map[string]any)
+			if !ok1 || !ok2 || f.Type != "object" {
+				continue
+			}
+			for _, k := range f.Fields {
+				if _, has := obj[k.Key]; !has {
+					if v, ok := defObj[k.Key]; ok {
+						obj[k.Key] = v
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return a.saveDraft(sc, d)
 }
 
 func (a *Admin) saveDraft(sc *SiteConfig, d *draftFile) error {
@@ -231,7 +321,7 @@ func (a *Admin) siteState(ctx context.Context, ac *actor, sc *SiteConfig, withSc
 	state := map[string]any{
 		"enabled": true, "content": d.Content, "version": d.Version, "updated": d.Updated,
 		"by": personOf(ac.cfg, ac.ws.ID, d.By), "current": releaseView(ac, cur), "changed": changed,
-		"dirty": len(changed) > 0, "lastBuild": a.lastBuild(sc),
+		"dirty": len(changed) > 0, "lastBuild": a.lastBuild(sc), "scheduled": scheduleView(ac, readSchedule(sc)),
 	}
 	if withSchema {
 		state["schema"] = schema
@@ -313,6 +403,7 @@ func (a *Admin) handleSaveSection(w http.ResponseWriter, r *http.Request, ac *ac
 		adminJSON(w, http.StatusInternalServerError, apiError{Error: "store"})
 		return
 	}
+	a.activity(sc, activityEntry{By: ac.user.ID, Kind: "save", Section: r.PathValue("id")})
 	st, err := a.siteState(r.Context(), ac, sc, false)
 	if err != nil {
 		adminJSON(w, http.StatusInternalServerError, apiError{Error: "site"})
@@ -536,48 +627,74 @@ func (a *Admin) handlePublish(w http.ResponseWriter, r *http.Request, ac *actor)
 	}
 	siteLock.Lock()
 	defer siteLock.Unlock()
-	d, err := a.loadDraft(r.Context(), sc)
+	meta, res, err := a.publishNow(r.Context(), ac.ws, sc, ac.user.ID, note)
 	if err != nil {
+		a.log.Printf("site %s: publish: %v", ac.ws.ID, err)
+		if res != nil {
+			adminJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "build", "build": res})
+			return
+		}
 		adminJSON(w, http.StatusInternalServerError, apiError{Error: "site"})
 		return
+	}
+	adminJSON(w, http.StatusOK, map[string]any{"ok": true, "release": releaseView(ac, meta), "build": res})
+}
+
+// publishNow builds the draft into a new release and puts it on the site.
+// The caller holds siteLock. A failed build returns its result with the
+// error; anything else returns a nil result.
+func (a *Admin) publishNow(ctx context.Context, ws *Workspace, sc *SiteConfig, by, note string) (*releaseMeta, *buildResult, error) {
+	d, err := a.loadDraft(ctx, sc)
+	if err != nil {
+		return nil, nil, err
 	}
 	id := newReleaseID(a.now())
 	rels := filepath.Join(sc.Root, "releases")
 	if err := os.MkdirAll(rels, 0o755); err != nil {
-		adminJSON(w, http.StatusInternalServerError, apiError{Error: "site"})
-		return
+		return nil, nil, err
 	}
 	tmp := filepath.Join(rels, ".building-"+id)
 	defer os.RemoveAll(tmp)
-	res, err := a.build(r.Context(), sc, d.Content, tmp, "publish")
+	res, err := a.build(ctx, sc, d.Content, tmp, "publish")
 	if err != nil {
-		a.log.Printf("site %s: publish: %v", ac.ws.ID, err)
-		adminJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "build", "build": res})
-		return
+		if res == nil {
+			res = &buildResult{Kind: "publish", Time: a.now().UTC()}
+		}
+		return nil, res, err
+	}
+	key := a.indexNowKey(sc)
+	if key != "" {
+		// search engines check that the site holds the key it reports with
+		if err := os.WriteFile(filepath.Join(tmp, key+".txt"), []byte(key), 0o644); err != nil {
+			return nil, nil, err
+		}
 	}
 	if err := os.Rename(tmp, filepath.Join(rels, id)); err != nil {
-		adminJSON(w, http.StatusInternalServerError, apiError{Error: "site"})
-		return
+		return nil, nil, err
 	}
-	meta := releaseMeta{ID: id, Time: a.now().UTC(), By: ac.user.ID, Note: note, Content: d.Content}
+	meta := releaseMeta{ID: id, Time: a.now().UTC(), By: by, Note: note, Content: d.Content}
 	raw, _ := json.Marshal(meta)
 	if err := os.MkdirAll(filepath.Join(sc.Data, "releases"), 0o700); err != nil {
-		adminJSON(w, http.StatusInternalServerError, apiError{Error: "site"})
-		return
+		return nil, nil, err
 	}
 	if err := writeFileAtomic(filepath.Join(sc.Data, "releases", id+".json"), raw); err != nil {
-		adminJSON(w, http.StatusInternalServerError, apiError{Error: "store"})
-		return
+		return nil, nil, err
 	}
 	if err := switchCurrent(sc, id); err != nil {
-		a.log.Printf("site %s: switch: %v", ac.ws.ID, err)
-		adminJSON(w, http.StatusInternalServerError, apiError{Error: "switch"})
-		return
+		return nil, nil, err
 	}
 	a.pruneReleases(sc)
-	a.log.Printf("site %s: release %s published by %s", ac.ws.ID, id, ac.user.ID)
+	a.log.Printf("site %s: release %s published by %s", ws.ID, id, by)
+	a.activity(sc, activityEntry{By: by, Kind: "publish", Note: note, Release: id})
+	if key != "" {
+		a.bg.Add(1)
+		go func() {
+			defer a.bg.Done()
+			a.submitIndexNow(sc, d.Content, filepath.Join(rels, id), key)
+		}()
+	}
 	meta.Content = nil
-	adminJSON(w, http.StatusOK, map[string]any{"ok": true, "release": releaseView(ac, &meta), "build": res})
+	return &meta, res, nil
 }
 
 // switchCurrent points root/current at a release with one rename, so the
@@ -682,6 +799,7 @@ func (a *Admin) handleRestore(w http.ResponseWriter, r *http.Request, ac *actor)
 		return
 	}
 	a.log.Printf("site %s: release %s restored by %s", ac.ws.ID, id, ac.user.ID)
+	a.activity(sc, activityEntry{By: ac.user.ID, Kind: "restore", Release: id})
 	st, err := a.siteState(r.Context(), ac, sc, false)
 	if err != nil {
 		adminJSON(w, http.StatusInternalServerError, apiError{Error: "site"})
@@ -732,7 +850,7 @@ func (a *Admin) servePreview(w http.ResponseWriter, r *http.Request, ac *actor) 
 	_, _ = w.Write(data)
 }
 
-var reMediaFile = regexp.MustCompile(`^[0-9a-f]{16}-[0-9]{2,4}\.jpg$`)
+var reMediaFile = regexp.MustCompile(`^[0-9a-f]{16}-[0-9]{2,4}\.(jpg|png)$`)
 
 func (a *Admin) serveMedia(w http.ResponseWriter, r *http.Request, ac *actor) {
 	name := r.PathValue("name")
@@ -746,7 +864,11 @@ func (a *Admin) serveMedia(w http.ResponseWriter, r *http.Request, ac *actor) {
 		return
 	}
 	setAdminPageHeaders(w)
-	w.Header().Set("Content-Type", "image/jpeg")
+	if strings.HasSuffix(name, ".png") {
+		w.Header().Set("Content-Type", "image/png")
+	} else {
+		w.Header().Set("Content-Type", "image/jpeg")
+	}
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = w.Write(data)
 }

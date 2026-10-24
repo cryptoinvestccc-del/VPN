@@ -46,6 +46,7 @@ const (
 // Every handler works inside the signed-in user's workspace and nowhere
 // else; ids from the browser are looked up in that workspace only.
 type Admin struct {
+	bg        sync.WaitGroup // reports to search engines still being sent
 	cfg       *ConfigSource
 	sessions  *Sessions
 	index     *Index

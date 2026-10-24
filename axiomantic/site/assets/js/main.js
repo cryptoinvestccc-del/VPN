@@ -1,7 +1,7 @@
 /* Аксиомантик: everything the pages do on every device — header, menu,
    scroll reveals, the hero video, the approach steps, counters, the order
    dialog, lead forms, filters and the click-to-load map. No dependencies,
-   no trackers. Desktop-only scroll choreography lives in motion.js.
+   no trackers unless the panel sets a counter and the visitor accepts it. Desktop-only scroll choreography lives in motion.js.
 
    Every order button is a link to the contacts page, so the site still
    takes orders with this script blocked; the script only upgrades that
@@ -219,8 +219,12 @@
     return n >= 10 && n <= 15;
   };
 
-  const WHEN = { hour: 'в течение часа', today: 'сегодня', tomorrow: 'завтра' };
-  const WHERE = { telegram: 'в Telegram', whatsapp: 'в WhatsApp', email: 'на почту' };
+  // Every message comes from the page (data-msg, edited in the panel).
+  let MSG = {};
+  try { MSG = JSON.parse(document.body.dataset.msg || '{}'); } catch (_) { MSG = {}; }
+  const ERR = MSG.errors || {};
+  const DONE = MSG.done || {};
+  const fill = (tpl, vars) => String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : ''));
 
   const plusFirst = (v) => /^\s*\+/.test(v);
   const formatPhone = (value) => {
@@ -275,7 +279,7 @@
     });
     const label = $('[data-submit-label]', form);
     if (label && form.dataset.source === 'modal') {
-      label.textContent = m === 'write' ? 'Отправить сообщение' : 'Жду звонка';
+      label.textContent = m === 'write' ? MSG.submit_write : MSG.submit_call;
     }
     clearErrors(form);
   };
@@ -304,36 +308,38 @@
       setError(input, ok ? '' : msg);
       if (!ok) problems.push(input);
     };
-    need('name', (v) => v.length >= 2 && v.length <= 80, 'Напишите, как к вам обращаться');
-    if (m === 'call') need('phone', isPhone, 'Укажите телефон полностью, например +7 900 000-00-00');
+    need('name', (v) => v.length >= 2 && v.length <= 80, ERR.name);
+    if (m === 'call') need('phone', isPhone, ERR.phone);
     if (m === 'write') {
       const ch = checked(form, 'channel');
       const rules = {
-        telegram: [(v) => RE.tg.test(v) || isPhone(v), 'Укажите ник, например @username, или номер телефона'],
-        whatsapp: [isPhone, 'Укажите номер WhatsApp полностью'],
-        email: [(v) => RE.email.test(v), 'Укажите email, например name@company.ru'],
+        telegram: [(v) => RE.tg.test(v) || isPhone(v), ERR.telegram],
+        whatsapp: [isPhone, ERR.whatsapp],
+        email: [(v) => RE.email.test(v), ERR.email],
       }[ch];
       if (rules) need('contact', rules[0], rules[1]);
     }
     if (m === 'form') {
-      need('contact', (v) => RE.email.test(v) || isPhone(v), 'Укажите email или телефон');
-      need('message', (v) => v.length >= 10, 'Опишите задачу хотя бы в паре предложений');
+      need('contact', (v) => RE.email.test(v) || isPhone(v), ERR.contact);
+      need('message', (v) => v.length >= 10, ERR.message);
     }
     const consent = $('input[name="consent"]', form);
     if (consent) {
-      setError(consent, consent.checked ? '' : 'Без согласия мы не сможем ответить на заявку');
+      setError(consent, consent.checked ? '' : ERR.consent);
       if (!consent.checked) problems.push(consent);
     }
     return problems[0] || null;
   };
 
   const doneText = (payload, demo) => {
-    const name = payload.name;
-    let text;
-    if (payload.mode === 'call') text = `${name}, перезвоним ${WHEN[payload.when] || 'в ближайшее время'} — в рабочее время студии.`;
-    else if (payload.mode === 'write') text = `${name}, ответим ${WHERE[payload.channel] || ''} в течение рабочего дня.`;
-    else text = `${name}, маркетолог изучит задачу и свяжется с вами в течение рабочего дня.`;
-    return demo ? `${text} Демо-режим: заявка никуда не отправлена.` : text;
+    const vars = {
+      name: payload.name,
+      when: DONE['when_' + payload.when] || DONE.when_other || '',
+      where: DONE['where_' + payload.channel] || '',
+    };
+    const tpl = payload.mode === 'call' ? DONE.call : payload.mode === 'write' ? DONE.write : DONE.form;
+    const text = fill(tpl, vars);
+    return demo && DONE.demo ? `${text} ${DONE.demo}` : text;
   };
 
   const contactEmail = () => {
@@ -391,17 +397,17 @@
       let body = {};
       try { body = await res.json(); } catch (_) { /* not JSON */ }
       if (res.status === 429) {
-        status.textContent = 'Слишком много заявок подряд. Попробуйте через несколько минут или позвоните нам.';
+        status.textContent = ERR.too_many || '';
       } else if (res.status === 400 && body.field) {
         const input = $(`[name="${body.field}"]`, form);
-        if (input) { setError(input, 'Проверьте это поле'); input.focus(); }
-        status.textContent = 'Проверьте выделенное поле.';
+        if (input) { setError(input, ERR.field); input.focus(); }
+        status.textContent = ERR.fields || '';
       } else {
         throw new Error(String(res.status));
       }
     } catch (_) {
       const mail = contactEmail();
-      status.textContent = 'Не получилось отправить заявку. Попробуйте ещё раз' + (mail ? ` или напишите на ${mail}.` : '.');
+      status.textContent = (ERR.failed || '') + (mail ? ` ${ERR.failed_mail || ''} ${mail}.` : '.');
     } finally {
       delete form.dataset.busy;
       btn.removeAttribute('aria-busy');
@@ -558,7 +564,7 @@
     btn.addEventListener('click', () => {
       const frame = document.createElement('iframe');
       frame.src = box.dataset.map;
-      frame.title = 'Карта: как нас найти';
+      frame.title = box.dataset.mapTitle || '';
       frame.referrerPolicy = 'strict-origin-when-cross-origin';
       frame.allowFullscreen = true;
       box.prepend(frame);
@@ -566,4 +572,34 @@
       frame.focus(); // the button is gone; focus goes to the map that replaced it
     });
   });
+
+  /* ------------------------------------------------- cookie, counter */
+
+  // With a Yandex Metrika counter set in the panel the page asks first;
+  // the counter's script is fetched only after «Принять».
+  const metrika = document.body.dataset.metrika;
+  const banner = $('[data-cookie]');
+  const loadMetrika = () => {
+    window.ym = window.ym || function () { (window.ym.a = window.ym.a || []).push(arguments); };
+    window.ym.l = Date.now();
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://mc.yandex.ru/metrika/tag.js';
+    document.head.appendChild(s);
+    window.ym(Number(metrika), 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true,
+      webvisor: 'webvisor' in document.body.dataset });
+  };
+  if (metrika && /^\d{4,12}$/.test(metrika) && banner) {
+    let choice = '';
+    try { choice = localStorage.getItem('axm-cookie') || ''; } catch (_) { /* storage off */ }
+    if (choice === 'yes') loadMetrika();
+    else if (choice !== 'no') banner.hidden = false;
+    const decide = (yes) => {
+      try { localStorage.setItem('axm-cookie', yes ? 'yes' : 'no'); } catch (_) { /* storage off */ }
+      banner.hidden = true;
+      if (yes) loadMetrika();
+    };
+    $('[data-cookie-yes]', banner).addEventListener('click', () => decide(true));
+    $('[data-cookie-no]', banner).addEventListener('click', () => decide(false));
+  }
 })();

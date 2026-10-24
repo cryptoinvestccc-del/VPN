@@ -1,231 +1,3265 @@
 {
-  "version": 1,
-  "site": "Аксиомантик",
-  "groups": [
-    {"id": "home", "title": "Главная"},
-    {"id": "pages", "title": "Страницы"},
-    {"id": "settings", "title": "Настройки"}
-  ],
-  "sections": [
+ "version": 1,
+ "site": "Аксиомантик",
+ "groups": [
+  {
+   "id": "home",
+   "title": "Главная"
+  },
+  {
+   "id": "pages",
+   "title": "Страницы"
+  },
+  {
+   "id": "settings",
+   "title": "Настройки"
+  }
+ ],
+ "sections": [
+  {
+   "id": "hero",
+   "group": "home",
+   "title": "Первый экран",
+   "where": "Главная · 1-й блок",
+   "icon": "sparkle",
+   "hint": "Самый первый экран. Заголовок из двух строк: вторая строка подсвечивается цветом.",
+   "fields": [
     {
-      "id": "hero", "group": "home", "title": "Первый экран", "where": "Главная · 1-й блок", "icon": "sparkle",
-      "hint": "Самый первый экран. Заголовок из двух строк: вторая строка подсвечивается цветом.",
-      "fields": [
-        {"key": "HERO", "type": "object", "fields": [
-          {"key": "eyebrow", "label": "Надпись над заголовком", "type": "text", "max": 60},
-          {"key": "lines", "label": "Заголовок", "type": "tuple", "items": [
-            {"label": "Первая строка", "type": "text", "max": 40, "required": true},
-            {"label": "Вторая строка (подсвечена)", "type": "text", "max": 40, "required": true}
-          ]},
-          {"key": "lead", "label": "Описание под заголовком", "type": "textarea", "max": 260, "required": true},
-          {"key": "caption", "label": "Подпись под кнопками", "type": "text", "max": 80},
-          {"key": "art_caption", "label": "Подпись у 3D-иллюстрации", "type": "text", "max": 40}
-        ]}
-      ]
+     "key": "HERO",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "lines",
+       "label": "Заголовок",
+       "type": "tuple",
+       "items": [
+        {
+         "label": "Первая строка",
+         "type": "text",
+         "max": 40,
+         "required": true
+        },
+        {
+         "label": "Вторая строка (подсвечена)",
+         "type": "text",
+         "max": 40,
+         "required": true
+        }
+       ]
+      },
+      {
+       "key": "lead",
+       "label": "Описание под заголовком",
+       "type": "textarea",
+       "max": 260,
+       "required": true
+      },
+      {
+       "key": "caption",
+       "label": "Подпись под кнопками",
+       "type": "text",
+       "max": 80
+      },
+      {
+       "key": "art_caption",
+       "label": "Подпись у 3D-иллюстрации",
+       "type": "text",
+       "max": 40
+      }
+     ]
     },
     {
-      "id": "statement", "group": "home", "title": "Заявление и цифры", "where": "Главная · 2-й блок", "icon": "chart",
-      "hint": "Крупное утверждение о студии и три цифры под ним. Цифры с числом в начале плавно отсчитываются при прокрутке.",
-      "fields": [
-        {"key": "STATEMENT", "label": "Утверждение", "type": "tuple", "items": [
-          {"label": "Первая часть (яркая)", "type": "textarea", "max": 140, "required": true},
-          {"label": "Вторая часть (проявляется при прокрутке)", "type": "textarea", "max": 220, "required": true}
-        ]},
-        {"key": "STATS", "label": "Цифры", "type": "list", "min": 1, "max": 3, "itemTitle": 0, "item": {"type": "tuple", "items": [
-          {"label": "Цифра", "type": "text", "max": 10, "required": true, "hint": "Например «120+», «97%», «−40%»"},
-          {"label": "Подпись", "type": "text", "max": 40, "required": true},
-          {"label": "Пояснение", "type": "text", "max": 80}
-        ]}}
-      ]
+     "key": "TEXTS.hero",
+     "label": "Кнопки и подписи",
+     "type": "object",
+     "fields": [
+      {
+       "key": "cta",
+       "label": "Главная кнопка",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "link",
+       "label": "Ссылка рядом с кнопкой",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "art_alt",
+       "label": "Описание картинки для незрячих",
+       "type": "text",
+       "max": 120
+      }
+     ]
     },
     {
-      "id": "approach", "group": "home", "title": "Команда и этапы работы", "where": "Главная · 3-й блок", "icon": "user",
-      "hint": "Кто работает над сайтом и как идёт работа по этапам.",
-      "fields": [
-        {"key": "ROLES", "label": "Роли в команде", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Значок", "type": "text", "readonly": true, "hidden": true},
-          {"label": "Роль", "type": "text", "max": 30, "required": true},
-          {"label": "Что делает", "type": "text", "max": 90}
-        ]}},
-        {"key": "STEPS", "label": "Этапы", "type": "list", "min": 2, "max": 8, "itemTitle": 0, "item": {"type": "tuple", "items": [
-          {"label": "Этап", "type": "text", "max": 40, "required": true},
-          {"label": "Кто ведёт", "type": "text", "max": 30, "required": true},
-          {"label": "Что происходит", "type": "textarea", "max": 200, "required": true},
-          {"label": "Чем помогает AI", "type": "text", "max": 120},
-          {"label": "Срок", "type": "text", "max": 20}
-        ]}}
-      ]
+     "key": "IMAGES.hero",
+     "label": "Картинка первого экрана",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера. Она же — в баннере внизу страниц и на странице 404"
     },
     {
-      "id": "services", "group": "home", "title": "Услуги", "where": "Главная · 4-й блок", "icon": "layers",
-      "hint": "Три услуги с картинками. Состав услуг связан с формой заявки и тарифами, поэтому меняются только тексты.",
-      "fields": [
-        {"key": "SERVICES", "label": "Услуги", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Ключ", "type": "text", "readonly": true},
-          {"label": "Название", "type": "text", "max": 40, "required": true},
-          {"label": "Описание", "type": "textarea", "max": 200, "required": true},
-          {"label": "Метки", "type": "list", "min": 0, "max": 4, "item": {"type": "text", "max": 24, "required": true}}
-        ]}}
-      ]
-    },
-    {
-      "id": "why", "group": "home", "title": "Почему мы", "where": "Главная · 5-й блок", "icon": "bulb",
-      "hint": "Преимущества студии: короткие тезисы и пункты базового SEO.",
-      "fields": [
-        {"key": "FEATURES", "label": "Тезисы у первого экрана", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Значок", "type": "text", "readonly": true, "hidden": true},
-          {"label": "Тезис", "type": "text", "max": 50, "required": true}
-        ]}},
-        {"key": "TRUST", "label": "Короткие гарантии", "type": "list", "min": 0, "max": 4, "item": {"type": "text", "max": 50, "required": true}},
-        {"key": "SEO_ITEMS", "label": "Что входит в базовое SEO", "type": "list", "min": 1, "max": 8, "item": {"type": "text", "max": 50, "required": true}}
-      ]
-    },
-    {
-      "id": "tariffs", "group": "home", "title": "Тарифы и цены", "where": "Главная · 6-й блок", "icon": "ruble",
-      "hint": "Три тарифа. Цены и состав меняются здесь; сами тарифы связаны с формой заявки.",
-      "fields": [
-        {"key": "TARIFFS", "label": "Тарифы", "type": "list", "fixed": true, "itemTitle": "name", "item": {"type": "object", "fields": [
-          {"key": "id", "label": "Ключ", "type": "text", "readonly": true},
-          {"key": "name", "label": "Название", "type": "text", "max": 30, "required": true},
-          {"key": "sub", "label": "Подзаголовок", "type": "text", "max": 40},
-          {"key": "popular", "label": "Отметить как популярный", "type": "toggle"},
-          {"key": "price", "label": "Цена", "type": "text", "max": 24, "required": true, "hint": "Как будет написано: «69 000 ₽», «от 300 000 ₽»"},
-          {"key": "price_note", "label": "Подпись к цене", "type": "text", "max": 40},
-          {"key": "term", "label": "Срок", "type": "text", "max": 30},
-          {"key": "features", "label": "Что входит", "type": "list", "min": 1, "max": 8, "item": {"type": "text", "max": 80, "required": true}}
-        ]}},
-        {"key": "TARIFF_NOTE", "label": "Примечание под тарифами", "type": "textarea", "max": 240}
-      ]
-    },
-    {
-      "id": "reviews", "group": "home", "title": "Отзывы", "where": "Главная · 7-й блок", "icon": "star",
-      "hint": "Отзывы клиентов. Каждый привязан к кейсу — по нему берётся цвет карточки.",
-      "fields": [
-        {"key": "REVIEWS", "label": "Отзывы", "type": "list", "min": 0, "max": 6, "itemTitle": 0, "item": {"type": "tuple", "items": [
-          {"label": "Имя", "type": "text", "max": 40, "required": true},
-          {"label": "Кто это", "type": "text", "max": 60},
-          {"label": "Кейс", "type": "select", "optionsFrom": "CASES.slug", "required": true},
-          {"label": "Текст отзыва", "type": "textarea", "max": 400, "required": true}
-        ]}}
-      ]
-    },
-    {
-      "id": "faq", "group": "home", "title": "Вопросы и ответы", "where": "Главная · 8-й блок", "icon": "help",
-      "hint": "Показываются на главной и попадают в разметку для поисковиков.",
-      "fields": [
-        {"key": "FAQ", "label": "Вопросы", "type": "list", "min": 0, "max": 12, "itemTitle": 0, "item": {"type": "tuple", "items": [
-          {"label": "Вопрос", "type": "text", "max": 120, "required": true},
-          {"label": "Ответ", "type": "textarea", "max": 600, "required": true}
-        ]}}
-      ]
-    },
-    {
-      "id": "cases", "group": "pages", "title": "Проекты", "where": "Страница «Проекты» и страницы кейсов", "icon": "briefcase",
-      "hint": "Каждый кейс — своя страница /projects/ключ. Отмеченные «на главной» попадают на главную. Для нового кейса загрузите обложку.",
-      "fields": [
-        {"key": "CATEGORIES", "label": "Фильтры на странице «Проекты»", "type": "map", "fixedKeys": true, "item": {"type": "text", "max": 30, "required": true}},
-        {"key": "CASES", "label": "Кейсы", "type": "list", "min": 1, "max": 40, "itemTitle": "title", "item": {"type": "object", "fields": [
-          {"key": "slug", "label": "Ключ (адрес страницы)", "type": "text", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "max": 40, "required": true, "unique": true, "hint": "Латиница, цифры и дефис: arch-bureau → /projects/arch-bureau"},
-          {"key": "type", "label": "Фильтр", "type": "select", "optionsFrom": "CATEGORIES", "required": true},
-          {"key": "featured", "label": "Показывать на главной", "type": "toggle"},
-          {"key": "title", "label": "Название", "type": "text", "max": 80, "required": true},
-          {"key": "client", "label": "Клиент", "type": "text", "max": 60},
-          {"key": "term", "label": "Срок", "type": "text", "max": 30},
-          {"key": "tariff", "label": "Тариф", "type": "text", "max": 40},
-          {"key": "cover", "label": "Обложка", "type": "image", "hint": "JPEG или PNG, лучше 2000 px по ширине. Без обложки кейс показывает 3D-рендер, если он есть, иначе цветную заглушку."},
-          {"key": "colors", "label": "Цвета кейса", "type": "tuple", "items": [
-            {"label": "Основной", "type": "color", "required": true},
-            {"label": "Светлый", "type": "color", "required": true},
-            {"label": "Фон", "type": "color", "required": true}
-          ]},
-          {"key": "lead", "label": "Короткое описание", "type": "textarea", "max": 240, "required": true},
-          {"key": "task", "label": "Задача", "type": "textarea", "max": 600, "required": true},
-          {"key": "solution", "label": "Решение", "type": "list", "min": 1, "max": 8, "item": {"type": "textarea", "max": 300, "required": true}},
-          {"key": "tech", "label": "Технологии", "type": "list", "min": 0, "max": 12, "item": {"type": "text", "max": 30, "required": true}},
-          {"key": "ai", "label": "Где помог AI", "type": "list", "min": 0, "max": 8, "item": {"type": "text", "max": 200, "required": true}},
-          {"key": "results", "label": "Результаты", "type": "list", "min": 0, "max": 4, "item": {"type": "tuple", "items": [
-            {"label": "Цифра", "type": "text", "max": 12, "required": true},
-            {"label": "Подпись", "type": "text", "max": 60, "required": true}
-          ]}}
-        ]}}
-      ]
-    },
-    {
-      "id": "blog", "group": "pages", "title": "Блог", "where": "Страница «Блог» и статьи", "icon": "pen",
-      "hint": "Каждая статья — своя страница /blog/ключ. Текст статьи собирается из абзацев, подзаголовков, списков и цитат.",
-      "fields": [
-        {"key": "BLOG_CATEGORIES", "label": "Рубрики", "type": "map", "fixedKeys": true, "item": {"type": "text", "max": 30, "required": true}},
-        {"key": "ARTICLES", "label": "Статьи", "type": "list", "min": 0, "max": 200, "itemTitle": "title", "item": {"type": "object", "fields": [
-          {"key": "slug", "label": "Ключ (адрес страницы)", "type": "text", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "max": 60, "required": true, "unique": true},
-          {"key": "cat", "label": "Рубрика", "type": "select", "optionsFrom": "BLOG_CATEGORIES", "required": true},
-          {"key": "date", "label": "Дата", "type": "date", "required": true},
-          {"key": "read", "label": "Минут чтения", "type": "number", "integer": true, "min": 1, "max": 90, "required": true},
-          {"key": "featured", "label": "Главная статья блога", "type": "toggle"},
-          {"key": "title", "label": "Заголовок", "type": "text", "max": 110, "required": true},
-          {"key": "desc", "label": "Описание (для списка и поисковиков)", "type": "textarea", "max": 200, "required": true},
-          {"key": "body", "label": "Текст статьи", "type": "blocks", "min": 1, "max": 200}
-        ]}}
-      ]
-    },
-    {
-      "id": "site", "group": "settings", "title": "Контакты, меню, реквизиты", "where": "Шапка и подвал на всех страницах", "icon": "phone",
-      "hint": "Контакты, соцсети и пункты меню. Пустая соцсеть на сайте не показывается.",
-      "fields": [
-        {"key": "SITE", "type": "object", "fields": [
-          {"key": "name", "label": "Название", "type": "text", "max": 40, "required": true},
-          {"key": "name_lat", "label": "Название латиницей", "type": "text", "max": 40},
-          {"key": "url", "label": "Адрес сайта", "type": "url", "required": true, "hint": "Канонический адрес: по нему строятся карта сайта и ссылки для соцсетей"},
-          {"key": "phone", "label": "Телефон", "type": "text", "max": 24, "pattern": "^[+0-9 ()-]{6,24}$", "required": true},
-          {"key": "phone_href", "label": "Телефон для ссылки tel:", "type": "text", "pattern": "^\\+?[0-9]{6,15}$", "required": true, "hint": "Только цифры с плюсом: +79001234567"},
-          {"key": "email", "label": "Почта", "type": "email", "required": true},
-          {"key": "hours", "label": "Часы работы", "type": "text", "max": 60},
-          {"key": "city", "label": "Город", "type": "text", "max": 40},
-          {"key": "address", "label": "Адрес", "type": "text", "max": 120},
-          {"key": "map_ll", "label": "Карта: долгота,широта", "type": "text", "pattern": "^-?[0-9]{1,3}\\.[0-9]{1,8},-?[0-9]{1,2}\\.[0-9]{1,8}$", "required": true, "hint": "Например 37.6176,55.7558"},
-          {"key": "map_z", "label": "Карта: масштаб", "type": "text", "pattern": "^([1-9]|1[0-9])$", "required": true},
-          {"key": "year", "label": "Год в подвале", "type": "number", "integer": true, "min": 2000, "max": 2100, "required": true},
-          {"key": "socials", "label": "Соцсети", "type": "list", "min": 0, "max": 6, "itemTitle": 0, "item": {"type": "tuple", "items": [
-            {"label": "Название", "type": "text", "max": 30, "required": true},
-            {"label": "Короткая подпись на кнопке", "type": "text", "max": 3, "required": true},
-            {"label": "Ссылка", "type": "url", "required": true}
-          ]}},
-          {"key": "demo", "label": "Показывать плашку «Демо»", "type": "toggle", "hint": "Выключите, когда цены, кейсы и контакты станут настоящими"},
-          {"key": "endpoint", "label": "Адрес приёма заявок", "type": "text", "readonly": true, "hidden": true}
-        ]},
-        {"key": "NAV", "label": "Меню", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Ключ", "type": "text", "readonly": true, "hidden": true},
-          {"label": "Пункт меню", "type": "text", "max": 20, "required": true},
-          {"label": "Адрес", "type": "text", "readonly": true}
-        ]}}
-      ]
-    },
-    {
-      "id": "forms", "group": "settings", "title": "Поля формы заявки", "where": "Все формы заявки на сайте", "icon": "form",
-      "hint": "Подписи вариантов в формах. Сами варианты связаны с проверкой на сервере, поэтому меняются только подписи.",
-      "fields": [
-        {"key": "INTERESTS", "label": "Что интересует", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Ключ", "type": "text", "readonly": true, "hidden": true}, {"label": "Подпись", "type": "text", "max": 30, "required": true}]}},
-        {"key": "BUDGETS", "label": "Бюджет", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Ключ", "type": "text", "readonly": true, "hidden": true}, {"label": "Подпись", "type": "text", "max": 30, "required": true}]}},
-        {"key": "CALL_TIMES", "label": "Когда позвонить", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Ключ", "type": "text", "readonly": true, "hidden": true}, {"label": "Подпись", "type": "text", "max": 30, "required": true}]}},
-        {"key": "CHANNELS", "label": "Каналы для ответа", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
-          {"label": "Ключ", "type": "text", "readonly": true, "hidden": true},
-          {"label": "Название", "type": "text", "max": 20, "required": true},
-          {"label": "Подпись поля", "type": "text", "max": 30, "required": true},
-          {"label": "Подсказка в поле", "type": "text", "max": 40},
-          {"label": "Тип поля", "type": "text", "readonly": true, "hidden": true},
-          {"label": "Автозаполнение", "type": "text", "readonly": true, "hidden": true}
-        ]}}
-      ]
-    },
-    {
-      "id": "legal", "group": "settings", "title": "Политика и согласие", "where": "Страницы /privacy и /consent", "icon": "shield",
-      "hint": "Реквизиты оператора и срок хранения подставляются в тексты политики и согласия. Тексты сверьте с юристом.",
-      "fields": [
-        {"key": "SITE.operator", "label": "Оператор персональных данных", "type": "text", "max": 200, "hint": "Например: ИП Иванов Иван Иванович, ИНН 000000000000"},
-        {"key": "SITE.retention", "label": "Срок хранения заявок", "type": "text", "max": 60, "hint": "Например: 1 год"}
-      ]
+     "key": "IMAGES.hero_video",
+     "label": "Анимация 3D-буквы",
+     "type": "toggle",
+     "hint": "Работает, пока картинка первого экрана не заменена"
     }
-  ]
+   ]
+  },
+  {
+   "id": "statement",
+   "group": "home",
+   "title": "Заявление и цифры",
+   "where": "Главная · 2-й блок",
+   "icon": "chart",
+   "hint": "Крупное утверждение о студии и три цифры под ним. Цифры с числом в начале плавно отсчитываются при прокрутке.",
+   "fields": [
+    {
+     "key": "STATEMENT",
+     "label": "Утверждение",
+     "type": "tuple",
+     "items": [
+      {
+       "label": "Первая часть (яркая)",
+       "type": "textarea",
+       "max": 140,
+       "required": true
+      },
+      {
+       "label": "Вторая часть (проявляется при прокрутке)",
+       "type": "textarea",
+       "max": 220,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "STATS",
+     "label": "Цифры",
+     "type": "list",
+     "min": 1,
+     "max": 3,
+     "itemTitle": 0,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Цифра",
+        "type": "text",
+        "max": 10,
+        "required": true,
+        "hint": "Например «120+», «97%», «−40%»"
+       },
+       {
+        "label": "Подпись",
+        "type": "text",
+        "max": 40,
+        "required": true
+       },
+       {
+        "label": "Пояснение",
+        "type": "text",
+        "max": 80
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "problems",
+   "group": "home",
+   "title": "Проблемы клиента",
+   "where": "Главная · после цифр",
+   "icon": "alert",
+   "hint": "Карточки «с чем к нам приходят». Блок скрыт, пока не включён.",
+   "fields": [
+    {
+     "key": "PROBLEMS",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "show",
+       "label": "Показывать на сайте",
+       "type": "toggle"
+      },
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "items",
+       "label": "Карточки",
+       "type": "list",
+       "min": 1,
+       "max": 6,
+       "itemTitle": 0,
+       "item": {
+        "type": "tuple",
+        "items": [
+         {
+          "label": "Заголовок",
+          "type": "text",
+          "max": 60,
+          "required": true
+         },
+         {
+          "label": "Текст",
+          "type": "textarea",
+          "max": 240,
+          "required": true
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "approach",
+   "group": "home",
+   "title": "Команда и этапы работы",
+   "where": "Главная · 3-й блок",
+   "icon": "user",
+   "hint": "Кто работает над сайтом и как идёт работа по этапам.",
+   "fields": [
+    {
+     "key": "ROLES",
+     "label": "Роли в команде",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Значок",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Роль",
+        "type": "text",
+        "max": 30,
+        "required": true
+       },
+       {
+        "label": "Что делает",
+        "type": "text",
+        "max": 90
+       }
+      ]
+     }
+    },
+    {
+     "key": "STEPS",
+     "label": "Этапы",
+     "type": "list",
+     "min": 2,
+     "max": 8,
+     "itemTitle": 0,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Этап",
+        "type": "text",
+        "max": 40,
+        "required": true
+       },
+       {
+        "label": "Кто ведёт",
+        "type": "text",
+        "max": 30,
+        "required": true
+       },
+       {
+        "label": "Что происходит",
+        "type": "textarea",
+        "max": 200,
+        "required": true
+       },
+       {
+        "label": "Чем помогает AI",
+        "type": "text",
+        "max": 120
+       },
+       {
+        "label": "Срок",
+        "type": "text",
+        "max": 20
+       }
+      ]
+     }
+    },
+    {
+     "key": "TEXTS.approach",
+     "label": "Заголовок и подписи",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 80
+      },
+      {
+       "key": "who",
+       "label": "Подпись «Делает»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "ai",
+       "label": "Подпись «AI ускоряет»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "term",
+       "label": "Подпись «Срок»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "step",
+       "label": "Слово «Этап» в счётчике",
+       "type": "text",
+       "max": 12,
+       "required": true
+      },
+      {
+       "key": "total_b",
+       "label": "Итог: выделенная часть",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "total",
+       "label": "Итог: остальное",
+       "type": "text",
+       "max": 120
+      }
+     ]
+    },
+    {
+     "key": "IMAGES.approach",
+     "label": "Картинка блока",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    }
+   ]
+  },
+  {
+   "id": "services",
+   "group": "home",
+   "title": "Услуги",
+   "where": "Главная · 4-й блок",
+   "icon": "layers",
+   "hint": "Три услуги с картинками. Состав услуг связан с формой заявки и тарифами, поэтому меняются только тексты.",
+   "fields": [
+    {
+     "key": "SERVICES",
+     "label": "Услуги",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true
+       },
+       {
+        "label": "Название",
+        "type": "text",
+        "max": 40,
+        "required": true
+       },
+       {
+        "label": "Описание",
+        "type": "textarea",
+        "max": 200,
+        "required": true
+       },
+       {
+        "label": "Метки",
+        "type": "list",
+        "min": 0,
+        "max": 4,
+        "item": {
+         "type": "text",
+         "max": 24,
+         "required": true
+        }
+       }
+      ]
+     }
+    },
+    {
+     "key": "TEXTS.services",
+     "label": "Заголовок и подписи",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "lead",
+       "label": "Описание под заголовком",
+       "type": "textarea",
+       "max": 300
+      },
+      {
+       "key": "badge",
+       "label": "Плашка на карточке",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "link",
+       "label": "Ссылка на тариф",
+       "type": "text",
+       "max": 40,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "IMAGES.svc-landing",
+     "label": "Картинка: первая услуга",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.svc-multi",
+     "label": "Картинка: вторая услуга",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.svc-custom",
+     "label": "Картинка: третья услуга",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    }
+   ]
+  },
+  {
+   "id": "why",
+   "group": "home",
+   "title": "Почему мы",
+   "where": "Главная · 5-й блок",
+   "icon": "bulb",
+   "hint": "Преимущества студии: короткие тезисы и пункты базового SEO.",
+   "fields": [
+    {
+     "key": "FEATURES",
+     "label": "Тезисы у первого экрана",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Значок",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Тезис",
+        "type": "text",
+        "max": 50,
+        "required": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "TRUST",
+     "label": "Короткие гарантии",
+     "type": "list",
+     "min": 0,
+     "max": 4,
+     "item": {
+      "type": "text",
+      "max": 50,
+      "required": true
+     }
+    },
+    {
+     "key": "SEO_ITEMS",
+     "label": "Что входит в базовое SEO",
+     "type": "list",
+     "min": 1,
+     "max": 8,
+     "item": {
+      "type": "text",
+      "max": 50,
+      "required": true
+     }
+    },
+    {
+     "key": "TEXTS.why",
+     "label": "Заголовок и карточки",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "human_t",
+       "label": "Большая карточка: заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "human",
+       "label": "Большая карточка: текст",
+       "type": "textarea",
+       "max": 300
+      },
+      {
+       "key": "fast_t",
+       "label": "Карточка 2: заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "fast",
+       "label": "Карточка 2: текст",
+       "type": "textarea",
+       "max": 240
+      },
+      {
+       "key": "seo_t",
+       "label": "Карточка 3: заголовок (список ниже)",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "team_t",
+       "label": "Карточка 4: заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "team",
+       "label": "Карточка 4: текст",
+       "type": "textarea",
+       "max": 240
+      }
+     ]
+    },
+    {
+     "key": "IMAGES.why-human",
+     "label": "Картинка: большая карточка",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.why-fast",
+     "label": "Картинка: карточка 2",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.why-seo",
+     "label": "Картинка: карточка 3",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.why-team",
+     "label": "Картинка: карточка 4",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    }
+   ]
+  },
+  {
+   "id": "compare",
+   "group": "home",
+   "title": "Сравнение с обычной разработкой",
+   "where": "Главная · после «Почему мы»",
+   "icon": "list",
+   "hint": "Таблица «как у других — как у нас». Блок скрыт, пока не включён.",
+   "fields": [
+    {
+     "key": "COMPARE",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "show",
+       "label": "Показывать на сайте",
+       "type": "toggle"
+      },
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "left",
+       "label": "Заголовок левой колонки",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "right",
+       "label": "Заголовок правой колонки (выделена)",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "rows",
+       "label": "Строки",
+       "type": "list",
+       "min": 1,
+       "max": 12,
+       "itemTitle": 0,
+       "item": {
+        "type": "tuple",
+        "items": [
+         {
+          "label": "Что сравниваем",
+          "type": "text",
+          "max": 60,
+          "required": true
+         },
+         {
+          "label": "Как у других",
+          "type": "text",
+          "max": 120,
+          "required": true
+         },
+         {
+          "label": "Как у нас",
+          "type": "text",
+          "max": 120,
+          "required": true
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "works",
+   "group": "home",
+   "title": "Кейсы на главной",
+   "where": "Главная · после сравнения",
+   "icon": "grid",
+   "hint": "Какие кейсы показывать — отметка «На главной» в разделе «Портфолио» (до четырёх).",
+   "fields": [
+    {
+     "key": "TEXTS.works",
+     "label": "Заголовок",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "button",
+       "label": "Кнопка «Все проекты»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tariffs",
+   "group": "home",
+   "title": "Тарифы и цены",
+   "where": "Главная · 6-й блок",
+   "icon": "ruble",
+   "hint": "Три тарифа. Цены и состав меняются здесь; сами тарифы связаны с формой заявки.",
+   "fields": [
+    {
+     "key": "TARIFFS",
+     "label": "Тарифы",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": "name",
+     "item": {
+      "type": "object",
+      "fields": [
+       {
+        "key": "id",
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true
+       },
+       {
+        "key": "name",
+        "label": "Название",
+        "type": "text",
+        "max": 30,
+        "required": true
+       },
+       {
+        "key": "sub",
+        "label": "Подзаголовок",
+        "type": "text",
+        "max": 40
+       },
+       {
+        "key": "popular",
+        "label": "Отметить как популярный",
+        "type": "toggle"
+       },
+       {
+        "key": "price",
+        "label": "Цена",
+        "type": "text",
+        "max": 24,
+        "required": true,
+        "hint": "Как будет написано: «69 000 ₽», «от 300 000 ₽»"
+       },
+       {
+        "key": "price_note",
+        "label": "Подпись к цене",
+        "type": "text",
+        "max": 40
+       },
+       {
+        "key": "term",
+        "label": "Срок",
+        "type": "text",
+        "max": 30
+       },
+       {
+        "key": "features",
+        "label": "Что входит",
+        "type": "list",
+        "min": 1,
+        "max": 8,
+        "item": {
+         "type": "text",
+         "max": 80,
+         "required": true
+        }
+       }
+      ]
+     }
+    },
+    {
+     "key": "TARIFF_NOTE",
+     "label": "Примечание под тарифами",
+     "type": "textarea",
+     "max": 240
+    },
+    {
+     "key": "TEXTS.tariffs",
+     "label": "Заголовок и подписи",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "popular",
+       "label": "Плашка популярного тарифа",
+       "type": "text",
+       "max": 20
+      },
+      {
+       "key": "button",
+       "label": "Кнопка на тарифе",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "reviews",
+   "group": "home",
+   "title": "Отзывы",
+   "where": "Главная · 7-й блок",
+   "icon": "star",
+   "hint": "Отзывы клиентов. Каждый привязан к кейсу — по нему берётся цвет карточки.",
+   "fields": [
+    {
+     "key": "REVIEWS",
+     "label": "Отзывы",
+     "type": "list",
+     "min": 0,
+     "max": 6,
+     "itemTitle": 0,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Имя",
+        "type": "text",
+        "max": 40,
+        "required": true
+       },
+       {
+        "label": "Кто это",
+        "type": "text",
+        "max": 60
+       },
+       {
+        "label": "Кейс",
+        "type": "select",
+        "optionsFrom": "CASES.slug",
+        "required": true
+       },
+       {
+        "label": "Текст отзыва",
+        "type": "textarea",
+        "max": 400,
+        "required": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "TEXTS.reviews",
+     "label": "Заголовок и подписи",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "link",
+       "label": "Ссылка на кейс",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "terms",
+   "group": "home",
+   "title": "Условия работы",
+   "where": "Главная · перед вопросами",
+   "icon": "note",
+   "hint": "Карточки «как мы работаем»: договор, оплата, поддержка. Блок скрыт, пока не включён.",
+   "fields": [
+    {
+     "key": "TERMS",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "show",
+       "label": "Показывать на сайте",
+       "type": "toggle"
+      },
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 100
+      },
+      {
+       "key": "items",
+       "label": "Карточки",
+       "type": "list",
+       "min": 1,
+       "max": 6,
+       "itemTitle": 0,
+       "item": {
+        "type": "tuple",
+        "items": [
+         {
+          "label": "Заголовок",
+          "type": "text",
+          "max": 60,
+          "required": true
+         },
+         {
+          "label": "Текст",
+          "type": "textarea",
+          "max": 240,
+          "required": true
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "faq",
+   "group": "home",
+   "title": "Вопросы и ответы",
+   "where": "Главная · 8-й блок",
+   "icon": "help",
+   "hint": "Показываются на главной и попадают в разметку для поисковиков.",
+   "fields": [
+    {
+     "key": "FAQ",
+     "label": "Вопросы",
+     "type": "list",
+     "min": 0,
+     "max": 12,
+     "itemTitle": 0,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Вопрос",
+        "type": "text",
+        "max": 120,
+        "required": true
+       },
+       {
+        "label": "Ответ",
+        "type": "textarea",
+        "max": 600,
+        "required": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "TEXTS.faq",
+     "label": "Заголовок и кнопка",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "lead",
+       "label": "Текст под заголовком",
+       "type": "textarea",
+       "max": 200
+      },
+      {
+       "key": "button",
+       "label": "Кнопка",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "home_form",
+   "group": "home",
+   "title": "Форма заявки внизу главной",
+   "where": "Главная · перед баннером",
+   "icon": "form",
+   "hint": "Полная форма заявки прямо на главной. Поля — те же, что на странице контактов.",
+   "fields": [
+    {
+     "key": "HOME_FORM",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "show",
+       "label": "Показывать на сайте",
+       "type": "toggle"
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "sub",
+       "label": "Текст под заголовком",
+       "type": "textarea",
+       "max": 200
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cta",
+   "group": "home",
+   "title": "Баннер с призывом внизу страниц",
+   "where": "Низ главной, проектов, блога",
+   "icon": "rocket",
+   "hint": "Тёмный блок с кнопками «Позвонить» и «Написать» внизу страниц.",
+   "fields": [
+    {
+     "key": "TEXTS.cta",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "tone",
+       "label": "Продолжение заголовка (светлее)",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "lead",
+       "label": "Текст",
+       "type": "textarea",
+       "max": 260
+      },
+      {
+       "key": "call",
+       "label": "Кнопка «Позвонить»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "write",
+       "label": "Кнопка «Написать»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cases",
+   "group": "pages",
+   "title": "Портфолио",
+   "where": "Страница «Проекты» и страницы кейсов",
+   "icon": "briefcase",
+   "hint": "Каждый кейс — своя страница /projects/ключ. Отмеченные «на главной» попадают на главную. Для нового кейса загрузите обложку.",
+   "fields": [
+    {
+     "key": "CATEGORIES",
+     "label": "Фильтры на странице «Проекты»",
+     "type": "map",
+     "fixedKeys": true,
+     "item": {
+      "type": "text",
+      "max": 30,
+      "required": true
+     }
+    },
+    {
+     "key": "CASES",
+     "label": "Кейсы",
+     "type": "list",
+     "min": 1,
+     "max": 40,
+     "itemTitle": "title",
+     "item": {
+      "type": "object",
+      "fields": [
+       {
+        "key": "slug",
+        "label": "Ключ (адрес страницы)",
+        "type": "text",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+        "max": 40,
+        "required": true,
+        "unique": true,
+        "hint": "Латиница, цифры и дефис: arch-bureau → /projects/arch-bureau"
+       },
+       {
+        "key": "type",
+        "label": "Фильтр",
+        "type": "select",
+        "optionsFrom": "CATEGORIES",
+        "required": true
+       },
+       {
+        "key": "featured",
+        "label": "Показывать на главной",
+        "type": "toggle"
+       },
+       {
+        "key": "title",
+        "label": "Название",
+        "type": "text",
+        "max": 80,
+        "required": true
+       },
+       {
+        "key": "client",
+        "label": "Клиент",
+        "type": "text",
+        "max": 60
+       },
+       {
+        "key": "term",
+        "label": "Срок",
+        "type": "text",
+        "max": 30
+       },
+       {
+        "key": "tariff",
+        "label": "Тариф",
+        "type": "text",
+        "max": 40
+       },
+       {
+        "key": "cover",
+        "label": "Обложка",
+        "type": "image",
+        "hint": "JPEG или PNG, лучше 2000 px по ширине. Без обложки кейс показывает 3D-рендер, если он есть, иначе цветную заглушку."
+       },
+       {
+        "key": "colors",
+        "label": "Цвета кейса",
+        "type": "tuple",
+        "items": [
+         {
+          "label": "Основной",
+          "type": "color",
+          "required": true
+         },
+         {
+          "label": "Светлый",
+          "type": "color",
+          "required": true
+         },
+         {
+          "label": "Фон",
+          "type": "color",
+          "required": true
+         }
+        ]
+       },
+       {
+        "key": "lead",
+        "label": "Короткое описание",
+        "type": "textarea",
+        "max": 240,
+        "required": true
+       },
+       {
+        "key": "task",
+        "label": "Задача",
+        "type": "textarea",
+        "max": 600,
+        "required": true
+       },
+       {
+        "key": "solution",
+        "label": "Решение",
+        "type": "list",
+        "min": 1,
+        "max": 8,
+        "item": {
+         "type": "textarea",
+         "max": 300,
+         "required": true
+        }
+       },
+       {
+        "key": "tech",
+        "label": "Технологии",
+        "type": "list",
+        "min": 0,
+        "max": 12,
+        "item": {
+         "type": "text",
+         "max": 30,
+         "required": true
+        }
+       },
+       {
+        "key": "ai",
+        "label": "Где помог AI",
+        "type": "list",
+        "min": 0,
+        "max": 8,
+        "item": {
+         "type": "text",
+         "max": 200,
+         "required": true
+        }
+       },
+       {
+        "key": "results",
+        "label": "Результаты",
+        "type": "list",
+        "min": 0,
+        "max": 4,
+        "item": {
+         "type": "tuple",
+         "items": [
+          {
+           "label": "Цифра",
+           "type": "text",
+           "max": 12,
+           "required": true
+          },
+          {
+           "label": "Подпись",
+           "type": "text",
+           "max": 60,
+           "required": true
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "key": "TEXTS.projects",
+     "label": "Страница «Проекты»",
+     "type": "object",
+     "fields": [
+      {
+       "key": "title",
+       "label": "Заголовок страницы",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "lead",
+       "label": "Описание",
+       "type": "textarea",
+       "max": 260
+      },
+      {
+       "key": "filter",
+       "label": "Подпись фильтра (для незрячих)",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "all",
+       "label": "Кнопка фильтра «Все»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "empty",
+       "label": "Текст, если в рубрике пусто",
+       "type": "text",
+       "max": 120
+      }
+     ]
+    },
+    {
+     "key": "TEXTS.case",
+     "label": "Подписи на странице кейса",
+     "type": "object",
+     "fields": [
+      {
+       "key": "client",
+       "label": "«Клиент»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "type",
+       "label": "«Тип проекта»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "term",
+       "label": "«Срок»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "tariff",
+       "label": "«Тариф»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "tech",
+       "label": "«Технологии»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "button",
+       "label": "Кнопка",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "task",
+       "label": "«Задача»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "solution",
+       "label": "«Решение»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "ai",
+       "label": "«Где помог AI»",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "ai_note",
+       "label": "Пояснение под AI",
+       "type": "text",
+       "max": 120
+      },
+      {
+       "key": "results",
+       "label": "«Результат»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "next",
+       "label": "«Следующий проект»",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "cover_alt",
+       "label": "Описание обложки для незрячих",
+       "type": "text",
+       "max": 120
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "blog",
+   "group": "pages",
+   "title": "Блог",
+   "where": "Страница «Блог» и статьи",
+   "icon": "pen",
+   "hint": "Каждая статья — своя страница /blog/ключ. Текст статьи собирается из абзацев, подзаголовков, списков и цитат.",
+   "fields": [
+    {
+     "key": "BLOG_CATEGORIES",
+     "label": "Рубрики",
+     "type": "map",
+     "fixedKeys": true,
+     "item": {
+      "type": "text",
+      "max": 30,
+      "required": true
+     }
+    },
+    {
+     "key": "ARTICLES",
+     "label": "Статьи",
+     "type": "list",
+     "min": 0,
+     "max": 200,
+     "itemTitle": "title",
+     "item": {
+      "type": "object",
+      "fields": [
+       {
+        "key": "slug",
+        "label": "Ключ (адрес страницы)",
+        "type": "text",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+        "max": 60,
+        "required": true,
+        "unique": true
+       },
+       {
+        "key": "cat",
+        "label": "Рубрика",
+        "type": "select",
+        "optionsFrom": "BLOG_CATEGORIES",
+        "required": true
+       },
+       {
+        "key": "date",
+        "label": "Дата",
+        "type": "date",
+        "required": true
+       },
+       {
+        "key": "read",
+        "label": "Минут чтения",
+        "type": "number",
+        "integer": true,
+        "min": 1,
+        "max": 90,
+        "required": true
+       },
+       {
+        "key": "featured",
+        "label": "Главная статья блога",
+        "type": "toggle"
+       },
+       {
+        "key": "title",
+        "label": "Заголовок",
+        "type": "text",
+        "max": 110,
+        "required": true
+       },
+       {
+        "key": "desc",
+        "label": "Описание (для списка и поисковиков)",
+        "type": "textarea",
+        "max": 200,
+        "required": true
+       },
+       {
+        "key": "body",
+        "label": "Текст статьи",
+        "type": "blocks",
+        "min": 1,
+        "max": 200
+       },
+       {
+        "key": "cover",
+        "label": "Обложка статьи",
+        "type": "image",
+        "hint": "Пусто — обложка рубрики"
+       }
+      ]
+     }
+    },
+    {
+     "key": "TEXTS.blog",
+     "label": "Страница «Блог» и подписи статей",
+     "type": "object",
+     "fields": [
+      {
+       "key": "title",
+       "label": "Заголовок страницы",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "lead",
+       "label": "Описание",
+       "type": "textarea",
+       "max": 260
+      },
+      {
+       "key": "filter",
+       "label": "Подпись фильтра (для незрячих)",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "empty",
+       "label": "Текст, если в рубрике пусто",
+       "type": "text",
+       "max": 120
+      },
+      {
+       "key": "read",
+       "label": "«мин чтения»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "cta_b",
+       "label": "Призыв под статьёй: выделенная часть",
+       "type": "text",
+       "max": 80
+      },
+      {
+       "key": "cta",
+       "label": "Призыв под статьёй: остальное",
+       "type": "text",
+       "max": 160
+      },
+      {
+       "key": "cta_button",
+       "label": "Кнопка под статьёй",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "related_eyebrow",
+       "label": "«Читайте также»: надпись",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "related",
+       "label": "«Читайте также»: заголовок",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "related_tone",
+       "label": "«Читайте также»: продолжение",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "all",
+       "label": "Кнопка «Все статьи»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "IMAGES.cover-ai",
+     "label": "Обложка рубрики «AI»",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.cover-design",
+     "label": "Обложка рубрики «Дизайн»",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.cover-dev",
+     "label": "Обложка рубрики «Разработка»",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    },
+    {
+     "key": "IMAGES.cover-marketing",
+     "label": "Обложка рубрики «Маркетинг»",
+     "type": "image",
+     "hint": "Пусто — остаётся 3D-иллюстрация дизайнера"
+    }
+   ]
+  },
+  {
+   "id": "about",
+   "group": "pages",
+   "title": "О студии",
+   "where": "Страница /about",
+   "icon": "users",
+   "hint": "Отдельная страница о студии. Скрыта, пока не включена.",
+   "fields": [
+    {
+     "key": "ABOUT",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "show",
+       "label": "Показывать на сайте",
+       "type": "toggle"
+      },
+      {
+       "key": "nav",
+       "label": "Пункт в меню",
+       "type": "toggle"
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "lead",
+       "label": "Описание под заголовком",
+       "type": "textarea",
+       "max": 260
+      },
+      {
+       "key": "cover",
+       "label": "Картинка",
+       "type": "image",
+       "hint": "Необязательно"
+      },
+      {
+       "key": "body",
+       "label": "Текст страницы",
+       "type": "blocks",
+       "min": 1,
+       "max": 80
+      }
+     ]
+    },
+    {
+     "key": "SEO.about_title",
+     "label": "Заголовок для поиска",
+     "type": "text",
+     "max": 70,
+     "hint": "Пусто — заголовок страницы"
+    },
+    {
+     "key": "SEO.about_desc",
+     "label": "Описание для поиска",
+     "type": "textarea",
+     "max": 200,
+     "hint": "Пусто — описание под заголовком"
+    }
+   ]
+  },
+  {
+   "id": "landings",
+   "group": "pages",
+   "title": "Посадочные страницы под запросы",
+   "where": "Свои страницы /ключ",
+   "icon": "target",
+   "hint": "Страницы под поисковые запросы: «сайт для клиники», «лендинг для курса». Каждая — по адресу /ключ/.",
+   "fields": [
+    {
+     "key": "LANDINGS",
+     "label": "Страницы",
+     "type": "list",
+     "min": 0,
+     "max": 50,
+     "itemTitle": "title",
+     "item": {
+      "type": "object",
+      "fields": [
+       {
+        "key": "show",
+        "label": "Показывать на сайте",
+        "type": "toggle"
+       },
+       {
+        "key": "nav",
+        "label": "Пункт в меню",
+        "type": "toggle"
+       },
+       {
+        "key": "slug",
+        "label": "Ключ (адрес страницы)",
+        "type": "text",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+        "max": 60,
+        "required": true,
+        "unique": true,
+        "hint": "Латиница, цифры и дефис: sajt-dlya-kliniki → /sajt-dlya-kliniki/"
+       },
+       {
+        "key": "title",
+        "label": "Заголовок",
+        "type": "text",
+        "max": 80,
+        "required": true
+       },
+       {
+        "key": "menu",
+        "label": "Название в меню",
+        "type": "text",
+        "max": 24,
+        "hint": "Пусто — заголовок"
+       },
+       {
+        "key": "lead",
+        "label": "Описание под заголовком",
+        "type": "textarea",
+        "max": 260
+       },
+       {
+        "key": "seo_title",
+        "label": "Заголовок для поиска",
+        "type": "text",
+        "max": 70,
+        "hint": "Пусто — заголовок страницы"
+       },
+       {
+        "key": "seo_desc",
+        "label": "Описание для поиска",
+        "type": "textarea",
+        "max": 200,
+        "hint": "Пусто — описание"
+       },
+       {
+        "key": "cover",
+        "label": "Картинка",
+        "type": "image",
+        "hint": "Необязательно"
+       },
+       {
+        "key": "body",
+        "label": "Текст страницы",
+        "type": "blocks",
+        "min": 1,
+        "max": 80
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "contacts_page",
+   "group": "pages",
+   "title": "Страница контактов",
+   "where": "Страница /contacts",
+   "icon": "mail",
+   "hint": "Тексты страницы контактов и её формы. Телефон и адрес — в «Контакты, меню, реквизиты».",
+   "fields": [
+    {
+     "key": "TEXTS.contacts",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "title",
+       "label": "Заголовок страницы",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "lead",
+       "label": "Описание",
+       "type": "textarea",
+       "max": 260
+      },
+      {
+       "key": "form_title",
+       "label": "Заголовок формы",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "form_sub",
+       "label": "Текст над формой",
+       "type": "textarea",
+       "max": 200
+      },
+      {
+       "key": "name",
+       "label": "Поле «Имя»",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "name_ph",
+       "label": "Подсказка в поле «Имя»",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "contact",
+       "label": "Поле «Email или телефон»",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "contact_ph",
+       "label": "Подсказка в нём",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "budget",
+       "label": "Поле «Бюджет»",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "message",
+       "label": "Поле «Описание задачи»",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "message_ph",
+       "label": "Подсказка в нём",
+       "type": "text",
+       "max": 120
+      },
+      {
+       "key": "submit",
+       "label": "Кнопка отправки",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "phone",
+       "label": "«Телефон»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "email",
+       "label": "«Email»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "hours",
+       "label": "«Часы работы»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "office",
+       "label": "«Офис»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "socials",
+       "label": "«Мы в соцсетях»",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "map_button",
+       "label": "Кнопка карты",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "map_link",
+       "label": "Ссылка на Яндекс Карты",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "map_note",
+       "label": "Пояснение под картой",
+       "type": "textarea",
+       "max": 300
+      },
+      {
+       "key": "map_title",
+       "label": "Название карты для незрячих",
+       "type": "text",
+       "max": 60
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p404",
+   "group": "pages",
+   "title": "Страница 404 — адрес не найден",
+   "where": "Любой несуществующий адрес",
+   "icon": "alert",
+   "hint": "Что видит человек, который открыл несуществующую страницу.",
+   "fields": [
+    {
+     "key": "TEXTS.p404",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "eyebrow",
+       "label": "Надпись над заголовком",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "lead",
+       "label": "Текст",
+       "type": "textarea",
+       "max": 200
+      },
+      {
+       "key": "home",
+       "label": "Кнопка на главную",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "link",
+       "label": "Вторая ссылка",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "SEO.p404_title",
+     "label": "Заголовок вкладки",
+     "type": "text",
+     "max": 70,
+     "required": true
+    }
+   ]
+  },
+  {
+   "id": "site",
+   "group": "settings",
+   "title": "Контакты, меню, реквизиты",
+   "where": "Шапка и подвал на всех страницах",
+   "icon": "phone",
+   "hint": "Контакты, соцсети и пункты меню. Пустая соцсеть на сайте не показывается.",
+   "fields": [
+    {
+     "key": "SITE",
+     "type": "object",
+     "fields": [
+      {
+       "key": "name",
+       "label": "Название",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "name_lat",
+       "label": "Название латиницей",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "url",
+       "label": "Адрес сайта",
+       "type": "url",
+       "required": true,
+       "hint": "Канонический адрес: по нему строятся карта сайта и ссылки для соцсетей"
+      },
+      {
+       "key": "phone",
+       "label": "Телефон",
+       "type": "text",
+       "max": 24,
+       "pattern": "^[+0-9 ()-]{6,24}$",
+       "required": true
+      },
+      {
+       "key": "phone_href",
+       "label": "Телефон для ссылки tel:",
+       "type": "text",
+       "pattern": "^\\+?[0-9]{6,15}$",
+       "required": true,
+       "hint": "Только цифры с плюсом: +79001234567"
+      },
+      {
+       "key": "email",
+       "label": "Почта",
+       "type": "email",
+       "required": true
+      },
+      {
+       "key": "hours",
+       "label": "Часы работы",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "city",
+       "label": "Город",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "address",
+       "label": "Адрес",
+       "type": "text",
+       "max": 120
+      },
+      {
+       "key": "map_ll",
+       "label": "Карта: долгота,широта",
+       "type": "text",
+       "pattern": "^-?[0-9]{1,3}\\.[0-9]{1,8},-?[0-9]{1,2}\\.[0-9]{1,8}$",
+       "required": true,
+       "hint": "Например 37.6176,55.7558"
+      },
+      {
+       "key": "map_z",
+       "label": "Карта: масштаб",
+       "type": "text",
+       "pattern": "^([1-9]|1[0-9])$",
+       "required": true
+      },
+      {
+       "key": "year",
+       "label": "Год в подвале",
+       "type": "number",
+       "integer": true,
+       "min": 2000,
+       "max": 2100,
+       "required": true
+      },
+      {
+       "key": "socials",
+       "label": "Соцсети",
+       "type": "list",
+       "min": 0,
+       "max": 6,
+       "itemTitle": 0,
+       "item": {
+        "type": "tuple",
+        "items": [
+         {
+          "label": "Название",
+          "type": "text",
+          "max": 30,
+          "required": true
+         },
+         {
+          "label": "Короткая подпись на кнопке",
+          "type": "text",
+          "max": 3,
+          "required": true
+         },
+         {
+          "label": "Ссылка",
+          "type": "url",
+          "required": true
+         }
+        ]
+       }
+      },
+      {
+       "key": "demo",
+       "label": "Показывать плашку «Демо»",
+       "type": "toggle",
+       "hint": "Выключите, когда цены, кейсы и контакты станут настоящими"
+      },
+      {
+       "key": "endpoint",
+       "label": "Адрес приёма заявок",
+       "type": "text",
+       "readonly": true,
+       "hidden": true
+      }
+     ]
+    },
+    {
+     "key": "NAV",
+     "label": "Меню",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Пункт меню",
+        "type": "text",
+        "max": 20,
+        "required": true
+       },
+       {
+        "label": "Адрес",
+        "type": "text",
+        "readonly": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "IMAGES.logo",
+     "label": "Логотип картинкой",
+     "type": "image",
+     "hint": "Пусто — фирменный знак «а» и надпись. Лучше горизонтальный PNG/JPEG высотой от 80 px"
+    },
+    {
+     "key": "TEXTS.header",
+     "label": "Кнопки в шапке",
+     "type": "object",
+     "fields": [
+      {
+       "key": "cta",
+       "label": "Кнопка в шапке",
+       "type": "text",
+       "max": 24,
+       "required": true
+      },
+      {
+       "key": "menu_cta",
+       "label": "Кнопка в мобильном меню",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "TEXTS.footer",
+     "label": "Подвал",
+     "type": "object",
+     "fields": [
+      {
+       "key": "about",
+       "label": "Текст под логотипом (после подписи первого экрана)",
+       "type": "textarea",
+       "max": 160
+      },
+      {
+       "key": "button",
+       "label": "Кнопка",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "nav",
+       "label": "Заголовок «Разделы»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "services",
+       "label": "Заголовок «Услуги»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "contacts",
+       "label": "Заголовок «Контакты»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "tariffs",
+       "label": "Ссылка «Тарифы»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "faq",
+       "label": "Ссылка «Вопросы и ответы»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "privacy",
+       "label": "Ссылка на политику",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "consent",
+       "label": "Ссылка на согласие",
+       "type": "text",
+       "max": 60,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "TEXTS.demo",
+     "label": "Плашка «Демо»",
+     "type": "object",
+     "fields": [
+      {
+       "key": "b",
+       "label": "Слово на плашке",
+       "type": "text",
+       "max": 12,
+       "required": true
+      },
+      {
+       "key": "text",
+       "label": "Текст плашки",
+       "type": "text",
+       "max": 120
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "forms",
+   "group": "settings",
+   "title": "Поля формы заявки",
+   "where": "Все формы заявки на сайте",
+   "icon": "form",
+   "hint": "Подписи вариантов в формах. Сами варианты связаны с проверкой на сервере, поэтому меняются только подписи.",
+   "fields": [
+    {
+     "key": "INTERESTS",
+     "label": "Что интересует",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Подпись",
+        "type": "text",
+        "max": 30,
+        "required": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "BUDGETS",
+     "label": "Бюджет",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Подпись",
+        "type": "text",
+        "max": 30,
+        "required": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "CALL_TIMES",
+     "label": "Когда позвонить",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Подпись",
+        "type": "text",
+        "max": 30,
+        "required": true
+       }
+      ]
+     }
+    },
+    {
+     "key": "CHANNELS",
+     "label": "Каналы для ответа",
+     "type": "list",
+     "fixed": true,
+     "itemTitle": 1,
+     "item": {
+      "type": "tuple",
+      "items": [
+       {
+        "label": "Ключ",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Название",
+        "type": "text",
+        "max": 20,
+        "required": true
+       },
+       {
+        "label": "Подпись поля",
+        "type": "text",
+        "max": 30,
+        "required": true
+       },
+       {
+        "label": "Подсказка в поле",
+        "type": "text",
+        "max": 40
+       },
+       {
+        "label": "Тип поля",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       },
+       {
+        "label": "Автозаполнение",
+        "type": "text",
+        "readonly": true,
+        "hidden": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "modal",
+   "group": "settings",
+   "title": "Окно заявки по кнопке",
+   "where": "Окно по кнопкам «Заказать», «Обсудить проект»",
+   "icon": "message",
+   "hint": "Подписи окна заявки и галочки согласия. Варианты «Когда удобно» и «Куда ответить» — в «Поля формы заявки».",
+   "fields": [
+    {
+     "key": "TEXTS.modal",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "title",
+       "label": "Заголовок окна",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "sub",
+       "label": "Текст под заголовком",
+       "type": "textarea",
+       "max": 200,
+       "hint": "{hours} заменится часами работы"
+      },
+      {
+       "key": "call",
+       "label": "Плитка «Позвонить»",
+       "type": "text",
+       "max": 24,
+       "required": true
+      },
+      {
+       "key": "call_sub",
+       "label": "Пояснение к ней",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "write",
+       "label": "Плитка «Написать»",
+       "type": "text",
+       "max": 24,
+       "required": true
+      },
+      {
+       "key": "write_sub",
+       "label": "Пояснение к ней",
+       "type": "text",
+       "max": 60
+      },
+      {
+       "key": "name",
+       "label": "Поле имени",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "name_ph",
+       "label": "Подсказка в нём",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "phone",
+       "label": "Поле телефона",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "when",
+       "label": "«Когда удобно»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "where",
+       "label": "«Куда ответить»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "message",
+       "label": "Поле сообщения",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "message_ph",
+       "label": "Подсказка в нём",
+       "type": "text",
+       "max": 120
+      },
+      {
+       "key": "interest",
+       "label": "«Что интересует»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "submit_call",
+       "label": "Кнопка: звонок",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "submit_write",
+       "label": "Кнопка: сообщение",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    },
+    {
+     "key": "TEXTS.consent",
+     "label": "Галочка согласия",
+     "type": "object",
+     "fields": [
+      {
+       "key": "before",
+       "label": "Начало («Даю»)",
+       "type": "text",
+       "max": 20
+      },
+      {
+       "key": "link",
+       "label": "Ссылка на согласие",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "middle",
+       "label": "Середина («на условиях»)",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "policy",
+       "label": "Ссылка на политику",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "optional",
+       "label": "Пометка «необязательно»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "done",
+   "group": "settings",
+   "title": "Окно «Заявка отправлена»",
+   "where": "После отправки любой формы",
+   "icon": "check-circle",
+   "hint": "Что видит человек после отправки, и сообщения об ошибках в формах. {name} — имя из формы, {when} и {where} — выбранные время и канал.",
+   "fields": [
+    {
+     "key": "TEXTS.done",
+     "label": "После отправки",
+     "type": "object",
+     "fields": [
+      {
+       "key": "title",
+       "label": "Заголовок",
+       "type": "text",
+       "max": 40,
+       "required": true
+      },
+      {
+       "key": "again",
+       "label": "Кнопка «ещё одну»",
+       "type": "text",
+       "max": 30,
+       "required": true
+      },
+      {
+       "key": "call",
+       "label": "Текст после заявки на звонок",
+       "type": "textarea",
+       "max": 200,
+       "required": true
+      },
+      {
+       "key": "write",
+       "label": "Текст после сообщения",
+       "type": "textarea",
+       "max": 200,
+       "required": true
+      },
+      {
+       "key": "form",
+       "label": "Текст после формы контактов",
+       "type": "textarea",
+       "max": 200,
+       "required": true
+      },
+      {
+       "key": "when_hour",
+       "label": "{when}: в течение часа",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "when_today",
+       "label": "{when}: сегодня",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "when_tomorrow",
+       "label": "{when}: завтра",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "when_other",
+       "label": "{when}: другое",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "where_telegram",
+       "label": "{where}: Telegram",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "where_whatsapp",
+       "label": "{where}: WhatsApp",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "where_email",
+       "label": "{where}: почта",
+       "type": "text",
+       "max": 30
+      },
+      {
+       "key": "demo",
+       "label": "Приписка в демо-режиме",
+       "type": "text",
+       "max": 80
+      }
+     ]
+    },
+    {
+     "key": "TEXTS.errors",
+     "label": "Ошибки в формах",
+     "type": "object",
+     "fields": [
+      {
+       "key": "name",
+       "label": "Не указано имя",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "phone",
+       "label": "Неверный телефон",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "telegram",
+       "label": "Неверный ник Telegram",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "whatsapp",
+       "label": "Неверный WhatsApp",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "email",
+       "label": "Неверный email",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "contact",
+       "label": "Нет email или телефона",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "message",
+       "label": "Слишком короткое описание",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "consent",
+       "label": "Нет галочки согласия",
+       "type": "text",
+       "max": 100,
+       "required": true
+      },
+      {
+       "key": "too_many",
+       "label": "Слишком много заявок",
+       "type": "textarea",
+       "max": 200,
+       "required": true
+      },
+      {
+       "key": "field",
+       "label": "Ошибка в поле",
+       "type": "text",
+       "max": 60,
+       "required": true
+      },
+      {
+       "key": "fields",
+       "label": "Ошибка в форме",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "failed",
+       "label": "Не отправилось",
+       "type": "textarea",
+       "max": 200,
+       "required": true
+      },
+      {
+       "key": "failed_mail",
+       "label": "«или напишите на»",
+       "type": "text",
+       "max": 40
+      },
+      {
+       "key": "nojs",
+       "label": "Без JavaScript",
+       "type": "textarea",
+       "max": 200
+      },
+      {
+       "key": "nojs_call",
+       "label": "«позвоните»",
+       "type": "text",
+       "max": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "seo_pages",
+   "group": "settings",
+   "title": "Поиск — заголовки страниц",
+   "where": "Вкладка браузера и выдача поисковиков",
+   "icon": "search",
+   "hint": "Заголовок и описание каждой страницы для Яндекса и Google. Кейсы и статьи берут свои заголовок и описание.",
+   "fields": [
+    {
+     "key": "SEO.home_title",
+     "label": "Главная: заголовок",
+     "type": "text",
+     "max": 70,
+     "required": true
+    },
+    {
+     "key": "SEO.home_desc",
+     "label": "Главная: описание",
+     "type": "textarea",
+     "max": 220,
+     "required": true
+    },
+    {
+     "key": "SEO.projects_title",
+     "label": "Проекты: заголовок",
+     "type": "text",
+     "max": 70,
+     "required": true
+    },
+    {
+     "key": "SEO.projects_desc",
+     "label": "Проекты: описание",
+     "type": "textarea",
+     "max": 220,
+     "required": true
+    },
+    {
+     "key": "SEO.blog_title",
+     "label": "Блог: заголовок",
+     "type": "text",
+     "max": 70,
+     "required": true
+    },
+    {
+     "key": "SEO.blog_desc",
+     "label": "Блог: описание",
+     "type": "textarea",
+     "max": 220,
+     "required": true
+    },
+    {
+     "key": "SEO.contacts_title",
+     "label": "Контакты: заголовок",
+     "type": "text",
+     "max": 70,
+     "required": true
+    },
+    {
+     "key": "SEO.contacts_desc",
+     "label": "Контакты: описание",
+     "type": "textarea",
+     "max": 220,
+     "required": true
+    },
+    {
+     "key": "TEXTS.legal",
+     "label": "Политика и согласие",
+     "type": "object",
+     "fields": [
+      {
+       "key": "privacy_title",
+       "label": "Политика: заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "privacy_lead",
+       "label": "Политика: описание",
+       "type": "textarea",
+       "max": 200
+      },
+      {
+       "key": "consent_title",
+       "label": "Согласие: заголовок",
+       "type": "text",
+       "max": 80,
+       "required": true
+      },
+      {
+       "key": "consent_lead",
+       "label": "Согласие: описание",
+       "type": "textarea",
+       "max": 200
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "seo_site",
+   "group": "settings",
+   "title": "Поиск — настройки сайта",
+   "where": "Индексация, коды поисковиков, превью ссылок",
+   "icon": "globe",
+   "hint": "Видимость сайта в поиске, подтверждение прав в Яндекс Вебмастере и Google Search Console, картинка для ссылок в мессенджерах.",
+   "fields": [
+    {
+     "key": "SEO.index",
+     "label": "Показывать сайт в поиске",
+     "type": "toggle",
+     "hint": "Выключите, пока сайт не готов: поисковики не будут его индексировать"
+    },
+    {
+     "key": "SEO.indexnow",
+     "label": "Сообщать Яндексу о новых страницах (IndexNow)",
+     "type": "toggle",
+     "hint": "После каждой публикации поисковик узнаёт об изменениях за минуты, а не недели. Статус — в «Индексация»"
+    },
+    {
+     "key": "SEO.yandex_verification",
+     "label": "Код Яндекс Вебмастера",
+     "type": "text",
+     "max": 80,
+     "hint": "Только код из meta name=\"yandex-verification\""
+    },
+    {
+     "key": "SEO.google_verification",
+     "label": "Код Google Search Console",
+     "type": "text",
+     "max": 80,
+     "hint": "Только код из meta name=\"google-site-verification\""
+    },
+    {
+     "key": "SEO.org_desc",
+     "label": "Описание организации для поисковиков",
+     "type": "textarea",
+     "max": 300
+    },
+    {
+     "key": "IMAGES.og",
+     "label": "Картинка для ссылок в соцсетях и мессенджерах",
+     "type": "image",
+     "hint": "Лучше 1200×630. Пусто — картинка дизайнера"
+    },
+    {
+     "key": "IMAGES.favicon",
+     "label": "Фавикон (значок во вкладке)",
+     "type": "image",
+     "hint": "Квадратная картинка от 512×512. Пусто — знак «а» дизайнера",
+     "icon": true
+    },
+    {
+     "key": "SEO.theme_color",
+     "label": "Цвет панели браузера на телефоне",
+     "type": "color",
+     "hint": "Например #0B0E33"
+    }
+   ]
+  },
+  {
+   "id": "design",
+   "group": "settings",
+   "title": "Дизайн — цвета и отступы",
+   "where": "Цвета и размеры на всём сайте",
+   "icon": "sun",
+   "hint": "Пустое поле — остаётся то, что задал дизайнер. Ошибочные значения не сохранятся. Правки видны в предпросмотре и после публикации.",
+   "fields": [
+    {
+     "key": "DESIGN",
+     "label": "",
+     "type": "object",
+     "fields": [
+      {
+       "key": "section",
+       "label": "Отступы между блоками, px",
+       "type": "number",
+       "min": 0,
+       "max": 400,
+       "hint": "Дизайнер: 80–160 в зависимости от экрана. Меньше — короче сайт",
+       "integer": true
+      },
+      {
+       "key": "hero_pad",
+       "label": "Отступ сверху на внутренних страницах, px",
+       "type": "number",
+       "min": 0,
+       "max": 300,
+       "hint": "Дизайнер: 48–96",
+       "integer": true
+      },
+      {
+       "key": "wrap",
+       "label": "Ширина содержимого, px",
+       "type": "number",
+       "min": 800,
+       "max": 2400,
+       "hint": "Дизайнер: 1600",
+       "integer": true
+      },
+      {
+       "key": "radius",
+       "label": "Скругление углов, px",
+       "type": "number",
+       "min": 0,
+       "max": 80,
+       "hint": "Дизайнер: 28–48. Ноль — прямые углы",
+       "integer": true
+      },
+      {
+       "key": "font_size",
+       "label": "Размер основного текста, px",
+       "type": "number",
+       "min": 12,
+       "max": 24,
+       "hint": "Дизайнер: 17",
+       "integer": true
+      },
+      {
+       "key": "heading_ls",
+       "label": "Межбуквенное в заголовках, em",
+       "type": "number",
+       "min": -0.1,
+       "max": 0.1,
+       "hint": "Дизайнер: −0.045. Ближе к нулю — свободнее"
+      },
+      {
+       "key": "accent",
+       "label": "Акцент: кнопки и ссылки",
+       "type": "color",
+       "hint": "Дизайнер: #4348DB"
+      },
+      {
+       "key": "accent_dark",
+       "label": "Акцент на тёмных блоках",
+       "type": "color",
+       "hint": "Дизайнер: #A9ACF7"
+      },
+      {
+       "key": "ink",
+       "label": "Основной текст и заголовки",
+       "type": "color",
+       "hint": "Дизайнер: #0B0E33"
+      },
+      {
+       "key": "muted",
+       "label": "Серый пояснительный текст",
+       "type": "color",
+       "hint": "Дизайнер: #5F6488"
+      },
+      {
+       "key": "bg",
+       "label": "Фон страницы",
+       "type": "color",
+       "hint": "Дизайнер: #FFFFFF"
+      },
+      {
+       "key": "bg_soft",
+       "label": "Фон мягких блоков и карточек",
+       "type": "color",
+       "hint": "Дизайнер: #F4F5FA"
+      },
+      {
+       "key": "line",
+       "label": "Линии и рамки",
+       "type": "color",
+       "hint": "Дизайнер: #E3E5F0"
+      },
+      {
+       "key": "dark",
+       "label": "Тёмные блоки (первый экран, баннер)",
+       "type": "color",
+       "hint": "Дизайнер: градиент #0E1240. Однотонный цвет заменит градиент"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "legal",
+   "group": "settings",
+   "title": "Политика и cookie",
+   "where": "Страницы /privacy и /consent",
+   "icon": "shield",
+   "hint": "Реквизиты для политики и согласия и текст уведомления о cookie (показывается, когда подключена Метрика).",
+   "fields": [
+    {
+     "key": "SITE.operator",
+     "label": "Оператор персональных данных",
+     "type": "text",
+     "max": 200,
+     "hint": "Например: ИП Иванов Иван Иванович, ИНН 000000000000"
+    },
+    {
+     "key": "SITE.retention",
+     "label": "Срок хранения заявок",
+     "type": "text",
+     "max": 60,
+     "hint": "Например: 1 год"
+    },
+    {
+     "key": "CONNECT",
+     "label": "Уведомление о cookie",
+     "type": "object",
+     "fields": [
+      {
+       "key": "cookie_text",
+       "label": "Текст",
+       "type": "textarea",
+       "max": 240,
+       "required": true
+      },
+      {
+       "key": "cookie_accept",
+       "label": "Кнопка «Принять»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "cookie_decline",
+       "label": "Кнопка «Отказаться»",
+       "type": "text",
+       "max": 20,
+       "required": true
+      },
+      {
+       "key": "cookie_more",
+       "label": "Ссылка на политику",
+       "type": "text",
+       "max": 30,
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "connect",
+   "group": "settings",
+   "title": "Подключения и аналитика",
+   "where": "Счётчики на всех страницах",
+   "icon": "zap",
+   "hint": "Яндекс Метрика включается, только когда посетитель нажал «Принять» в уведомлении о cookie (152-ФЗ). Токен Telegram-бота здесь не хранится — он только на сервере.",
+   "fields": [
+    {
+     "key": "CONNECT.metrika",
+     "label": "Номер счётчика Яндекс Метрики",
+     "type": "text",
+     "max": 12,
+     "pattern": "^[0-9]{4,12}$",
+     "hint": "Только цифры, например 98765432. Пусто — счётчика нет"
+    },
+    {
+     "key": "CONNECT.webvisor",
+     "label": "Вебвизор (запись действий посетителей)",
+     "type": "toggle",
+     "hint": "Включайте, только если это указано в политике обработки данных"
+    }
+   ]
+  }
+ ]
 }

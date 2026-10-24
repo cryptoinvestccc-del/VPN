@@ -87,6 +87,7 @@ func main() {
 		}
 		srv.admin = NewAdmin(cfg, idx, fs, time.Now, logger)
 		srv.admin.uiDir = *adminUI
+		srv.admin.StartScheduler(context.Background())
 		logger.Printf("team panel on /admin/ for %d workspaces", len(cfg.Get().Workspaces))
 	}
 	for _, o := range strings.Split(*origins, ",") {

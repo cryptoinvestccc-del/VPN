@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -257,11 +258,14 @@ func pngBytes(w, h int) []byte {
 	return b.Bytes()
 }
 
-func (c *client) upload(name string, data []byte) *httptest.ResponseRecorder {
+func (c *client) upload(name string, data []byte, kind ...string) *httptest.ResponseRecorder {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	fw, _ := mw.CreateFormFile("file", name)
 	fw.Write(data)
+	if len(kind) > 0 {
+		mw.WriteField("kind", kind[0])
+	}
 	mw.Close()
 	req := httptest.NewRequest("POST", "https://admin.example/api/admin/site/media", &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
@@ -464,4 +468,272 @@ func TestSiteBlogBlocksAndHealth(t *testing.T) {
 			t.Fatalf("%s: %d", name, rec.Code)
 		}
 	}
+}
+
+func TestSiteMediaLibraryAndIcons(t *testing.T) {
+	h := newSiteHarness(t)
+	owner := h.login("owner@alpha.example")
+	manager := h.login("manager@alpha.example")
+	viewer := h.login("viewer@alpha.example")
+	beta := h.login("owner@beta.example")
+	type upResp struct {
+		ID string `json:"id"`
+	}
+	icon := decode[upResp](t, owner.upload("знак<script>.png", pngBytes(600, 400), "icon"))
+	photo := decode[upResp](t, owner.upload("photo.png", pngBytes(800, 600)))
+	if icon.ID == "" || photo.ID == "" {
+		t.Fatal("uploads failed")
+	}
+	png180 := filepath.Join(h.site("alpha").Data, "media", icon.ID+"-180.png")
+	if f, err := os.Open(png180); err != nil {
+		t.Fatalf("icon sizes not made: %v", err)
+	} else {
+		cfg, _, err := image.DecodeConfig(f)
+		f.Close()
+		if err != nil || cfg.Width != 180 || cfg.Height != 180 {
+			t.Fatalf("icon is not a 180px square: %+v %v", cfg, err)
+		}
+	}
+	if rec := owner.do("GET", "/admin/media/"+icon.ID+"-32.png", nil); rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("icon file: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	// the favicon is used, so it cannot be deleted; the library says where
+	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	if rec := owner.save("seo_site", st.Version, map[string]any{"IMAGES.favicon": icon.ID}); rec.Code != http.StatusOK {
+		t.Fatalf("save favicon: %d %s", rec.Code, rec.Body)
+	}
+	var lib struct {
+		Items []struct {
+			ID   string   `json:"id"`
+			Name string   `json:"name"`
+			Icon bool     `json:"icon"`
+			Uses []string `json:"uses"`
+		} `json:"items"`
+	}
+	lib = decode[struct {
+		Items []struct {
+			ID   string   `json:"id"`
+			Name string   `json:"name"`
+			Icon bool     `json:"icon"`
+			Uses []string `json:"uses"`
+		} `json:"items"`
+	}](t, viewer.do("GET", "/api/admin/site/media", nil))
+	if len(lib.Items) != 2 {
+		t.Fatalf("library: %+v", lib.Items)
+	}
+	for _, it := range lib.Items {
+		if it.ID == icon.ID && (!it.Icon || len(it.Uses) != 1 || strings.ContainsAny(it.Name, "<>")) {
+			t.Fatalf("icon entry: %+v", it)
+		}
+	}
+	if rec := manager.do("DELETE", "/api/admin/site/media/"+icon.ID, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("deleting a used picture: %d", rec.Code)
+	}
+	// someone else's id, a viewer, a bad id: refused, the file stays
+	if rec := beta.do("DELETE", "/api/admin/site/media/"+photo.ID, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("beta deletes alpha's picture: %d", rec.Code)
+	}
+	if rec := viewer.do("DELETE", "/api/admin/site/media/"+photo.ID, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer deletes: %d", rec.Code)
+	}
+	if rec := manager.do("DELETE", "/api/admin/site/media/..%2fmanifest", nil); rec.Code == http.StatusOK {
+		t.Fatal("bad id accepted")
+	}
+	if _, err := os.Stat(filepath.Join(h.site("alpha").Data, "media", photo.ID+"-480.jpg")); err != nil {
+		t.Fatal("photo removed by a refused request")
+	}
+	if rec := manager.do("DELETE", "/api/admin/site/media/"+photo.ID, nil); rec.Code != http.StatusOK {
+		t.Fatalf("delete unused: %d %s", rec.Code, rec.Body)
+	}
+	if _, err := os.Stat(filepath.Join(h.site("alpha").Data, "media", photo.ID+"-480.jpg")); err == nil {
+		t.Fatal("deleted picture's file is still there")
+	}
+	// the favicon reaches the published pages
+	if rec := owner.do("POST", "/api/admin/site/publish", map[string]any{}); rec.Code != http.StatusOK {
+		t.Fatalf("publish: %d %s", rec.Code, rec.Body)
+	}
+	idx, _ := os.ReadFile(filepath.Join(h.site("alpha").Root, "current", "index.html"))
+	if !strings.Contains(string(idx), "assets/media/"+icon.ID+"-32.png") {
+		t.Fatal("favicon not on the page")
+	}
+	// a picture in a kept release cannot be deleted either
+	st = decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	owner.save("seo_site", st.Version, map[string]any{"IMAGES.favicon": ""})
+	if rec := manager.do("DELETE", "/api/admin/site/media/"+icon.ID, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("deleting a picture of a kept release: %d", rec.Code)
+	}
+	// the log has the uploads, the saves and the publication
+	var log struct {
+		Items []struct {
+			Kind string `json:"kind"`
+		} `json:"items"`
+	}
+	log = decode[struct {
+		Items []struct {
+			Kind string `json:"kind"`
+		} `json:"items"`
+	}](t, viewer.do("GET", "/api/admin/site/activity", nil))
+	kinds := map[string]int{}
+	for _, it := range log.Items {
+		kinds[it.Kind]++
+	}
+	if kinds["upload"] != 2 || kinds["save"] < 2 || kinds["publish"] != 1 || kinds["delete"] != 1 {
+		t.Fatalf("activity: %v", kinds)
+	}
+	if rec := beta.do("GET", "/api/admin/site/activity", nil); strings.Contains(rec.Body.String(), icon.ID) {
+		t.Fatal("beta sees alpha's activity")
+	}
+}
+
+func TestSiteDiffScheduleAndDesign(t *testing.T) {
+	h := newSiteHarness(t)
+	owner := h.login("owner@alpha.example")
+	manager := h.login("manager@alpha.example")
+	viewer := h.login("viewer@alpha.example")
+	owner.do("POST", "/api/admin/site/publish", map[string]any{"note": "first"})
+	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	hero := deepCopy(st.Content["HERO"]).(map[string]any)
+	hero["lead"] = "Новое описание"
+	design := deepCopy(st.Content["DESIGN"]).(map[string]any)
+	design["radius"] = 12.0
+	design["accent"] = "#FF0A0A"
+	design["section"] = nil
+	if rec := owner.save("hero", st.Version, map[string]any{"HERO": hero}); rec.Code != http.StatusOK {
+		t.Fatalf("save hero: %d %s", rec.Code, rec.Body)
+	}
+	if rec := owner.save("design", st.Version+1, map[string]any{"DESIGN": design}); rec.Code != http.StatusOK {
+		t.Fatalf("save design (an empty number): %d %s", rec.Code, rec.Body)
+	}
+	design["radius"] = 500.0
+	if rec := owner.save("design", st.Version+2, map[string]any{"DESIGN": design}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("radius out of range: %d", rec.Code)
+	}
+	type diffResp struct {
+		Sections []struct {
+			ID      string   `json:"id"`
+			Changes []change `json:"changes"`
+		} `json:"sections"`
+	}
+	df := decode[diffResp](t, viewer.do("GET", "/api/admin/site/diff", nil))
+	got := map[string]bool{}
+	for _, s := range df.Sections {
+		got[s.ID] = true
+		if s.ID == "hero" && (len(s.Changes) != 1 || s.Changes[0].After != "Новое описание") {
+			t.Fatalf("hero changes: %+v", s.Changes)
+		}
+	}
+	if len(df.Sections) != 2 || !got["hero"] || !got["design"] {
+		t.Fatalf("diff sections: %+v", df.Sections)
+	}
+	// schedule: refused for viewers and for the past; runs when due
+	if rec := viewer.do("PUT", "/api/admin/site/schedule", map[string]any{"at": h.clock.Now().Add(time.Hour)}); rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer schedules: %d", rec.Code)
+	}
+	if rec := manager.do("PUT", "/api/admin/site/schedule", map[string]any{"at": h.clock.Now().Add(-time.Hour)}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("schedule in the past: %d", rec.Code)
+	}
+	if rec := manager.do("PUT", "/api/admin/site/schedule", map[string]any{"at": h.clock.Now().Add(2 * time.Hour), "note": "утром"}); rec.Code != http.StatusOK {
+		t.Fatalf("schedule: %d %s", rec.Code, rec.Body)
+	}
+	before := currentRelease(h.site("alpha"))
+	h.srv.admin.RunSchedules(context.Background())
+	if currentRelease(h.site("alpha")) != before {
+		t.Fatal("published before its time")
+	}
+	h.clock.Add(3 * time.Hour)
+	h.srv.admin.RunSchedules(context.Background())
+	sc := h.site("alpha")
+	if currentRelease(sc) == before {
+		t.Fatal("scheduled publication did not happen")
+	}
+	css, _ := os.ReadFile(filepath.Join(sc.Root, "current", "assets", "css", "main.css"))
+	if !strings.Contains(string(css), "--indigo:#FF0A0A") || !strings.Contains(string(css), "--r-l:8px") {
+		t.Fatal("design settings not in the published styles")
+	}
+	if readSchedule(sc) != nil {
+		t.Fatal("schedule kept after it ran")
+	}
+	// a plan by someone who lost the right to publish is dropped
+	manager.do("PUT", "/api/admin/site/schedule", map[string]any{"at": h.clock.Now().Add(2 * time.Hour)})
+	owner.do("PATCH", "/api/admin/users/"+h.ids["manager@alpha.example"], map[string]any{"role": "viewer"})
+	h.clock.Add(3 * time.Hour)
+	cur := currentRelease(sc)
+	h.srv.admin.RunSchedules(context.Background())
+	if currentRelease(sc) != cur || readSchedule(sc) != nil {
+		t.Fatal("a plan of a demoted manager ran or stayed")
+	}
+}
+
+func TestSiteOldDraftGetsNewBlocks(t *testing.T) {
+	h := newSiteHarness(t)
+	owner := h.login("owner@alpha.example")
+	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	// a draft made before the site had design settings and a few texts
+	sc := h.site("alpha")
+	raw, _ := os.ReadFile(draftPath(sc))
+	var d draftFile
+	json.Unmarshal(raw, &d)
+	delete(d.Content, "DESIGN")
+	delete(d.Content["TEXTS"].(map[string]any), "p404")
+	delete(d.Content["SEO"].(map[string]any), "indexnow")
+	d.Content["HERO"].(map[string]any)["lead"] = "Своё описание"
+	raw, _ = json.Marshal(d)
+	os.WriteFile(draftPath(sc), raw, 0o600)
+	st = decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	if st.Content["DESIGN"] == nil || st.Content["TEXTS"].(map[string]any)["p404"] == nil ||
+		st.Content["SEO"].(map[string]any)["indexnow"] != true {
+		t.Fatal("new blocks not filled in")
+	}
+	if st.Content["HERO"].(map[string]any)["lead"] != "Своё описание" {
+		t.Fatal("filling in new blocks changed an edited one")
+	}
+}
+
+func TestSiteIndexNow(t *testing.T) {
+	h := newSiteHarness(t)
+	owner := h.login("owner@alpha.example")
+	viewer := h.login("viewer@alpha.example")
+	sent := make(chan []byte, 4)
+	old := indexNowSend
+	indexNowSend = func(_ context.Context, body []byte) (int, error) { sent <- body; return http.StatusOK, nil }
+	t.Cleanup(func() { indexNowSend = old })
+	// demo address: nothing is sent, and no key is published
+	owner.do("POST", "/api/admin/site/publish", map[string]any{})
+	if rec := owner.do("POST", "/api/admin/site/indexing", map[string]any{}); rec.Code != http.StatusConflict {
+		t.Fatalf("IndexNow for a demo address: %d", rec.Code)
+	}
+	// a real address
+	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	site := deepCopy(st.Content["SITE"]).(map[string]any)
+	site["url"] = "https://studio-test.ru"
+	if rec := owner.save("site", st.Version, map[string]any{"SITE": site}); rec.Code != http.StatusOK {
+		t.Fatalf("save url: %d %s", rec.Code, rec.Body)
+	}
+	owner.do("POST", "/api/admin/site/publish", map[string]any{})
+	var body struct {
+		Host    string   `json:"host"`
+		Key     string   `json:"key"`
+		URLList []string `json:"urlList"`
+	}
+	select {
+	case raw := <-sent:
+		json.Unmarshal(raw, &body)
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing sent after publishing")
+	}
+	if body.Host != "studio-test.ru" || len(body.URLList) < 5 || !reIndexKey.MatchString(body.Key) {
+		t.Fatalf("report: %+v", body)
+	}
+	keyFile, err := os.ReadFile(filepath.Join(h.site("alpha").Root, "current", body.Key+".txt"))
+	if err != nil || string(keyFile) != body.Key {
+		t.Fatal("key file not published")
+	}
+	if rec := viewer.do("POST", "/api/admin/site/indexing", map[string]any{}); rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer sends: %d", rec.Code)
+	}
+	if rec := owner.do("POST", "/api/admin/site/indexing", map[string]any{}); rec.Code != http.StatusOK {
+		t.Fatalf("send again: %d %s", rec.Code, rec.Body)
+	}
+	<-sent
+	h.srv.admin.bg.Wait()
 }

@@ -58,6 +58,7 @@ type Field struct {
 	OptionsFrom string   `json:"optionsFrom,omitempty"`
 	Fixed       bool     `json:"fixed,omitempty"`
 	FixedKeys   bool     `json:"fixedKeys,omitempty"`
+	Icon        bool     `json:"icon,omitempty"` // an image uploaded as a square icon (favicon)
 	ItemTitle   any      `json:"itemTitle,omitempty"`
 	Item        *Field   `json:"item,omitempty"`
 	Items       []*Field `json:"items,omitempty"`
@@ -251,6 +252,9 @@ func (v *validator) check(f *Field, path string, val, cur any) (any, error) {
 	case "number":
 		n, ok := val.(float64)
 		if !ok {
+			if val == nil && !f.Required {
+				return nil, nil
+			}
 			return bad("нужно число")
 		}
 		if f.Integer && n != float64(int64(n)) {

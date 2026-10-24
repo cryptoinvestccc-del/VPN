@@ -385,6 +385,233 @@ CHANNELS = [
 BUDGETS = [('lt100', 'До 100 000 ₽'), ('100-300', '100–300 000 ₽'), ('gt300', 'От 300 000 ₽'), ('unknown', 'Пока не знаю')]
 
 
+# Every heading, button and label the pages show, by place on the site.
+# The panel edits them; build.py has no visible text of its own.
+TEXTS = {
+    'header': {'cta': 'Заказать', 'menu_cta': 'Обсудить проект'},
+    'hero': {'cta': 'Обсудить проект', 'link': 'Смотреть проекты',
+             'art_alt': 'Объёмная буква «а» из логотипа студии'},
+    'approach': {
+        'eyebrow': 'Наш подход', 'title': 'AI ускоряет рутину.', 'tone': 'Люди делают продукт.',
+        'who': 'Делает', 'ai': 'AI ускоряет', 'term': 'Срок', 'step': 'Этап',
+        'total_b': '10 рабочих дней', 'total': '— путь лендинга от брифа до запуска',
+    },
+    'services': {
+        'eyebrow': 'Услуги', 'title': 'Что мы делаем', 'tone': '— от страницы до продукта',
+        'lead': 'Три формата под разные задачи. В каждый уже входит работа маркетолога, UX/UI-дизайнера и разработчика, а также базовое SEO.',
+        'badge': 'Базовое SEO включено', 'link': 'Тариф и стоимость',
+    },
+    'why': {
+        'eyebrow': 'Почему мы', 'title': 'Быстро и качественно —',
+        'tone': 'потому что дизайн делает человек, а рутину берёт AI',
+        'human_t': 'Дизайн рисует человек, а не нейросеть',
+        'human': 'AI не генерирует макеты. Каждый экран проектирует UX/UI-дизайнер под вашу задачу и аудиторию — поэтому сайт не похож на шаблон и ведёт к заявке.',
+        'fast_t': 'Быстро',
+        'fast': 'AI снимает рутину на каждом этапе — лендинг от 10 рабочих дней вместо 4–6 недель.',
+        'seo_t': 'SEO уже в цене',
+        'team_t': 'Одно окно',
+        'team': 'Маркетолог, дизайнер, разработчик и менеджер проекта — в одном чате с вами. Ревью дизайна и кода людьми, автотесты форм и вёрстки.',
+    },
+    'works': {'eyebrow': 'Портфолио', 'title': 'Избранные', 'tone': 'проекты', 'button': 'Все проекты'},
+    'tariffs': {'eyebrow': 'Тарифы', 'title': 'Прозрачные цены —', 'tone': 'команда и SEO уже внутри',
+                'popular': 'Популярный', 'button': 'Заказать'},
+    'reviews': {'eyebrow': 'Отзывы', 'title': 'Что говорят', 'tone': 'клиенты', 'link': 'Смотреть кейс'},
+    'faq': {'eyebrow': 'Вопросы и ответы', 'title': 'Частые вопросы',
+            'lead': 'Не нашли ответ? Напишите — ответим в течение рабочего дня.', 'button': 'Задать вопрос'},
+    'cta': {
+        'eyebrow': 'Новый проект', 'title': 'Обсудим ваш', 'tone': 'сайт?',
+        'lead': 'Расскажите о задаче — предложим формат, сроки и стоимость в течение рабочего дня. Базовое SEO уже в цене.',
+        'call': 'Позвонить', 'write': 'Написать',
+    },
+    'footer': {
+        'about': 'Маркетолог, разработчик и UX/UI-дизайнер в связке с AI.', 'button': 'Обсудить проект',
+        'nav': 'Разделы', 'services': 'Услуги', 'contacts': 'Контакты',
+        'tariffs': 'Тарифы', 'faq': 'Вопросы и ответы',
+        'privacy': 'Политика обработки персональных данных', 'consent': 'Согласие на обработку данных',
+    },
+    'projects': {
+        'title': 'Проекты',
+        'lead': 'Лендинги, сайты компаний и интернет-магазины. В каждом кейсе — задача, решение, технологии и результат.',
+        'filter': 'Тип проекта', 'all': 'Все', 'empty': 'В этой категории пока нет проектов.',
+    },
+    'case': {
+        'client': 'Клиент', 'type': 'Тип проекта', 'term': 'Срок', 'tariff': 'Тариф', 'tech': 'Технологии',
+        'button': 'Хочу так же', 'task': 'Задача', 'solution': 'Решение', 'ai': 'Где помог AI',
+        'ai_note': 'Дизайн и решения — за людьми. AI взял на себя рутину.', 'results': 'Результат',
+        'next': 'Следующий проект', 'cover_alt': 'Макет сайта на ноутбуке и телефоне',
+    },
+    'blog': {
+        'title': 'Блог', 'lead': 'Пишем о маркетинге, дизайне и разработке — и о том, как AI меняет работу студии.',
+        'filter': 'Категория', 'empty': 'В этой категории пока нет статей.', 'read': 'мин чтения',
+        'cta_b': 'Нужен сайт, который работает на бизнес?',
+        'cta': 'Расскажите о задаче — предложим формат и сроки.', 'cta_button': 'Обсудить проект',
+        'related_eyebrow': 'Блог', 'related': 'Читайте', 'related_tone': 'также', 'all': 'Все статьи',
+    },
+    'contacts': {
+        'title': 'Контакты',
+        'lead': 'Расскажите о проекте — ответим в течение рабочего дня и предложим формат, сроки и стоимость.',
+        'form_title': 'Заявка на проект', 'form_sub': 'Заполните форму — маркетолог изучит задачу и свяжется с вами.',
+        'name': 'Имя', 'name_ph': 'Как к вам обращаться',
+        'contact': 'Email или телефон', 'contact_ph': 'name@company.ru или +7…',
+        'budget': 'Бюджет', 'message': 'Описание задачи', 'message_ph': 'Что за проект, какие сроки, есть ли сайт сейчас',
+        'submit': 'Отправить заявку',
+        'phone': 'Телефон', 'email': 'Email', 'hours': 'Часы работы', 'office': 'Офис', 'socials': 'Мы в соцсетях',
+        'map_button': 'Показать карту', 'map_link': 'Открыть в Яндекс Картах',
+        'map_note': 'Карта загружается с серверов Яндекса только после нажатия. Тогда Яндекс может установить свои cookie, в том числе Яндекс Метрики.',
+        'map_title': 'Карта: как нас найти',
+    },
+    'modal': {
+        'title': 'Обсудим проект', 'sub': 'Выберите, как удобнее связаться. Ответим в рабочее время: {hours}.',
+        'call': 'Позвонить', 'call_sub': 'Перезвоним в удобное время',
+        'write': 'Написать', 'write_sub': 'Ответим в мессенджере или на почту',
+        'name': 'Как к вам обращаться', 'name_ph': 'Имя', 'phone': 'Телефон', 'when': 'Когда удобно',
+        'where': 'Куда ответить', 'message': 'Коротко о задаче',
+        'message_ph': 'Например: лендинг для запуска курса, нужен к марту',
+        'interest': 'Что интересует', 'submit_call': 'Жду звонка', 'submit_write': 'Отправить сообщение',
+    },
+    'consent': {'before': 'Даю', 'link': 'согласие на обработку персональных данных', 'middle': 'на условиях',
+                'policy': 'политики', 'optional': 'необязательно'},
+    # The window that replaces a form once it is sent; {name}, {when},
+    # {where} are filled in from what the visitor chose.
+    'done': {
+        'title': 'Заявка отправлена', 'again': 'Отправить ещё одну',
+        'call': '{name}, перезвоним {when} — в рабочее время студии.',
+        'write': '{name}, ответим {where} в течение рабочего дня.',
+        'form': '{name}, маркетолог изучит задачу и свяжется с вами в течение рабочего дня.',
+        'when_hour': 'в течение часа', 'when_today': 'сегодня', 'when_tomorrow': 'завтра', 'when_other': 'в ближайшее время',
+        'where_telegram': 'в Telegram', 'where_whatsapp': 'в WhatsApp', 'where_email': 'на почту',
+        'demo': 'Демо-режим: заявка никуда не отправлена.',
+    },
+    'errors': {
+        'name': 'Напишите, как к вам обращаться',
+        'phone': 'Укажите телефон полностью, например +7 900 000-00-00',
+        'telegram': 'Укажите ник, например @username, или номер телефона',
+        'whatsapp': 'Укажите номер WhatsApp полностью',
+        'email': 'Укажите email, например name@company.ru',
+        'contact': 'Укажите email или телефон',
+        'message': 'Опишите задачу хотя бы в паре предложений',
+        'consent': 'Без согласия мы не сможем ответить на заявку',
+        'too_many': 'Слишком много заявок подряд. Попробуйте через несколько минут или позвоните нам.',
+        'field': 'Проверьте это поле', 'fields': 'Проверьте выделенное поле.',
+        'failed': 'Не получилось отправить заявку. Попробуйте ещё раз', 'failed_mail': 'или напишите на',
+        'nojs': 'Чтобы отправить форму, включите JavaScript — или напишите на',
+        'nojs_call': 'позвоните',
+    },
+    'p404': {'eyebrow': 'Ошибка 404', 'title': 'Такой страницы нет',
+             'lead': 'Возможно, её переместили. Начните с главной или посмотрите наши проекты.',
+             'home': 'На главную', 'link': 'Проекты'},
+    'legal': {
+        'privacy_title': 'Политика обработки персональных данных',
+        'privacy_lead': 'Как студия обрабатывает и защищает данные, которые вы оставляете на сайте.',
+        'consent_title': 'Согласие на обработку персональных данных',
+        'consent_lead': 'Текст согласия, которое вы даёте, отправляя форму на сайте.',
+    },
+    'demo': {'b': 'Демо', 'text': 'Цены, кейсы, отзывы, цифры и контакты — примеры. Заменить перед запуском.'},
+}
+
+# How pages look in search and in link previews.
+SEO = {
+    'home_title': 'Аксиомантик — сайты, которые двигают бизнес',
+    'home_desc': 'Студия «Аксиомантик»: лендинги и многостраничные сайты с индивидуальным дизайном от человека. Маркетолог, разработчик, UX/UI-дизайнер и AI в одной команде. Базовое SEO включено в стоимость.',
+    'projects_title': 'Проекты студии',
+    'projects_desc': 'Портфолио студии «Аксиомантик»: лендинги, многостраничные сайты и интернет-магазины — задачи, решения, технологии и результаты.',
+    'blog_title': 'Блог',
+    'blog_desc': 'Статьи студии «Аксиомантик» о маркетинге, дизайне, разработке сайтов и AI в дизайне.',
+    'contacts_title': 'Контакты',
+    'contacts_desc': 'Свяжитесь со студией «Аксиомантик»: заявка на сайт, телефон, email и соцсети. Ответим в течение рабочего дня.',
+    'about_title': 'О студии',
+    'about_desc': '',
+    'p404_title': 'Страница не найдена',
+    'org_desc': 'Студия цифровых продуктов: лендинги, многостраничные сайты и интернет-магазины с базовым SEO.',
+    # False hides the whole site from search engines (a site still in work)
+    'index': True,
+    # after each publication, tell Yandex (IndexNow) which pages to crawl
+    'indexnow': True,
+    'yandex_verification': '',
+    'google_verification': '',
+    'theme_color': '#0B0E33',
+}
+
+# Colours, spacing and type over the designer's. Empty — the designer's value.
+DESIGN = {
+    'section': None,    # space between blocks, px (designer: 80–160 by screen)
+    'hero_pad': None,   # space above inner page headings, px
+    'wrap': None,       # content width, px (1600)
+    'radius': None,     # large corners, px (28–48)
+    'font_size': None,  # body text, px (17)
+    'heading_ls': None,  # letter spacing in headings, em (−0.045)
+    'accent': '',       # buttons and links on light (#4348DB)
+    'accent_dark': '',  # accent on dark blocks (#A9ACF7)
+    'ink': '',          # text and headings (#0B0E33)
+    'muted': '',        # secondary text (#5F6488)
+    'bg': '',           # page (#FFFFFF)
+    'bg_soft': '',      # soft sections and cards (#F4F5FA)
+    'line': '',         # lines and borders (#E3E5F0)
+    'dark': '',         # dark blocks: first screen, call to action (#0E1240)
+}
+
+# Pictures uploaded in the panel in place of the 3D renders. Empty — the render.
+IMAGES = {
+    'logo': '', 'favicon': '', 'og': '',
+    'hero': '', 'hero_video': True, 'approach': '',
+    'svc-landing': '', 'svc-multi': '', 'svc-custom': '',
+    'why-human': '', 'why-fast': '', 'why-seo': '', 'why-team': '',
+    'cover-ai': '', 'cover-design': '', 'cover-dev': '', 'cover-marketing': '',
+}
+
+# Counters and cookie notice. The Yandex Metrika counter starts only after
+# the visitor accepts cookies in the notice.
+CONNECT = {
+    'metrika': '',
+    'webvisor': False,
+    'cookie_text': 'Мы используем cookie и Яндекс Метрику, чтобы понимать, как улучшить сайт.',
+    'cookie_accept': 'Принять',
+    'cookie_decline': 'Отказаться',
+    'cookie_more': 'Подробнее',
+}
+
+# Blocks of the home page that are off until switched on in the panel.
+COMPARE = {
+    'show': False, 'eyebrow': 'Сравнение', 'title': 'Обычная разработка', 'tone': 'и наш подход',
+    'left': 'Обычная студия', 'right': 'Аксиомантик',
+    'rows': [
+        ['Срок лендинга', '4–6 недель', 'от 10 рабочих дней'],
+        ['Дизайн', 'Шаблон или генерация', 'UX/UI-дизайнер под вашу задачу'],
+        ['SEO', 'Отдельная услуга', 'Базовое SEO в стоимости'],
+        ['Команда', 'Подрядчики по отдельности', 'Маркетолог, дизайнер и разработчик в одном чате'],
+    ],
+}
+PROBLEMS = {
+    'show': False, 'eyebrow': 'Знакомо?', 'title': 'С чем к нам', 'tone': 'приходят',
+    'items': [
+        ['Сайт не приводит заявки', 'Красиво, но посетители уходят, не дойдя до формы.'],
+        ['Долго и дорого', 'Разработка тянется месяцами, а бюджет растёт.'],
+        ['Шаблонный вид', 'Сайт похож на десятки других и не выделяет бизнес.'],
+    ],
+}
+TERMS = {
+    'show': False, 'eyebrow': 'Условия', 'title': 'Как мы', 'tone': 'работаем',
+    'items': [
+        ['Договор и смета', 'Фиксируем объём, сроки и стоимость до старта.'],
+        ['Оплата по этапам', 'Предоплата 50%, остальное — после приёмки.'],
+        ['Месяц поддержки', 'Бесплатно исправляем ошибки после запуска.'],
+    ],
+}
+HOME_FORM = {
+    'show': False, 'title': 'Оставьте заявку', 'sub': 'Ответим в течение рабочего дня и предложим формат, сроки и стоимость.',
+}
+
+# Pages of their own: «О студии» and landing pages for search queries.
+# Their bodies are blocks, like articles.
+ABOUT = {
+    'show': False, 'nav': False, 'title': 'О студии',
+    'lead': 'Небольшая команда: маркетолог, UX/UI-дизайнер и разработчик.',
+    'cover': '',
+    'body': [['p', 'Расскажите здесь о студии: кто вы, как работаете и почему вам доверяют.']],
+}
+LANDINGS = []
+
+
 # The team panel keeps the content as JSON and builds the site from it:
 # AXM_CONTENT names that file, and its values replace the ones above. Only
 # names defined above are taken; the panel has already checked every value
