@@ -199,9 +199,13 @@ func (a *Admin) handleMediaList(w http.ResponseWriter, r *http.Request, ac *acto
 		if uses == nil {
 			uses = []string{}
 		}
+		var when any // pictures uploaded before the library have no date
+		if !m.Time.IsZero() {
+			when = m.Time
+		}
 		items = append(items, map[string]any{
 			"id": id, "w": m.W, "h": m.H, "thumb": thumb, "icon": len(m.PNG) > 0, "name": m.Name,
-			"time": m.Time, "by": personOf(ac.cfg, ac.ws.ID, m.By), "uses": uses, "inRelease": released[id],
+			"time": when, "by": personOf(ac.cfg, ac.ws.ID, m.By), "uses": uses, "inRelease": released[id],
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {

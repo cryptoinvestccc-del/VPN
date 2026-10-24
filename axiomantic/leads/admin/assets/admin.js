@@ -699,8 +699,11 @@
   /* sidebar menu: «Обзор», «Заявки», the schema's groups of sections, «Доступ» */
   var ACCESS_ITEMS = [
     ['#/team', 'users', 'Пользователи', 'team', 'команда роли доступ участники логин пароль владелец менеджер наблюдатель'],
-    ['#/releases', 'history', 'Резервные копии', 'releases', 'версии публикации история вернуть откат восстановить', true],
+    ['#/indexing', 'compass', 'Индексация', 'indexing', 'яндекс поиск indexnow вебмастер страницы роботы', true],
     ['#/health', 'pulse', 'Проверка сайта', 'health', 'ошибки ссылки сборка картинки поиск seo проверить', true],
+    ['#/media', 'image', 'Медиатека', 'media', 'картинки фото изображения загрузки файлы удалить', true],
+    ['#/activity', 'clock', 'Журнал действий', 'activity', 'история кто что изменил правки события', true],
+    ['#/releases', 'history', 'Резервные копии', 'releases', 'версии публикации история вернуть откат восстановить', true],
     ['#/password', 'lock', 'Сменить пароль', 'password', 'пароль безопасность вход']
   ];
   function norm(s) { return String(s || '').toLowerCase().replace(/ё/g, 'е'); }
@@ -712,6 +715,25 @@
     (f.fields || []).forEach(function (x) { fieldWords(x, out); });
     fieldWords(f.item, out);
     return out;
+  }
+  // «Поиск по сайту»: the sidebar search also finds a section by what it says
+  function sectionTexts(sec) {
+    var out = [];
+    var c = S.site && S.site.content;
+    if (!c) return out;
+    function walk(v) {
+      if (typeof v === 'string') { if (v && !reMediaId.test(v)) out.push(v); }
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { walk(v[k]); });
+    }
+    sec.fields.forEach(function (f) { walk(getPathOf(c, f.key)); });
+    return out;
+  }
+  function getPathOf(c, key) {
+    var i = key.indexOf('.');
+    if (i < 0) return c[key];
+    var top = c[key.slice(0, i)];
+    return top && typeof top === 'object' ? top[key.slice(i + 1)] : undefined;
   }
   function renderSideNav() {
     if (!E.navBox) return;
@@ -733,7 +755,7 @@
         if (!secs.length) return;
         groups.push({ title: g.title, items: secs.map(function (sec) {
           var a = link('#/edit/' + encodeURIComponent(sec.id), secIcon(sec.icon), sec.title, 'edit:' + sec.id,
-            [sec.where, sec.hint].concat(sec.fields.reduce(function (o, f) { return fieldWords(f, o); }, [])).join(' '));
+            [sec.where, sec.hint].concat(sec.fields.reduce(function (o, f) { return fieldWords(f, o); }, []), sectionTexts(sec)).join(' '));
           a.setAttribute('title', sec.title);
           if (changed[sec.id] && S.site.current) {
             add(a, h('span', { class: 'nav__dot', title: 'Есть неопубликованные правки' }), h('span', { class: 'sr', text: ', есть неопубликованные правки' }));
@@ -950,9 +972,10 @@
     else location.hash = hash;
   }
 
-  var SIMPLE_ROUTES = { team: 1, settings: 1, analytics: 1, releases: 1, health: 1, password: 1 };
+  var SIMPLE_ROUTES = { team: 1, settings: 1, analytics: 1, releases: 1, health: 1, password: 1, media: 1, activity: 1, indexing: 1 };
   var VIEW_TITLE = { dash: 'Обзор', leads: 'Заявки', analytics: 'Аналитика заявок', team: 'Пользователи', settings: 'Рабочее пространство',
-    releases: 'Резервные копии', health: 'Проверка сайта', password: 'Сменить пароль', edit: 'Раздел', missing: 'Не найдено' };
+    releases: 'Резервные копии', health: 'Проверка сайта', password: 'Сменить пароль', edit: 'Раздел', missing: 'Не найдено',
+    media: 'Медиатека', activity: 'Журнал действий', indexing: 'Индексация' };
 
   function onRoute() {
     if (!S.user || !E.shell) return;
@@ -992,6 +1015,9 @@
       if (!(same && S.editor && S.editor.id === r.section)) render(viewEditor, r);
     } else if (r.name === 'releases') { if (!same) render(viewReleases, r); }
     else if (r.name === 'health') { if (!same) render(viewHealth, r); }
+    else if (r.name === 'media') { if (!same) render(viewMedia, r); }
+    else if (r.name === 'activity') { if (!same) render(viewActivity, r); }
+    else if (r.name === 'indexing') { if (!same) render(viewIndexing, r); }
     else if (r.name === 'password') { if (!same) render(viewPassword, r); }
     else if (r.name === 'leads') {
       if (!(same && S.leads)) render(viewLeads, r);
@@ -2541,7 +2567,7 @@
   /* ------------------------------------------------------------------ site: state */
 
   // Section icons come from the site's schema; only names we draw are used.
-  var SEC_ICONS = { sparkle: 1, chart: 1, bulb: 1, ruble: 1, star: 1, help: 1, briefcase: 1, form: 1, shield: 1, diamond: 1, layers: 1, user: 1, users: 1, check: 1, chat: 1, search: 1, pen: 1, phone: 1, send: 1, home: 1, image: 1, settings: 1,
+  var SEC_ICONS = { compass: 1, sun: 1, list: 1, grid: 1, 'check-circle': 1, alert: 1, 'eye-off': 1, sparkle: 1, chart: 1, bulb: 1, ruble: 1, star: 1, help: 1, briefcase: 1, form: 1, shield: 1, diamond: 1, layers: 1, user: 1, users: 1, check: 1, chat: 1, search: 1, pen: 1, phone: 1, send: 1, home: 1, image: 1, settings: 1,
     globe: 1, mail: 1, note: 1, shield: 1, calendar: 1, target: 1, zap: 1, bulb: 1, sparkle: 1, inbox: 1, form: 1, message: 1, clock: 1, key: 1,
     database: 1, eye: 1, bell: 1, history: 1, lock: 1, rocket: 1, type: 1, heading: 1, dashboard: 1 };
   function secIcon(name) { return has(SEC_ICONS, name) ? name : 'note'; }
@@ -2564,7 +2590,7 @@
   var siteReq = null;
   function loadSite() {
     if (!siteReq) {
-      siteReq = api('/site').then(function (d) { siteReq = null; setSite(d); return S.site; },
+      siteReq = api('/site').then(function (d) { siteReq = null; setSite(d); loadThumbs(); return S.site; },
         function (e) { siteReq = null; throw e; });
     }
     return siteReq;
@@ -2576,7 +2602,7 @@
     var schema = d.schema || (S.site && S.site.schema) || null;
     S.site = Object.assign({}, d, { schema: schema, changed: Array.isArray(d.changed) ? d.changed : [] });
     S.siteErr = null;
-    var sig = JSON.stringify([schema && schema.sections ? schema.sections.map(function (x) { return x.id; }) : [], S.site.changed, !!S.site.current]);
+    var sig = JSON.stringify([schema && schema.sections ? schema.sections.map(function (x) { return x.id; }) : [], S.site.changed, !!S.site.current, S.site.version]);
     if (sig !== E.navSig) { E.navSig = sig; renderSideNav(); }
     renderPubBar();
     if (S.onSite) S.onSite();
@@ -2600,6 +2626,7 @@
     else if (!st.current) { text = 'Ещё не опубликован'; tone = 'draft'; }
     else if (st.dirty) { var n = st.changed.length; text = 'Черновик: изменено ' + n + NB + sectionsWord(n); tone = 'draft'; }
     else { text = 'Всё опубликовано'; tone = 'ok'; }
+    if (st && st.scheduled && toDate(st.scheduled.at)) { text = 'Публикация ' + fullTime(st.scheduled.at); tone = 'draft'; }
     E.pubState.className = 'pub__state pub__state--' + tone;
     $('.pub__text', E.pubState).textContent = text;
     var names = changedSections().map(function (x) { return x.title; });
@@ -2704,21 +2731,82 @@
       : null;
     var ok = h('button', { class: 'btn btn--primary', type: 'submit' }, icon('rocket', 'ico--sm'), h('span', { class: 'btn__label', text: 'Опубликовать' }));
     var cancel = h('button', { class: 'btn btn--soft', type: 'button', text: 'Отмена' });
+    // what exactly changes: field by field, loaded when opened
+    var diffBox = h('div', { class: 'diff' });
+    var diffDet = st.current && names.length ? h('details', { class: 'diff__det' }, h('summary', { class: 'diff__sum', text: 'Подробнее: было → стало' }), diffBox) : null;
+    if (diffDet) diffDet.addEventListener('toggle', function () {
+      if (!diffDet.open || diffBox.dataset.loaded) return;
+      diffBox.dataset.loaded = '1';
+      fill(diffBox, h('div', { class: 'skel skel--line', vars: { width: '70%' } }));
+      api('/site/diff').then(function (d) {
+        var secs = (d && d.sections) || [];
+        if (!secs.length) { fill(diffBox, h('p', { class: 'muted', text: 'Отличий нет.' })); return; }
+        fill(diffBox, secs.map(function (sec) {
+          return h('div', { class: 'diff__sec' }, h('h3', { class: 'diff__title', text: sec.title }),
+            h('ul', { class: 'diff__list' }, sec.changes.map(function (c) {
+              return h('li', { class: 'diff__item' }, h('span', { class: 'diff__label', text: c.label }),
+                h('span', { class: 'diff__vals' }, h('del', { class: 'diff__was', text: c.before || 'пусто' }), h('span', { 'aria-hidden': 'true', text: ' → ' }), h('ins', { class: 'diff__now', text: c.after || 'пусто' })));
+            }), sec.more ? h('li', { class: 'diff__more', text: 'и ещё ' + sec.more }) : null));
+        }));
+      }, function (e) { fill(diffBox, h('p', { class: 'fld__err', text: errText(e) })); });
+    });
+    // publish later: a time in the browser's clock
+    var sid = nextId('later');
+    var laterChk = h('input', { type: 'checkbox', id: sid, class: 'check' });
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var localValue = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+    var soon = new Date(Date.now() + 60 * 60000);
+    var laterAt = h('input', { type: 'datetime-local', class: 'input input--date', 'aria-label': 'Когда опубликовать', min: localValue(new Date(Date.now() + 2 * 60000)), hidden: true });
+    laterAt.value = localValue(soon);
+    laterChk.addEventListener('change', function () {
+      laterAt.hidden = !laterChk.checked;
+      $('.btn__label', ok).textContent = laterChk.checked ? 'Запланировать' : 'Опубликовать';
+    });
+    var planned = st.scheduled && toDate(st.scheduled.at) ? h('p', { class: 'note' }, icon('calendar', 'ico--sm'),
+      h('span', { text: 'Уже запланировано на ' + fullTime(st.scheduled.at) + (st.scheduled.note ? ' («' + st.scheduled.note + '»)' : '') + '. ' }),
+      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: function (e) {
+        var bt = e.currentTarget;
+        working(bt, true, 'Отменяем…');
+        api('/site/schedule', { method: 'DELETE' }).then(function () { toast('Запланированная публикация отменена', 'calendar', 'ok'); planned.remove(); return loadSite(); },
+          function (er) { working(bt, false); toast(errText(er), 'alert', 'error'); });
+      } }, h('span', { class: 'btn__label', text: 'Отменить план' }))) : null;
+    var later = h('div', { class: 'later' }, h('label', { class: 'later__chk', for: sid }, laterChk, h('span', { text: 'Опубликовать позже' })), laterAt);
     var form = h('form', { class: 'dialog__form', novalidate: true },
       h('p', { class: 'dialog__text', text: lead }),
       st.current && names.length ? h('ul', { class: 'chiplist' }, names.map(function (x) { return h('li', null, h('span', { class: 'chip' }, icon(secIcon(x.icon), 'ico--xs'), x.title)); })) : null,
+      diffDet,
+      planned,
       unsaved,
       h('div', { class: 'fld fld--wide' },
         h('div', { class: 'fld__top' }, h('label', { class: 'field__label', for: tid, text: 'Что изменили' }), counter),
         note,
         h('p', { class: 'fld__hint', text: 'Необязательно. Видно в резервных копиях — проще найти нужную версию.' }),
         err),
+      later,
       h('div', { class: 'dialog__foot' }, cancel, ok));
     var m = modal({ title: 'Опубликовать сайт', icon: 'rocket', body: [form], focus: note });
     cancel.addEventListener('click', function () { m.close(); });
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       if (S.publishing) return;
+      if (laterChk.checked) {
+        var at = new Date(laterAt.value);
+        if (isNaN(at.getTime()) || at.getTime() < Date.now() + 60000) { err.textContent = 'Выберите время хотя бы через пару минут'; err.hidden = false; laterAt.focus(); return; }
+        working(ok, true, 'Планируем…');
+        ensureSaved().then(function (saved) {
+          if (!saved) { working(ok, false); return; }
+          return api('/site/schedule', { method: 'PUT', body: { at: at.toISOString(), note: note.value.trim() } }).then(function () {
+            m.close();
+            toast('Публикация запланирована на ' + fullTime(at.toISOString()), 'calendar', 'ok');
+            return loadSite().catch(function () {});
+          }, function (e2) {
+            working(ok, false);
+            err.textContent = e2.code === 'invalid' && e2.field === 'at' ? 'Время — не раньше чем через минуту и не позже чем через 90 дней' : errText(e2);
+            err.hidden = false;
+          });
+        });
+        return;
+      }
       S.publishing = true;
       m.locked = true;
       working(ok, true, 'Публикуем…');
@@ -3018,6 +3106,7 @@
     var t = f.type;
     if (t === 'toggle' || t === 'image') return '';
     if (t === 'number') {
+      if ((v === null || v === undefined) && !f.required) return '';
       if (typeof v !== 'number' || isNaN(v)) return 'Введите число';
       if (f.integer && Math.floor(v) !== v) return 'Нужно целое число';
       if ((f.min != null && v < f.min) || (f.max != null && v > f.max)) {
@@ -3236,15 +3325,20 @@
           var hex = typeof v === 'string' ? v : '';
           var picker = h('input', { class: 'color__pick', type: 'color', disabled: ro, 'aria-label': (o.label !== undefined ? o.label : f.label || 'Цвет') + ': выбрать', tabindex: ro ? '-1' : null });
           picker.value = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex.toLowerCase() : '#000000';
-          var txt = h('input', { class: 'input color__hex', id: id, type: 'text', maxlength: '7', spellcheck: 'false', autocomplete: 'off', disabled: ro, 'aria-describedby': described() });
+          var txt = h('input', { class: 'input color__hex', id: id, type: 'text', maxlength: '7', spellcheck: 'false', autocomplete: 'off', disabled: ro, 'aria-describedby': described(),
+            placeholder: f.required ? null : 'как у дизайнера' });
           txt.value = hex;
-          picker.addEventListener('input', function () { txt.value = picker.value.toUpperCase(); set(txt.value); });
+          // an empty optional colour is shown as empty, not as black
+          var markEmpty = function () { el.classList.toggle('color--empty', !/^#[0-9A-Fa-f]{6}$/.test(txt.value)); };
+          picker.addEventListener('input', function () { txt.value = picker.value.toUpperCase(); set(txt.value); markEmpty(); });
           txt.addEventListener('input', function () {
             if (/^#[0-9A-Fa-f]{6}$/.test(txt.value)) picker.value = txt.value.toLowerCase();
             set(txt.value);
+            markEmpty();
           });
           api_.focusEl = txt;
           el = h('div', { class: 'color' }, picker, txt);
+          markEmpty();
           break;
         case 'date':
           el = h('input', { class: 'input input--date', id: id, type: 'date', disabled: ro, 'aria-describedby': described() });
@@ -3274,6 +3368,10 @@
     var file = h('input', { type: 'file', accept: 'image/jpeg,image/png', class: 'sr', tabindex: '-1', 'aria-hidden': 'true' });
     var up = h('button', { class: 'btn btn--soft btn--sm', type: 'button', id: id, 'aria-describedby': described() }, icon('upload', 'ico--sm'), h('span', { class: 'btn__label', text: 'Загрузить' }));
     var rm = h('button', { class: 'btn btn--ghost btn--sm', type: 'button' }, icon('close', 'ico--sm'), 'Убрать');
+    var pick = h('button', { class: 'btn btn--ghost btn--sm', type: 'button' }, icon('grid', 'ico--sm'), 'Из медиатеки');
+    pick.addEventListener('click', function () {
+      pickMedia(!!f.icon, pick).then(function (id) { if (id) { set(id); draw(); note.textContent = 'Выбрано из медиатеки. Сохраните раздел.'; pick.focus(); } });
+    });
     var note = h('p', { class: 'img__note', role: 'status' });
     box.axmFocus = up;
     function draw() {
@@ -3286,9 +3384,10 @@
         add(frame, im);
       } else add(frame, h('span', { class: 'img__empty' }, icon('image'), h('span', { text: val ? 'Картинка не найдена' : 'Нет картинки' })));
       $('.btn__label', up).textContent = val ? 'Заменить' : 'Загрузить';
+      if (f.icon && !val) $('.btn__label', up).textContent = 'Загрузить значок';
       fill(box, frame, h('div', { class: 'img__side' },
-        h('p', { class: 'img__meta' }, val ? ['Загружена · ', h('code', { text: String(val) })] : 'JPEG или PNG, до 12' + NB + 'МБ'),
-        ro ? null : h('div', { class: 'img__btns' }, up, val ? rm : null),
+        h('p', { class: 'img__meta' }, val ? ['Загружена · ', h('code', { text: String(val) })] : f.icon ? 'Квадратный PNG или JPEG от 512' + NB + 'px' : 'JPEG или PNG, до 12' + NB + 'МБ'),
+        ro ? null : h('div', { class: 'img__btns' }, up, pick, val ? rm : null),
         note, file));
     }
     function fail(text) { note.textContent = text; note.classList.add('img__note--bad'); }
@@ -3299,6 +3398,7 @@
       if (fl.size > 12 * 1024 * 1024) { fail('Файл больше 12' + NB + 'МБ — уменьшите его'); return; }
       var fd = new FormData();
       fd.append('file', fl, fl.name || 'image');
+      if (f.icon) fd.append('kind', 'icon');
       working(up, true, 'Загрузка…');
       note.textContent = 'Загружаем ' + (fl.name || 'картинку') + '…';
       // api() adds X-CSRF-Token to every write, the multipart one too
@@ -3968,6 +4068,243 @@
           if (e.code === 'not_found') { toast('Этой версии уже нет', 'alert', 'error'); load(); }
           else if (e.code !== 'auth') toast(errText(e), 'alert', 'error');
         });
+      });
+    }
+    load();
+  }
+
+  /* ------------------------------------------------------------------ site: media library */
+
+  // thumbnails of every uploaded picture, so icons and small pictures show
+  // in the editor after a reload too
+  function loadThumbs() {
+    if (!S.features.site) return Promise.resolve([]);
+    return api('/site/media').then(function (d) {
+      var items = (d && d.items) || [];
+      items.forEach(function (it) { if (reMediaId.test(it.id) && reThumb.test(String(it.thumb || ''))) MEDIA_THUMBS[it.id] = it.thumb; });
+      return items;
+    }, function () { return []; });
+  }
+  function mediaName(it) { return it.name || ('Картинка ' + it.id.slice(0, 6)); }
+
+  // a dialog to choose an uploaded picture; resolves with its id or null
+  function pickMedia(iconOnly, returnTo) {
+    return new Promise(function (resolve) {
+      var grid = h('div', { class: 'mlib mlib--pick', 'aria-busy': 'true' }, h('div', { class: 'skel skel--line', vars: { width: '60%' } }));
+      var chosen = null;
+      var m = modal({ title: 'Медиатека', icon: 'image', wide: true, returnTo: returnTo, body: [
+        h('p', { class: 'dialog__text', text: iconOnly ? 'Значки, загруженные раньше. Новый — кнопкой «Загрузить значок».' : 'Картинки, загруженные раньше. Нажмите на нужную.' }), grid],
+        foot: [h('button', { class: 'btn btn--soft', type: 'button', onclick: function () { m.close(); } }, 'Отмена')],
+        onClose: function () { resolve(chosen); } });
+      loadThumbs().then(function (items) {
+        grid.removeAttribute('aria-busy');
+        items = items.filter(function (it) { return iconOnly ? it.icon : true; });
+        if (!items.length) { fill(grid, h('p', { class: 'muted', text: iconOnly ? 'Значков пока нет.' : 'Картинок пока нет.' })); return; }
+        fill(grid, items.map(function (it) {
+          return h('button', { class: 'mlib__item', type: 'button', onclick: function () { chosen = it.id; m.close(); } },
+            h('span', { class: 'mlib__frame' }, it.thumb ? h('img', { src: it.thumb, alt: '', decoding: 'async', loading: 'lazy' }) : icon('image')),
+            h('span', { class: 'mlib__name', text: mediaName(it) }),
+            h('span', { class: 'mlib__meta', text: it.w + '×' + it.h }));
+        }));
+      });
+    });
+  }
+
+  function viewMedia(root, r, token) {
+    var file = h('input', { type: 'file', accept: 'image/jpeg,image/png', class: 'sr', tabindex: '-1', 'aria-hidden': 'true', multiple: true });
+    var up = can('site') ? h('button', { class: 'btn btn--primary', type: 'button' }, icon('upload', 'ico--sm'), h('span', { class: 'btn__label', text: 'Загрузить' })) : null;
+    var filterBox = h('div', { class: 'seg', role: 'group', 'aria-label': 'Показать' });
+    var grid = h('div', { class: 'mlib', 'aria-busy': 'true' }, [0, 1, 2, 3].map(function () { return h('div', { class: 'card mlib__card' }, h('div', { class: 'skel', vars: { height: '120px' } })); }));
+    var status = h('p', { class: 'sr', role: 'status' });
+    var intro = h('p', { class: 'note' }, icon('image', 'ico--sm'), h('span', { text: 'Все картинки, загруженные в панель. Удалить можно только ту, что нигде не используется — ни в черновике, ни в сохранённых копиях сайта.' }));
+    fill(root, pageHead('Медиатека', 'Картинки сайта и где они стоят', [up, file]), intro, filterBox, status, grid);
+    var all = [], mode = 'all';
+    var MODES = [['all', 'Все'], ['used', 'Используются'], ['free', 'Не используются']];
+    function drawFilter() {
+      fill(filterBox, MODES.map(function (x) {
+        return h('button', { class: 'seg__opt', type: 'button', 'aria-pressed': String(mode === x[0]), onclick: function () { mode = x[0]; drawFilter(); draw(); } }, x[1]);
+      }));
+    }
+    function draw() {
+      var items = all.filter(function (it) { return mode === 'all' || (mode === 'used') === (it.uses.length > 0 || it.inRelease); });
+      status.textContent = items.length + ' ' + plural(items.length, ['картинка', 'картинки', 'картинок']);
+      if (!items.length) {
+        fill(grid, h('div', { class: 'empty fade' }, h('span', { class: 'empty__art' }, icon('image')),
+          h('h2', { class: 'empty__title', text: all.length ? 'Здесь пусто' : 'Картинок пока нет' }),
+          h('p', { class: 'empty__text', text: all.length ? 'Под этот фильтр ничего не подходит.' : 'Загрузите картинку здесь или прямо в разделе, где она нужна.' })));
+        return;
+      }
+      fill(grid, items.map(function (it, i) {
+        var used = it.uses.length > 0;
+        var del = can('site') ? h('button', { class: 'btn btn--ghost btn--sm', type: 'button', disabled: used || it.inRelease,
+          title: used ? 'Используется — сначала уберите её из разделов' : it.inRelease ? 'Есть в сохранённой копии сайта' : null,
+          onclick: function (e) { remove(it, e.currentTarget); } }, icon('trash', 'ico--sm'), h('span', { class: 'btn__label', text: 'Удалить' })) : null;
+        return rise(h('article', { class: 'card mlib__card' },
+          h('div', { class: 'mlib__frame mlib__frame--lg' + (it.icon ? ' mlib__frame--icon' : '') }, it.thumb ? h('img', { src: it.thumb, alt: mediaName(it), decoding: 'async', loading: 'lazy' }) : icon('image')),
+          h('div', { class: 'mlib__body' },
+            h('h2', { class: 'mlib__title', text: mediaName(it) }),
+            h('p', { class: 'mlib__meta', text: [it.w + '×' + it.h + NB + 'px', it.icon ? 'значок' : '', it.time ? relTime(it.time) : '', it.by && it.by.name ? it.by.name : ''].filter(Boolean).join(' · ') }),
+            used ? h('ul', { class: 'chiplist chiplist--sm' }, it.uses.map(function (t) { return h('li', null, h('span', { class: 'chip', text: t })); }))
+              : h('p', { class: 'mlib__free', text: it.inRelease ? 'В черновике не используется, есть в копии сайта' : 'Нигде не используется' }),
+            del)), Math.min(i, 12));
+      }));
+    }
+    function load() {
+      loadThumbs().then(function (items) {
+        if (!alive(token)) return;
+        grid.removeAttribute('aria-busy');
+        all = items;
+        drawFilter();
+        draw();
+      });
+    }
+    function remove(it, btn) {
+      confirmDialog({ title: 'Удалить «' + mediaName(it) + '»?', text: 'Картинка пропадёт из медиатеки. Вернуть её можно, только загрузив снова.', ok: 'Удалить', cancel: 'Отмена', danger: true, icon: 'trash' })
+        .then(function (yes) {
+          if (!yes) return;
+          working(btn, true, 'Удаляем…');
+          api('/site/media/' + encodeURIComponent(it.id), { method: 'DELETE' }).then(function () {
+            toast('Картинка удалена', 'trash', 'ok');
+            delete MEDIA_THUMBS[it.id];
+            if (alive(token)) load();
+          }, function (e) {
+            working(btn, false);
+            if (e.code === 'in_use') toast('Картинка используется — сначала уберите её из разделов', 'alert', 'error');
+            else if (e.code !== 'auth') toast(errText(e), 'alert', 'error');
+            if (alive(token)) load();
+          });
+        });
+    }
+    if (up) {
+      up.addEventListener('click', function () { file.value = ''; file.click(); });
+      file.addEventListener('change', function () {
+        var files = Array.prototype.slice.call(file.files || []);
+        if (!files.length) return;
+        working(up, true, 'Загрузка…');
+        var done = 0, bad = 0;
+        files.reduce(function (p, fl) {
+          return p.then(function () {
+            if (!/^image\/(jpeg|png)$/.test(fl.type) || fl.size > 12 * 1024 * 1024) { bad++; return; }
+            var fd = new FormData();
+            fd.append('file', fl, fl.name || 'image');
+            return api('/site/media', { method: 'POST', form: fd, timeout: 120000 }).then(function () { done++; }, function () { bad++; });
+          });
+        }, Promise.resolve()).then(function () {
+          working(up, false);
+          if (done) toast('Загружено: ' + done, 'upload', 'ok');
+          if (bad) toast('Не загрузилось: ' + bad + ' (нужен JPEG или PNG до 12' + NB + 'МБ)', 'alert', 'error');
+          if (alive(token)) load();
+        });
+      });
+    }
+    load();
+  }
+
+  /* ------------------------------------------------------------------ site: activity log */
+
+  function activityText(it, who) {
+    var sec = it.sectionTitle ? '«' + it.sectionTitle + '»' : 'раздел';
+    var v = function (m, f) { return verb(who, m, f); };
+    switch (it.kind) {
+      case 'save': return v('сохранил', 'сохранила') + ' ' + sec;
+      case 'publish': return v('опубликовал', 'опубликовала') + ' сайт' + (it.note ? ': «' + it.note + '»' : '');
+      case 'restore': return v('вернул', 'вернула') + ' сайт к прошлой версии';
+      case 'upload': return v('загрузил', 'загрузила') + ' картинку' + (it.note ? ' «' + it.note + '»' : '');
+      case 'delete': return v('удалил', 'удалила') + ' картинку' + (it.note ? ' «' + it.note + '»' : '');
+      case 'schedule': return v('запланировал', 'запланировала') + ' публикацию на ' + (toDate(it.note) ? fullTime(it.note) : it.note);
+      case 'unschedule': return v('отменил', 'отменила') + ' запланированную публикацию';
+      case 'publish_failed': return '— запланированная публикация не прошла: ' + (it.note || '');
+      case 'indexnow': return v('отправил', 'отправила') + ' страницы сайта в Яндекс';
+    }
+    return it.kind;
+  }
+  var ACT_ICON = { save: 'save', publish: 'rocket', restore: 'history', upload: 'upload', 'delete': 'trash', schedule: 'calendar', unschedule: 'calendar', publish_failed: 'alert', indexnow: 'compass' };
+  function viewActivity(root, r, token) {
+    var list = h('div', { class: 'card alog', 'aria-busy': 'true' }, h('div', { class: 'skel skel--line', vars: { width: '60%' } }));
+    fill(root, pageHead('Журнал действий', 'Кто и что менял на сайте'), list);
+    function load() {
+      api('/site/activity?limit=300').then(function (d) {
+        if (!alive(token)) return;
+        list.removeAttribute('aria-busy');
+        var items = (d && d.items) || [];
+        if (!items.length) {
+          fill(list, h('div', { class: 'empty fade' }, h('span', { class: 'empty__art' }, icon('clock')),
+            h('h2', { class: 'empty__title', text: 'Пока пусто' }), h('p', { class: 'empty__text', text: 'Здесь появятся сохранения разделов, публикации и загрузки картинок.' })));
+          return;
+        }
+        var day = '', kids = [];
+        items.forEach(function (it) {
+          var dt = toDate(it.time);
+          var key = dt ? ymd(dt) : '';
+          if (key !== day) { day = key; kids.push(h('h2', { class: 'alog__day', text: dt ? dm(dt, true) : '—' })); }
+          var who = (it.by && it.by.name) || 'Кто-то';
+          var link = it.section && it.kind === 'save' ? h('a', { class: 'alog__link', href: '#/edit/' + encodeURIComponent(it.section) }, 'Открыть') : null;
+          kids.push(h('div', { class: 'alog__row' + (it.kind === 'publish_failed' ? ' alog__row--bad' : '') },
+            h('span', { class: 'alog__ico' }, icon(ACT_ICON[it.kind] || 'dot', 'ico--sm')),
+            h('p', { class: 'alog__text' }, b(who), ' ' + activityText(it, who)),
+            h('time', { class: 'alog__time', datetime: it.time || '', text: dt ? hm(dt) : '' }),
+            link));
+        });
+        fill(list, kids);
+      }, function (e) {
+        if (!alive(token) || e.code === 'auth') return;
+        list.removeAttribute('aria-busy');
+        fill(list, errorCard(e, load));
+      });
+    }
+    load();
+  }
+
+  /* ------------------------------------------------------------------ site: indexing */
+
+  function viewIndexing(root, r, token) {
+    var box = h('div', { class: 'idx', 'aria-busy': 'true' }, h('div', { class: 'card' }, h('div', { class: 'skel skel--line', vars: { width: '50%' } })));
+    fill(root, pageHead('Индексация', 'Как поисковики узнают о сайте'), box);
+    function row(ok, title, text, action) {
+      return h('div', { class: 'idx__row' },
+        h('span', { class: 'idx__mark idx__mark--' + (ok === true ? 'ok' : ok === false ? 'bad' : 'warn') }, icon(ok === true ? 'check' : 'alert', 'ico--sm')),
+        h('div', { class: 'idx__body' }, h('h3', { class: 'idx__title', text: title }), h('p', { class: 'idx__text', text: text }), action || null));
+    }
+    function load() {
+      api('/site/indexing').then(function (d) {
+        if (!alive(token)) return;
+        box.removeAttribute('aria-busy');
+        var last = d.last;
+        var send = can('site') ? h('button', { class: 'btn btn--primary', type: 'button', disabled: !d.ready || !d.published }, icon('compass', 'ico--sm'), h('span', { class: 'btn__label', text: 'Отправить страницы в Яндекс' })) : null;
+        if (send) send.addEventListener('click', function () {
+          working(send, true, 'Отправляем…');
+          api('/site/indexing', { method: 'POST', body: {} }).then(function (res) {
+            working(send, false);
+            var l = res && res.last;
+            if (l && l.ok) toast('Яндекс получил ' + l.count + ' ' + plural(l.count, ['страницу', 'страницы', 'страниц']), 'compass', 'ok');
+            else toast((l && l.error) || 'Не получилось отправить', 'alert', 'error');
+            if (alive(token)) load();
+          }, function (e) {
+            working(send, false);
+            if (e.code === 'republish') toast('Опубликуйте сайт ещё раз: в текущей версии нет ключа для Яндекса', 'alert', 'error');
+            else if (e.code === 'not_ready') toast('Сайт закрыт от поиска или у него ещё нет настоящего адреса', 'alert', 'error');
+            else if (e.code !== 'auth') toast(errText(e), 'alert', 'error');
+          });
+        });
+        var hostOk = !!d.host && d.host.indexOf('.') > 0 && !/\.(example|local|test)$/.test(d.host);
+        fill(box,
+          h('section', { class: 'card idx__card' },
+            row(hostOk, 'Адрес сайта', !d.host ? 'Не указан. Укажите настоящий адрес (https://…) в «Контакты, меню, реквизиты».'
+              : hostOk ? d.host : d.host + ' — это адрес-пример. Укажите настоящий домен сайта.',
+              h('a', { class: 'link', href: '#/edit/site' }, 'Изменить адрес')),
+            row(d.open, d.open ? 'Сайт открыт для поисковиков' : 'Сайт закрыт от поисковиков',
+              d.open ? 'Яндекс и Google могут показывать его в выдаче.' : 'Так и должно быть, пока сайт не готов. Открыть — в «Поиск — настройки сайта».',
+              h('a', { class: 'link', href: '#/edit/seo_site' }, 'Настройки поиска')),
+            row(d.ready && last ? last.ok : d.ready ? null : false, 'Сообщения Яндексу (IndexNow)',
+              !d.ready ? 'Не работают: сайт закрыт, IndexNow выключен или адрес ненастоящий (например, .example).'
+                : last ? (last.ok ? 'Последний раз ' + fullTime(last.time) + ': отправлено ' + last.count + ' ' + plural(last.count, ['страница', 'страницы', 'страниц']) + '.' : 'Последний раз ' + fullTime(last.time) + ': ' + (last.error || 'ошибка') + '.')
+                  : 'После каждой публикации Яндекс сам узнаёт о новых и изменённых страницах.',
+              send)),
+          h('p', { class: 'note' }, icon('help', 'ico--sm'), h('span', { text: 'Чтобы видеть, как сайт индексируется, подключите Яндекс Вебмастер и Google Search Console: код подтверждения вставляется в «Поиск — настройки сайта». Карта сайта — по адресу ' + (d.host ? 'https://' + d.host : '') + '/sitemap.xml.' })));
+      }, function (e) {
+        if (!alive(token) || e.code === 'auth') return;
+        box.removeAttribute('aria-busy');
+        fill(box, errorCard(e, load));
       });
     }
     load();
