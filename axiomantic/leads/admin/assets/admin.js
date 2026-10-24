@@ -2541,7 +2541,7 @@
   /* ------------------------------------------------------------------ site: state */
 
   // Section icons come from the site's schema; only names we draw are used.
-  var SEC_ICONS = { diamond: 1, layers: 1, user: 1, users: 1, check: 1, chat: 1, search: 1, pen: 1, phone: 1, send: 1, home: 1, image: 1, settings: 1,
+  var SEC_ICONS = { sparkle: 1, chart: 1, bulb: 1, ruble: 1, star: 1, help: 1, briefcase: 1, form: 1, shield: 1, diamond: 1, layers: 1, user: 1, users: 1, check: 1, chat: 1, search: 1, pen: 1, phone: 1, send: 1, home: 1, image: 1, settings: 1,
     globe: 1, mail: 1, note: 1, shield: 1, calendar: 1, target: 1, zap: 1, bulb: 1, sparkle: 1, inbox: 1, form: 1, message: 1, clock: 1, key: 1,
     database: 1, eye: 1, bell: 1, history: 1, lock: 1, rocket: 1, type: 1, heading: 1, dashboard: 1 };
   function secIcon(name) { return has(SEC_ICONS, name) ? name : 'note'; }

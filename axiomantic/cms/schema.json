@@ -8,7 +8,7 @@
   ],
   "sections": [
     {
-      "id": "hero", "group": "home", "title": "Первый экран", "where": "Главная · 1-й блок", "icon": "diamond",
+      "id": "hero", "group": "home", "title": "Первый экран", "where": "Главная · 1-й блок", "icon": "sparkle",
       "hint": "Самый первый экран. Заголовок из двух строк: вторая строка подсвечивается цветом.",
       "fields": [
         {"key": "HERO", "type": "object", "fields": [
@@ -24,7 +24,7 @@
       ]
     },
     {
-      "id": "statement", "group": "home", "title": "Заявление и цифры", "where": "Главная · 2-й блок", "icon": "layers",
+      "id": "statement", "group": "home", "title": "Заявление и цифры", "where": "Главная · 2-й блок", "icon": "chart",
       "hint": "Крупное утверждение о студии и три цифры под ним. Цифры с числом в начале плавно отсчитываются при прокрутке.",
       "fields": [
         {"key": "STATEMENT", "label": "Утверждение", "type": "tuple", "items": [
@@ -69,7 +69,7 @@
       ]
     },
     {
-      "id": "why", "group": "home", "title": "Почему мы", "where": "Главная · 5-й блок", "icon": "check",
+      "id": "why", "group": "home", "title": "Почему мы", "where": "Главная · 5-й блок", "icon": "bulb",
       "hint": "Преимущества студии: короткие тезисы и пункты базового SEO.",
       "fields": [
         {"key": "FEATURES", "label": "Тезисы у первого экрана", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
@@ -81,7 +81,7 @@
       ]
     },
     {
-      "id": "tariffs", "group": "home", "title": "Тарифы и цены", "where": "Главная · 6-й блок", "icon": "diamond",
+      "id": "tariffs", "group": "home", "title": "Тарифы и цены", "where": "Главная · 6-й блок", "icon": "ruble",
       "hint": "Три тарифа. Цены и состав меняются здесь; сами тарифы связаны с формой заявки.",
       "fields": [
         {"key": "TARIFFS", "label": "Тарифы", "type": "list", "fixed": true, "itemTitle": "name", "item": {"type": "object", "fields": [
@@ -98,7 +98,7 @@
       ]
     },
     {
-      "id": "reviews", "group": "home", "title": "Отзывы", "where": "Главная · 7-й блок", "icon": "chat",
+      "id": "reviews", "group": "home", "title": "Отзывы", "where": "Главная · 7-й блок", "icon": "star",
       "hint": "Отзывы клиентов. Каждый привязан к кейсу — по нему берётся цвет карточки.",
       "fields": [
         {"key": "REVIEWS", "label": "Отзывы", "type": "list", "min": 0, "max": 6, "itemTitle": 0, "item": {"type": "tuple", "items": [
@@ -110,7 +110,7 @@
       ]
     },
     {
-      "id": "faq", "group": "home", "title": "Вопросы и ответы", "where": "Главная · 8-й блок", "icon": "search",
+      "id": "faq", "group": "home", "title": "Вопросы и ответы", "where": "Главная · 8-й блок", "icon": "help",
       "hint": "Показываются на главной и попадают в разметку для поисковиков.",
       "fields": [
         {"key": "FAQ", "label": "Вопросы", "type": "list", "min": 0, "max": 12, "itemTitle": 0, "item": {"type": "tuple", "items": [
@@ -120,7 +120,7 @@
       ]
     },
     {
-      "id": "cases", "group": "pages", "title": "Проекты", "where": "Страница «Проекты» и страницы кейсов", "icon": "layers",
+      "id": "cases", "group": "pages", "title": "Проекты", "where": "Страница «Проекты» и страницы кейсов", "icon": "briefcase",
       "hint": "Каждый кейс — своя страница /projects/ключ. Отмеченные «на главной» попадают на главную. Для нового кейса загрузите обложку.",
       "fields": [
         {"key": "CATEGORIES", "label": "Фильтры на странице «Проекты»", "type": "map", "fixedKeys": true, "item": {"type": "text", "max": 30, "required": true}},
@@ -200,7 +200,7 @@
       ]
     },
     {
-      "id": "forms", "group": "settings", "title": "Поля формы заявки", "where": "Все формы заявки на сайте", "icon": "send",
+      "id": "forms", "group": "settings", "title": "Поля формы заявки", "where": "Все формы заявки на сайте", "icon": "form",
       "hint": "Подписи вариантов в формах. Сами варианты связаны с проверкой на сервере, поэтому меняются только подписи.",
       "fields": [
         {"key": "INTERESTS", "label": "Что интересует", "type": "list", "fixed": true, "itemTitle": 1, "item": {"type": "tuple", "items": [
@@ -220,7 +220,7 @@
       ]
     },
     {
-      "id": "legal", "group": "settings", "title": "Политика и согласие", "where": "Страницы /privacy и /consent", "icon": "check",
+      "id": "legal", "group": "settings", "title": "Политика и согласие", "where": "Страницы /privacy и /consent", "icon": "shield",
       "hint": "Реквизиты оператора и срок хранения подставляются в тексты политики и согласия. Тексты сверьте с юристом.",
       "fields": [
         {"key": "SITE.operator", "label": "Оператор персональных данных", "type": "text", "max": 200, "hint": "Например: ИП Иванов Иван Иванович, ИНН 000000000000"},
