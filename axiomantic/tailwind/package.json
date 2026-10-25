@@ -1,0 +1,11 @@
+{
+  "name": "axiomantic-styles",
+  "private": true,
+  "description": "Builds site/assets/css/main.css from build.py's markup. Only needed when templates change; the server does not run it.",
+  "scripts": {
+    "build": "tailwindcss -c tailwind.config.cjs -i input.css -o ../site/assets/css/main.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

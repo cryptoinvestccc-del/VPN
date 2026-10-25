@@ -1,0 +1,40 @@
+/* Inter is served from the site itself: no request leaves for Google. */
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(../fonts/inter-cyrillic-opsz-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:"Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url(../fonts/inter-latin-opsz-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+20BD,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Inter Fallback";src:local("Arial"),local("ArialMT");size-adjust:107.12%;ascent-override:90.44%;descent-override:22.52%;line-gap-override:0%}
+
+/* The designer's values; the panel's design settings come after this file. */
+:root{
+  --c-brand:116 87 230;--c-brand-hover:95 67 207;--c-brand-light:237 233 254;
+  --c-surface:255 255 255;--c-surface-muted:243 244 246;
+  --c-heading:17 24 39;--c-body:107 114 128;--c-muted:156 163 175;
+  --c-dark:17 24 39;--c-dark-text:209 213 219;
+  --r-card:2rem;--r-section:2.5rem;--r-inner:1.5rem;--w-container:72rem;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Кнопки: цвет меняется только здесь.
+   .btn-dark — основная чёрная кнопка на светлом фоне.
+   .btn-light — второстепенная серая кнопка на светлом фоне.
+   .btn-inverse — белая кнопка, только внутри тёмных блоков. */
+@layer components {
+  .btn-dark { @apply bg-dark text-white transition-all duration-300 hover:bg-slate-800; }
+  .btn-light { @apply bg-surface-muted text-text-heading transition-all duration-300 hover:bg-slate-200; }
+  .btn-inverse { @apply bg-surface text-text-heading transition-all duration-300 hover:bg-slate-200; }
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: 7rem; }
+/* Google Fonts serves Inter at its text optical size; keep that look. */
+body { -webkit-font-smoothing: antialiased; font-optical-sizing: none; }
+h1, h2, h3 { min-width: 0; text-wrap: balance; overflow-wrap: break-word; }
+p { overflow-wrap: break-word; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid rgb(var(--c-brand)); outline-offset: 4px; }
+::selection { background: rgb(var(--c-brand-light)); color: rgb(var(--c-heading)); }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

@@ -1,0 +1,47 @@
+/* Стили главной страницы: полноэкранный hero и анимация блока «Как мы решаем задачи». */
+/* HERO: первый экран занимает всю высоту окна */
+#hero {
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding-top: 144px;
+  padding-bottom: 72px;
+}
+
+@media (min-width: 1024px) {
+  #hero {
+    padding-top: clamp(170px, 21svh, 235px);
+    padding-bottom: 96px;
+  }
+}
+
+/* Анимация шариков */
+#axiomantic-process .flow-board {
+  position: relative;
+}
+
+#axiomantic-process .flow-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#axiomantic-process .flow-overlay svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#axiomantic-process .flow-board > ul,
+#axiomantic-process .flow-board > .flex {
+  position: relative;
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #axiomantic-process .flow-overlay {
+    display: none;
+  }
+}

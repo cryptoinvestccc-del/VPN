@@ -36,8 +36,11 @@ var (
 var (
 	whenLabels     = map[string]string{"hour": "в течение часа", "today": "сегодня", "tomorrow": "завтра"}
 	channelLabels  = map[string]string{"telegram": "Telegram", "whatsapp": "WhatsApp", "email": "Email"}
-	interestLabels = map[string]string{"landing": "Лендинг", "multi-base": "Многостаночник · Базовый", "multi-custom": "Многостаночник · Под вас", "unknown": "пока не знает"}
-	budgetLabels   = map[string]string{"lt100": "до 100 000 ₽", "100-300": "100–300 000 ₽", "gt300": "от 300 000 ₽", "unknown": "пока не знает"}
+	interestLabels = map[string]string{"landing": "Лендинг", "multi-base": "Многостаночник · Базовый", "multi-custom": "Многостаночник · Под вас", "unknown": "пока не знает",
+		"business": "Бизнес", "custom": "Индивидуальный"}
+	// briefSources: where the short form of the current site stands
+	briefSources = map[string]string{"home": "Главная", "contacts": "Страница контактов", "modal": "Окно заявки"}
+	budgetLabels = map[string]string{"lt100": "до 100 000 ₽", "100-300": "100–300 000 ₽", "gt300": "от 300 000 ₽", "unknown": "пока не знает"}
 )
 
 // isPhone accepts 10–15 digits, except that a Russian number (written
@@ -113,6 +116,8 @@ func (l *Lead) Normalize() {
 		l.Phone, l.When, l.Budget = "", "", ""
 	case "form":
 		l.Phone, l.When, l.Channel, l.Interest = "", "", "", ""
+	case "brief":
+		l.Phone, l.When, l.Channel, l.Budget = "", "", "", ""
 	}
 }
 
@@ -121,6 +126,7 @@ func (l *Lead) Validate() string {
 	switch {
 	case l.Source == "modal" && (l.Mode == "call" || l.Mode == "write"):
 	case l.Source == "contacts" && l.Mode == "form":
+	case l.Mode == "brief" && oneOf(l.Source, briefSources):
 	default:
 		return "mode"
 	}
@@ -159,6 +165,11 @@ func (l *Lead) Validate() string {
 		if !ok || !between(l.Contact, 1, 120) {
 			return "contact"
 		}
+	case "brief":
+		// name, a phone or a Telegram name (or an email), the task if any
+		if !between(l.Contact, 3, 120) || !(isPhone(l.Contact) || reTelegram.MatchString(l.Contact) || reEmail.MatchString(l.Contact)) {
+			return "contact"
+		}
 	case "form":
 		if !between(l.Contact, 1, 120) || !(reEmail.MatchString(l.Contact) || isPhone(l.Contact)) {
 			return "contact"
@@ -181,7 +192,7 @@ func (l *Lead) Validate() string {
 // link anything in the chat.
 func (l *Lead) Text(id string) string {
 	var b strings.Builder
-	title := map[string]string{"call": "Позвонить", "write": "Написать", "form": "Форма на странице контактов"}[l.Mode]
+	title := map[string]string{"call": "Позвонить", "write": "Написать", "form": "Форма на странице контактов", "brief": "Заявка"}[l.Mode]
 	b.WriteString("Заявка с сайта — " + title + "\n\n")
 	line := func(label, value string) {
 		if value != "" {

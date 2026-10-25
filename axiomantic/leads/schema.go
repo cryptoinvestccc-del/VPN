@@ -462,8 +462,24 @@ func (v *validator) optionOK(f *Field, s string) bool {
 	name, sub, _ := strings.Cut(f.OptionsFrom, ".")
 	switch src := v.full[name].(type) {
 	case map[string]any:
-		_, ok := src[s]
-		return ok && sub == ""
+		if sub == "" {
+			_, ok := src[s]
+			return ok
+		}
+		// "BLOG.categories" inside an object: a map's keys, or the first
+		// item of each pair in a list (which keeps its order)
+		switch inner := src[sub].(type) {
+		case map[string]any:
+			_, ok := inner[s]
+			return ok
+		case []any:
+			for _, it := range inner {
+				if pair, ok := it.([]any); ok && len(pair) > 0 && pair[0] == s {
+					return true
+				}
+			}
+		}
+		return false
 	case []any:
 		for _, it := range src {
 			if m, ok := it.(map[string]any); ok && m[sub] == s {

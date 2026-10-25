@@ -1,0 +1,48 @@
+/* Shared page grid: header, content and footer have the same outer edges. */
+html { scrollbar-gutter: stable; }
+.site-footer .af { padding-left: 24px; padding-right: 24px; }
+@supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
+.inner-page #main { padding-top: 80px; }
+.inner-page #main > section { padding-left: 0; padding-right: 0; }
+.inner-page #main > section > .page-container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--w-container);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.inner-page #main > .page-intro { padding-top: 64px; }
+.inner-page #main > .page-intro > .page-container { text-align: left; }
+.inner-page #main h1 {
+  margin-top: 0;
+  text-align: left;
+  font-size: 48px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+.inner-page #main > .page-intro > .page-container > p {
+  margin-left: 0;
+  margin-right: 0;
+}
+/* Keep coloured panels inside the same gutters as the normal page sections. */
+.inner-page #main > section:has(> .page-container.bg-dark) {
+  box-sizing: border-box;
+  max-width: var(--w-container);
+  margin-inline: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+@media (min-width: 640px) {
+  .inner-page #main h1 { font-size: 60px; }
+}
+@media (min-width: 1024px) {
+  .site-footer .af { padding-left: 32px; padding-right: 32px; }
+  .inner-page #main > .page-intro { padding-top: 96px; }
+  .inner-page #main h1 { font-size: 72px; }
+  .inner-page #main > section > .page-container { padding-left: 32px; padding-right: 32px; }
+  .inner-page #main > section:has(> .page-container.bg-dark) { padding-left: 32px; padding-right: 32px; }
+}

@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Builds the Axiomantic studio site from content.py into site/.
+"""Builds the Axiomantic site from content.py into site/.
 
     python3 axiomantic/build.py
 
-The pages are static HTML beside the hand-written assets in site/assets.
-Pictures come from the Blender renders in render/ via
-site/assets/img/manifest.json, which gives every <img> its exact width
-and height. Links between pages are relative, so the folder works from
-any web server and any sub-path; open it through a server
-(python3 -m http.server -d axiomantic/site), not as a file.
+The markup is the designer's (Tailwind classes, compiled once into
+site/assets/css/main.css by tailwind/); every text, number, link and
+picture comes from content.py, or from the panel's draft through
+AXM_CONTENT. Links between pages are relative, so the folder works from any
+web server; open it through one (python3 -m http.server -d axiomantic/site).
 
-Nothing is loaded from other servers: fonts, scripts and pictures are
-local, and the map on the contacts page is fetched only on request. The
-output is deterministic — CI rebuilds it and fails if site/ differs from
-git, or if a page refers to a picture that has not been rendered.
+Nothing is loaded from other servers: the font, icons and scripts are
+local; Yandex Metrika loads only after the visitor accepts cookies, when a
+counter is set. The output is deterministic — CI rebuilds it and fails if
+site/ differs from git.
 """
 import hashlib
 import html
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -30,72 +30,18 @@ MEDIA_DIR = os.environ.get('AXM_MEDIA', '')
 sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True  # no __pycache__ beside the sources
 import content as C  # noqa: E402
-import legal  # noqa: E402
 
 S = C.SITE
 T = C.TEXTS
 IMG = C.IMAGES
-MANIFEST = {}
-MISSING = set()
 
 
 def e(s):
     return html.escape(str(s), quote=True)
 
 
-ICONS = {
-    'arrow': '<path d="M5 12h14M13 6l6 6-6 6"/>',
-    'arrow-ur': '<path d="M7 17 17 7M8.5 7H17v8.5"/>',
-    'arrow-down': '<path d="M12 5v14M6 13l6 6 6-6"/>',
-    'check': '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
-    'plus': '<path d="M12 5v14M5 12h14"/>',
-    'close': '<path d="M6 6l12 12M18 6 6 18"/>',
-    'phone': '<path d="M6.6 3.5h2.6l1.6 4.1-2 1.3a11 11 0 0 0 6.3 6.3l1.3-2 4.1 1.6v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/>',
-    'chat': '<path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 19 17h-8.5L6 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M8 10h8M8 13h5"/>',
-    'spark': '<path d="M11 4.5 12.9 10l5.6 2-5.6 2L11 19.5 9.1 14l-5.6-2 5.6-2z"/><path d="M18.5 3v4M16.5 5h4"/>',
-    'search': '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
-    'clock': '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-    'user': '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5a7 7 0 0 1 14 0"/>',
-    'mail': '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="m4.5 7.5 7.5 5.5 7.5-5.5"/>',
-    'pin': '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z"/><circle cx="12" cy="10" r="2.3"/>',
-    'send': '<path d="M20.5 3.5 3.5 10.6l6.6 2.6 2.6 6.6z"/><path d="m10.1 13.2 4.6-4.6"/>',
-    'layers': '<path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"/><path d="m3.5 12 8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5"/>',
-    'diamond': '<path d="M12 3.5 20.5 12 12 20.5 3.5 12z"/>',
-    'asterisk': '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',
-    'command': '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
-    'orbit': '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/>',
-    'pause': '<path d="M9 6v12M15 6v12"/>',
-    'play': '<path d="M8 5.5v13l10.5-6.5z"/>',
-}
-
-
-def icon(name, cls='ico'):
-    return f'<svg class="{cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{ICONS[name]}</svg>'
-
-
-# The logo mark: the brand font's «а» (Manrope ExtraBold, font units, y up)
-# and its dot. The wordmark next to it is live text in the same font.
-A_PATH = ('M440 -30Q324 -30 243.5 14.5Q163 59 121.5 133.5Q80 208 80 298Q80 373 103.0 435.0Q126 497 177.5 544.5Q229 592 316 624'
-          'Q376 646 459.0 663.0Q542 680 647.0 695.5Q752 711 878 730L780 676Q780 772 734.0 817.0Q688 862 580 862Q520 862 455.0 833.0'
-          'Q390 804 364 730L118 808Q159 942 272.0 1026.0Q385 1110 580 1110Q723 1110 834.0 1066.0Q945 1022 1002 914Q1034 854 1040.0 794.0'
-          'Q1046 734 1046 660V0H808V222L842 176Q763 67 671.5 18.5Q580 -30 440 -30ZM498 184Q573 184 624.5 210.5Q676 237 706.5 271.0'
-          'Q737 305 748 328Q769 372 772.5 430.5Q776 489 776 528L856 508Q735 488 660.0 474.5Q585 461 539.0 450.0Q493 439 458 426'
-          'Q418 410 393.5 391.5Q369 373 357.5 351.0Q346 329 346 302Q346 265 364.5 238.5Q383 212 417.0 198.0Q451 184 498 184Z')
-LOGO_MARK = (f'<svg class="logo__mark" viewBox="40 -1150 1430 1210" aria-hidden="true" focusable="false">'
-             f'<path transform="scale(1 -1)" fill="currentColor" d="{A_PATH}"/>'
-             f'<circle class="logo__dot" cx="1300" cy="-122" r="132"/></svg>')
-
-MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
-          'сентября', 'октября', 'ноября', 'декабря']
-
-
-def date_ru(iso):
-    y, m, d = iso.split('-')
-    return f'{int(d)} {MONTHS[int(m) - 1]} {y}'
-
-
 class Page:
-    """A page at a folder path such as '' or 'projects/english-school/'."""
+    """A page at a folder path such as '' or 'cases/tenders/'."""
 
     def __init__(self, path, absolute=False):
         self.path = path
@@ -106,6 +52,54 @@ class Page:
         if self.absolute:
             return '/' + target
         return '../' * self.depth + target or './'
+
+
+SAFE_URL = re.compile(r'^(https?://[^\s"<>]+|mailto:[^\s"<>]+|tel:\+?[0-9]+|#[A-Za-z0-9_-]*|[a-z0-9][a-z0-9/_-]*/?(#[A-Za-z0-9_-]*)?)$')
+
+
+def href(p, url):
+    """An address from content: outside links as they are, the site's own
+    paths ("privacy/") relative to the page; anything else is dropped."""
+    url = url.strip()
+    if not SAFE_URL.match(url):
+        return ''
+    if re.match(r'^(https?:|mailto:|tel:|#)', url):
+        return url
+    return p.u(url)
+
+
+def md(p, text):
+    """Escaped text with **bold**, [links](path) and line breaks."""
+    out = []
+    pos = 0
+    for m in re.finditer(r'\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)\s]+)\)', text):
+        out.append(e(text[pos:m.start()]))
+        if m.group(1) is not None:
+            out.append(f'<strong>{e(m.group(1))}</strong>')
+        else:
+            url = href(p, m.group(3))
+            ext = ' target="_blank" rel="noopener"' if url.startswith('http') else ''
+            out.append(f'<a href="{e(url)}"{ext}>{e(m.group(2))}</a>' if url else e(m.group(2)))
+        pos = m.end()
+    out.append(e(text[pos:]))
+    return ''.join(out).replace('\n', '<br>')
+
+
+def fa(name, cls=''):
+    """A Font Awesome icon; names come from the panel's list."""
+    style = 'fa-brands' if name in ('fa-telegram', 'fa-vk', 'fa-whatsapp') else 'fa-solid'
+    if not re.match(r'^fa-[a-z0-9-]+$', name or ''):
+        name = 'fa-circle'
+    return f'<i class="{style} {name}{" " + cls if cls else ""}" aria-hidden="true"></i>'
+
+
+MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+          'сентября', 'октября', 'ноября', 'декабря']
+
+
+def date_ru(iso):
+    y, m, d = iso.split('-')
+    return f'{int(d)} {MONTHS[int(m) - 1]} {y}'
 
 
 def asset_version(*parts):
@@ -143,33 +137,16 @@ def media_entry(mid):
     return m
 
 
-def media_picture(p, mid, alt, sizes, cls, eager):
+def media_img(p, mid, alt, sizes, cls, eager=False):
+    """An uploaded picture filling its box, or None when there is none."""
     m = media_entry(mid)
     if not m or not m.get('jpg'):
         return None
     srcset = ', '.join(f'{p.u("assets/media/" + name)} {w}w' for w, name in m['jpg'])
     load = 'loading="eager" fetchpriority="high"' if eager else 'loading="lazy"'
-    alt_attr = f'alt="{e(alt)}"' if alt else 'alt="" aria-hidden="true"'
-    return (f'<picture class="{cls}"><img src="{p.u("assets/media/" + m["jpg"][-1][1])}" srcset="{srcset}" sizes="{sizes}" '
-            f'width="{m["w"]}" height="{m["h"]}" {alt_attr} {load} decoding="async"></picture>')
-
-
-def slot(p, aid, alt='', sizes='100vw', cls='', eager=False):
-    """A picture of the design: the one uploaded in the panel for this place
-    (IMAGES), else the 3D render."""
-    if IMG.get(aid):
-        out = media_picture(p, IMG[aid], alt, sizes, cls, eager)
-        if out:
-            return out
-    return picture(p, aid, alt=alt, sizes=sizes, cls=cls, eager=eager)
-
-
-def post_picture(p, a, sizes='100vw', eager=False):
-    if a.get('cover'):
-        out = media_picture(p, a['cover'], '', sizes, '', eager)
-        if out:
-            return out
-    return slot(p, 'cover-' + a['cat'], sizes=sizes, eager=eager)
+    alt_attr = f'alt="{e(alt)}"' if alt else 'alt=""'
+    return (f'<img class="{cls}" src="{p.u("assets/media/" + m["jpg"][-1][1])}" srcset="{srcset}" sizes="{sizes}" '
+            f'width="{m["w"]}" height="{m["h"]}" {alt_attr} {load} decoding="async">')
 
 
 def favicon_links(p):
@@ -179,339 +156,178 @@ def favicon_links(p):
         small = icons.get(32) or m['png'][0][1]
         big = icons.get(180) or m['png'][-1][1]
         return (f'<link rel="icon" href="{p.u("assets/media/" + small)}" type="image/png" sizes="32x32">\n'
-                f'<link rel="apple-touch-icon" href="{p.u("assets/media/" + big)}">')
-    return (f'<link rel="icon" href="{p.u("assets/favicon.svg")}" type="image/svg+xml">\n'
-            f'<link rel="apple-touch-icon" href="{p.u("assets/apple-touch-icon.png")}">')
-
-
-def favicon_path():
-    m = media_entry(IMG.get('favicon'))
-    if m and m.get('png'):
-        return 'assets/media/' + m['png'][-1][1]
-    return 'assets/favicon.svg'
+                f'  <link rel="apple-touch-icon" href="{p.u("assets/media/" + big)}">')
+    return f'<link rel="icon" href="{p.u("assets/favicon.svg")}" type="image/svg+xml">'
 
 
 def og_image():
-    """Address, width and height of the link-preview picture."""
     m = media_entry(IMG.get('og'))
     if m and m.get('jpg'):
         w, name = m['jpg'][-1]
         return f'{S["url"]}/assets/media/{name}', w, round(m['h'] * w / m['w'])
-    return f'{S["url"]}/assets/og.jpg', 1200, 630
+    return '', 0, 0
 
 
-def home_label():
-    return next((label for key, label, _ in C.NAV if key == 'home'), 'Главная')
-
-
-def prose_blocks(body):
-    out = []
-    for kind, val in body:
-        if kind == 'p':
-            out.append(f'<p>{e(val)}</p>')
-        elif kind == 'h2':
-            out.append(f'<h2>{e(val)}</h2>')
-        elif kind == 'ul':
-            out.append('<ul>' + ''.join(f'<li>{e(x)}</li>' for x in val) + '</ul>')
-        elif kind == 'quote':
-            out.append(f'<blockquote><p>{e(val)}</p></blockquote>')
-    return ''.join(out)
-
-
-def case_picture(p, c, alt='', sizes='100vw', eager=False):
-    """A case's cover: the picture uploaded in the panel, else the 3D render."""
-    if c.get('cover'):
-        out = media_picture(p, c['cover'], alt, sizes, '', eager)
-        if out:
-            return out
-    return picture(p, 'case-' + c['slug'], alt=alt, sizes=sizes, eager=eager)
-
-
-def picture(p, aid, alt='', sizes='100vw', cls='', eager=False):
-    """<picture> with AVIF and WebP srcsets from the render manifest; the
-    <img> carries the real width/height so nothing jumps while it loads."""
-    m = MANIFEST.get(aid)
-    if not m:
-        MISSING.add(aid)
-        return f'<div class="ph {cls}" data-missing="{e(aid)}" aria-hidden="true"></div>'
-
-    def srcset(fmt):
-        return ', '.join(f'{p.u(src)} {w}w' for w, src in m[fmt])
-
-    load = 'loading="eager" fetchpriority="high"' if eager else 'loading="lazy"'
-    alt_attr = f'alt="{e(alt)}"' if alt else 'alt="" aria-hidden="true"'
-    return (f'<picture class="{cls}"><source type="image/avif" srcset="{srcset("avif")}" sizes="{sizes}">'
-            f'<source type="image/webp" srcset="{srcset("webp")}" sizes="{sizes}">'
-            f'<img src="{p.u(m["webp"][-1][1])}" width="{m["w"]}" height="{m["h"]}" {alt_attr} {load} decoding="async"></picture>')
-
-
-def words(text, cls='w'):
-    """Wraps each word in a mask span so motion.js can slide words up.
-    Plain text for screen readers and for pages without scripts."""
-    return ' '.join(f'<span class="{cls}"><span>{e(t)}</span></span>' for t in text.split())
+def logo(p, cls):
+    m = media_entry(IMG.get('logo'))
+    if m and m.get('jpg'):
+        w, name = m['jpg'][0]
+        return (f'<img src="{p.u("assets/media/" + name)}" width="{w}" height="{round(m["h"] * w / m["w"])}" '
+                f'alt="{e(S["name"])}" class="h-9 w-auto">')
+    return e(S['logo'])
 
 
 # ---------------------------------------------------------------- frame
 
-def logo(p, cls=''):
-    m = media_entry(IMG.get('logo'))
-    if m and m.get('jpg'):
-        w, name = m['jpg'][0]
-        return (f'<a class="logo {cls}" href="{p.u()}"><img class="logo__img" src="{p.u("assets/media/" + name)}" '
-                f'width="{w}" height="{round(m["h"] * w / m["w"])}" alt="{e(S["name"])} — на главную"></a>')
-    return (f'<a class="logo {cls}" href="{p.u()}" aria-label="{e(S["name"])} — на главную">{LOGO_MARK}'
-            f'<span class="logo__word">аксиомантик</span></a>')
+def modal_btn(cls, label, interest=''):
+    data = f' data-interest="{e(interest)}"' if interest else ''
+    return (f'<button type="button" data-project-modal{data} aria-haspopup="dialog" aria-controls="project-modal" '
+            f'class="{cls}">{e(label)}</button>')
 
 
 def nav_items():
-    """The menu: NAV, then «О студии» and landing pages marked for it."""
     items = list(C.NAV)
     if C.ABOUT.get('show') and C.ABOUT.get('nav'):
-        items.append(('about', C.ABOUT['title'], 'about/'))
+        items.append(['about', C.ABOUT['title'], 'about/'])
     for x in C.LANDINGS:
         if x.get('show', True) and x.get('nav'):
-            items.append(('l-' + x['slug'], x.get('menu') or x['title'], x['slug'] + '/'))
+            items.append(['l-' + x['slug'], x.get('menu') or x['title'], x['slug'] + '/'])
     return items
 
 
-def nav_links(p, active):
-    """The section of the page is marked: "page" on the page itself, "true"
-    on its parent section (a case or an article), so a screen reader hears
-    one current page — the breadcrumb's."""
-    def cur(key, href):
-        if key != active:
-            return ''
-        return ' aria-current="page"' if href == p.path else ' aria-current="true"'
-    return ''.join(f'<a href="{p.u(href)}"{cur(key, href)}>{e(label)}</a>' for key, label, href in nav_items())
-
-
 def header(p, active):
-    links = nav_links(p, active)
-    return f'''<header class="hdr" data-hdr>
-<div class="wrap hdr__in">
-{logo(p)}
-<nav class="nav" aria-label="Основное меню">{links}</nav>
-<div class="hdr__act">
-<a class="btn btn--glass hdr__cta" href="{p.u("contacts/")}" data-order>{e(T["header"]["cta"])}</a>
-<button class="burger" type="button" aria-expanded="false" aria-controls="menu" data-burger><span></span><span></span><span class="sr">Меню</span></button>
-</div>
-</div>
-<div class="menu" id="menu" hidden>
-<nav class="menu__nav" aria-label="Мобильное меню">{links}</nav>
-<div class="menu__foot">
-<a class="btn btn--white btn--lg btn--block" href="{p.u("contacts/")}" data-order>{e(T["header"]["menu_cta"])}</a>
-<a class="menu__contact" href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a>
-<a class="menu__contact" href="mailto:{e(S["email"])}">{e(S["email"])}</a>
-</div>
-</div>
+    def links(cls_on, cls):
+        out = []
+        for key, label, path in nav_items():
+            cur = ' aria-current="page"' if key == active else ''
+            out.append(f'<a href="{href(p, path)}" class="{cls_on if key == active else cls}"{cur}>{e(label)}</a>')
+        return '\n        '.join(out)
+    desk = links('nav-link transition-colors duration-300 hover:text-text-heading text-text-heading',
+                 'nav-link transition-colors duration-300 hover:text-text-heading')
+    mob = links('rounded-full px-4 py-3 hover:bg-surface-muted', 'rounded-full px-4 py-3 hover:bg-surface-muted')
+    H = T['header']
+    return f'''<header class="fixed top-0 left-0 right-0 z-50 h-20 border-b border-slate-200 bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-full max-w-container items-center justify-between gap-6 px-6 lg:px-8">
+    <a href="{p.u()}" aria-label="{e(S["name"])} — на главную" class="text-2xl font-extrabold tracking-tighter text-text-heading">{logo(p, "")}</a>
+    <div class="flex items-center gap-6 lg:gap-8">
+      <nav aria-label="Основная навигация" class="hidden items-center gap-6 text-sm font-medium text-text-body lg:flex">
+        {desk}
+      </nav>
+      {modal_btn("hidden rounded-full px-6 py-3 text-sm font-medium sm:inline-flex btn-dark", H["cta"])}
+      <button id="menu-toggle" aria-controls="mobile-menu" aria-expanded="false" type="button" aria-label="{e(H["menu_open"])}" data-label-open="{e(H["menu_open"])}" data-label-close="{e(H["menu_close"])}" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full lg:hidden btn-dark">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+  <nav id="mobile-menu" aria-label="Мобильная навигация" hidden class="absolute inset-x-0 top-20 border-b border-slate-200 bg-surface px-6 py-6 lg:hidden">
+    <div class="mx-auto flex max-w-container flex-col gap-1 font-medium text-text-heading">
+      {mob}
+      {modal_btn("mt-3 rounded-full px-8 py-4 text-center btn-dark", H["cta"])}
+    </div>
+  </nav>
 </header>'''
 
 
-def socials(cls='soc'):
-    return f'<ul class="{cls}">' + ''.join(
-        # the name starts with the visible letters (WCAG 2.5.3, label in name)
-        f'<li><a href="{e(href)}" aria-label="{e(short)} — {e(name)}" title="{e(name)}">{e(short)}</a></li>'
-        for name, short, href in S['socials']) + '</ul>'
+MAIL_SVG = ('<svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path fill-rule="evenodd" d="M4.5 4a2.5 2.5 0 0 0-2.5 2.5v11A2.5 2.5 0 0 0 4.5 20h15a2.5 2.5 0 0 0 2.5-2.5v-11A2.5 2.5 0 0 0 19.5 4h-15Zm-.02 2.86a.8.8 0 0 0-.96 1.28l8 6a.8.8 0 0 0 .96 0l8-6a.8.8 0 1 0-.96-1.28L12 12.5 4.48 6.86Z" clip-rule="evenodd"/></svg>')
+TG_SVG = ('<svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M21.4 3.5 18.2 20c-.2 1.2-.9 1.5-1.9.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L5.6 13.8.8 12.3c-1-.3-1-1 .2-1.5L20 3.4c.9-.3 1.7.2 1.4 1.1Z"/></svg>')
 
 
 def footer(p):
-    nav = ''.join(f'<li><a href="{p.u(href)}">{e(label)}</a></li>' for _, label, href in nav_items())
+    nav = ''.join(f'<a href="{href(p, path)}">{e(label)}</a>' for _, label, path in nav_items())
+    social = ''
+    if S.get('email'):
+        social += f'<a href="mailto:{e(S["email"])}" aria-label="Почта: {e(S["email"])}"><span class="ax-social-tile" aria-hidden="true">{MAIL_SVG}</span></a>'
+    if S.get('telegram'):
+        social += f'<a href="{e(S["telegram"])}" aria-label="Telegram"><span class="ax-social-tile" aria-hidden="true">{TG_SVG}</span></a>'
+    if S.get('max'):
+        social += (f'<a href="{e(S["max"])}" aria-label="MAX"><span class="ax-social-tile" aria-hidden="true"><img class="ax-max-logo" '
+                   f'src="{p.u("assets/images/social/max.png")}" alt="" width="26" height="26" decoding="async"></span></a>')
+    tagline = '<br>'.join(e(x) for x in S['tagline'])
     F = T['footer']
-    nav += f'<li><a href="{p.u("#tariffs")}">{e(F["tariffs"])}</a></li><li><a href="{p.u("#faq")}">{e(F["faq"])}</a></li>'
-    services = ''.join(
-        f'<li><a href="{p.u("#tariffs")}">{e(t["name"])}{" · " + e(t["sub"]) if t["id"] != "landing" else ""}</a></li>'
-        for t in C.TARIFFS)
-    return f'''<footer class="ftr">
-<div class="wrap">
-<div class="ftr__top">
-<div class="ftr__brand">
-{logo(p, "logo--footer")}
-<p>{e(C.HERO["caption"])} {e(F["about"])}</p>
-<a class="btn btn--white" href="{p.u("contacts/")}" data-order>{e(F["button"])} {icon("arrow")}</a>
-</div>
-<div class="ftr__col"><h2 class="ftr__h">{e(F["nav"])}</h2><ul>{nav}</ul></div>
-<div class="ftr__col"><h2 class="ftr__h">{e(F["services"])}</h2><ul>{services}</ul></div>
-<div class="ftr__col"><h2 class="ftr__h">{e(F["contacts"])}</h2><ul>
-<li><a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a></li>
-<li><a href="mailto:{e(S["email"])}">{e(S["email"])}</a></li>
-<li class="ftr__muted">{e(S["hours"])}</li>
-</ul>{socials("soc soc--dark")}</div>
-</div>
-<p class="ftr__word" aria-hidden="true">аксиомантик</p>
-<div class="ftr__bottom">
-<span>© {S["year"]} {e(S["name"])}</span>
-<a href="{p.u("privacy/")}">{e(F["privacy"])}</a>
-<a href="{p.u("consent/")}">{e(F["consent"])}</a>
-</div>
-</div>
-</footer>'''
+    return (f'<footer class="site-footer"><div class="af"><div class="af-top"><a class="ax-logo" href="{p.u()}" aria-label="{e(S["name"])} — главная страница">'
+            f'{logo(p, "")}</a><nav class="ax-nav" aria-label="Навигация по сайту">{nav}</nav></div><div class="af-row"><p class="ax-tagline">{tagline}</p>'
+            f'<address class="ax-contact"><a class="ax-phone" href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a><div class="ax-social">{social}</div>'
+            f'</address></div><div class="af-bottom"><div class="ax-legal"><p class="ax-copyright">© <span id="year">{S["year"]}</span> {e(S["name"])} · {e(S["city"])}</p>'
+            f'<p>{e(S["legal_name"])}</p><p>{e(S["legal_ids"])}</p></div><div class="ax-docs"><a href="{p.u("privacy/")}">{e(F["privacy"])}</a>'
+            f'<a href="{p.u("consent/")}">{e(F["consent"])}</a></div></div></div></footer>')
 
 
-# ---------------------------------------------------------------- forms
-
-def picks(name, options, checked=None):
-    out = []
-    for value, label in options:
-        chk = ' checked' if value == checked else ''
-        out.append(f'<label class="pick"><input type="radio" name="{name}" value="{e(value)}"{chk}>'
-                   f'<span>{e(label)}</span></label>')
-    return f'<div class="picks">{"".join(out)}</div>'
-
-
-def field(uid, name, label, *, kind='input', type_='text', required=True, placeholder='',
-          autocomplete='', inputmode='', maxlength=120, extra='', optional_note=False):
-    fid = f'{uid}-{name}'
-    req = ' required' if required else ''
-    attrs = f' id="{fid}" name="{name}"{req} maxlength="{maxlength}" aria-describedby="{fid}-err"'
-    if placeholder:
-        attrs += f' placeholder="{e(placeholder)}"'
-    if autocomplete:
-        attrs += f' autocomplete="{autocomplete}"'
-    if inputmode:
-        attrs += f' inputmode="{inputmode}"'
-    attrs += extra
-    opt = f' <span class="field__opt">{e(T["consent"]["optional"])}</span>' if optional_note else ''
-    if kind == 'textarea':
-        control = f'<textarea rows="3"{attrs}></textarea>'
-    else:
-        control = f'<input type="{type_}"{attrs}>'
-    return (f'<div class="field"><label class="field__label" for="{fid}">{e(label)}{opt}</label>{control}'
-            f'<p class="field__err" id="{fid}-err"></p></div>')
-
-
-def consent(p, uid):
-    K = T['consent']
-    return (f'<label class="consent"><input type="checkbox" name="consent" required aria-describedby="{uid}-consent-err">'
-            f'<span>{e(K["before"])} <a href="{p.u("consent/")}" target="_blank">{e(K["link"])}</a> '
-            f'{e(K["middle"])} <a href="{p.u("privacy/")}" target="_blank">{e(K["policy"])}</a></span></label>'
-            f'<p class="field__err" id="{uid}-consent-err"></p>')
-
-
-# The lead forms are sent by main.js (fetch to SITE["endpoint"]). Their
-# method is "dialog", so without the script a submit sends nothing: a POST to
-# the static page would answer 405/501 and drop what the visitor typed. The
-# <noscript> note says how to reach us instead.
-def nojs_note():
-    return (f'<noscript><p class="lead__status">{e(T["errors"]["nojs"])} '
-            f'<a href="mailto:{e(S["email"])}">{e(S["email"])}</a>, {e(T["errors"]["nojs_call"])} '
-            f'<a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a>.</p></noscript>')
+def lead_form(p, fid, source, cls):
+    """The designer's form. main.js sends it to SITE.endpoint; ids differ in
+    the dialog so a page can hold both."""
+    F = C.FORM
+    pre = 'modal-' if fid == 'project-modal-form' else ''
+    contact_id = pre + 'contact-value'
+    name_id = pre + 'name'
+    task_id = pre + 'project'
+    priv_id = pre + 'privacy'
+    status_id = 'modal-form-status' if pre else 'form-status'
+    sel_id = 'modal-selected-project' if pre else 'selected-project'
+    return f'''<form id="{fid}" class="{cls}" data-source="{source}" novalidate>
+          <input id="{sel_id}" type="hidden" name="interest" value="">
+          <div class="hp" aria-hidden="true"><label>Не заполняйте это поле <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          <div>
+            <label for="{name_id}" class="mb-2 block text-sm font-medium text-text-heading">{e(F["name"])} <span aria-hidden="true">*</span></label>
+            <input id="{name_id}" name="name" type="text" autocomplete="name" placeholder="{e(F["name_ph"])}" required maxlength="80" class="w-full min-w-0 rounded-xl border-none bg-surface px-5 py-4 text-base text-text-heading placeholder:text-slate-400">
+          </div>
+          <div class="mt-5">
+            <label for="{contact_id}" class="mb-2 block text-sm font-medium text-text-heading">{e(F["contact"])} <span aria-hidden="true">*</span></label>
+            <input id="{contact_id}" name="contact" type="text" inputmode="tel" placeholder="{e(F["contact_ph"])}" required minlength="3" maxlength="120" class="w-full min-w-0 rounded-xl border-none bg-surface px-5 py-4 text-base text-text-heading placeholder:text-slate-400">
+          </div>
+          <div class="mt-5">
+            <label for="{task_id}" class="mb-2 block text-sm font-medium text-text-heading">{e(F["task"])}</label>
+            <textarea id="{task_id}" name="message" rows="4" maxlength="3000" placeholder="{e(F["task_ph"])}" class="block w-full min-w-0 resize-y rounded-xl border-none bg-surface px-5 py-4 text-base text-text-heading placeholder:text-slate-400"></textarea>
+          </div>
+          <div class="mt-6 flex items-start gap-3">
+            <input type="checkbox" id="{priv_id}" name="consent" value="accepted" required class="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-text-heading focus:ring-brand">
+            <label for="{priv_id}" class="text-sm text-text-body leading-snug consent-text">{md(p, F["consent"])}</label>
+          </div>
+          <button type="submit" disabled class="mt-6 w-full rounded-full py-4 font-medium btn-dark">{e(F["submit"])}</button>
+          <p class="mt-3 text-sm leading-relaxed text-text-body">
+            <i class="fa-solid fa-check text-brand mr-1" aria-hidden="true"></i> {e(F["note"])}
+          </p>
+          <p id="{status_id}" role="status" aria-live="polite" aria-atomic="true" class="mt-4 text-sm font-medium text-text-body"></p>
+        <noscript><p>{e(F["nojs"])}</p></noscript>
+        </form>'''
 
 
-HONEYPOT = ('<div class="hp" aria-hidden="true"><label>Не заполняйте это поле '
-            '<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>')
+def modal(p):
+    M = T['modal']
+    form = lead_form(p, 'project-modal-form', 'modal', 'min-w-0 rounded-card bg-surface-muted p-8 lg:p-10')
+    return f'''<dialog id="project-modal" class="project-modal" aria-labelledby="project-modal-title">
+  <div class="project-modal-heading">
+    <h2 id="project-modal-title">{e(M["title"])}</h2>
+    <button type="button" class="project-modal-close" data-close-modal aria-label="{e(M["close"])}">×</button>
+  </div>
+  {form}
+  <p class="project-modal-direct">{e(M["direct"])} <a href="{e(S["telegram"])}" target="_blank" rel="noopener">{e(M["direct_tg"])}</a> / <a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a></p>
+</dialog>'''
 
 
-def done_block():
-    D = T['done']
-    return (f'<div class="lead__done" hidden tabindex="-1">'
-            f'<span class="lead__done-ico">{icon("check")}</span>'
-            f'<h3 class="lead__done-title">{e(D["title"])}</h3><p class="lead__done-text" data-done-text></p>'
-            f'<button type="button" class="btn btn--ghost" data-again>{e(D["again"])}</button></div>')
-
-
-def project_form(p, uid, source):
-    """The full lead form: on the contacts page and, when switched on, at
-    the bottom of the home page. Both post as the contacts form."""
-    K = T['contacts']
-    return f'''<form class="lead" method="dialog" data-lead data-source="{source}" novalidate>
-<input type="hidden" name="mode" value="form">
-<div class="lead__form">
-<div class="fields fields--2">
-{field(uid, "name", K["name"], placeholder=K["name_ph"], autocomplete="name", maxlength=80)}
-{field(uid, "contact", K["contact"], placeholder=K["contact_ph"], autocomplete="email", maxlength=120)}
-</div>
-<div class="fields">
-<fieldset class="field"><legend class="field__label">{e(K["budget"])}</legend>{picks("budget", C.BUDGETS, "unknown")}</fieldset>
-{field(uid, "message", K["message"], kind="textarea", placeholder=K["message_ph"], maxlength=3000)}
-{HONEYPOT}
-{consent(p, uid)}
-</div>
-<button class="btn btn--dark btn--lg lead__submit" type="submit" data-submit><span data-submit-label>{e(K["submit"])}</span>{icon("send")}</button>
-<p class="lead__status" role="status" aria-live="polite"></p>
-{nojs_note()}
-</div>
-{done_block()}
-</form>'''
+def cookie(p):
+    """Shown only with a counter: Metrika starts after «Принять»."""
+    K = C.CONNECT
+    if not K.get('metrika'):
+        return ''
+    return f'''<div id="cookie-banner" hidden class="fixed bottom-4 left-1/2 z-[100] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 translate-y-24 opacity-0 transition-all duration-500 ease-in-out">
+  <div class="flex flex-col items-center justify-between gap-4 rounded-card bg-dark p-5 text-white shadow-xl sm:flex-row sm:p-6">
+    <p class="text-sm text-dark-text text-center sm:text-left">{e(K["cookie_text"])} <a href="{p.u("privacy/")}" class="underline">{e(K["cookie_more"])}</a></p>
+    <div class="flex shrink-0 gap-2">
+      <button id="decline-cookies" type="button" class="rounded-full px-5 py-2.5 text-sm font-medium text-white ring-1 ring-white/30 hover:bg-white/10">{e(K["cookie_decline"])}</button>
+      <button id="accept-cookies" type="button" class="rounded-full px-6 py-2.5 text-sm font-medium btn-inverse">{e(K["cookie_accept"])}</button>
+    </div>
+  </div>
+</div>'''
 
 
 def body_data():
-    """What main.js needs besides markup: its messages, and the counter."""
-    msg = {'errors': T['errors'], 'done': T['done'],
-           'submit_call': T['modal']['submit_call'], 'submit_write': T['modal']['submit_write']}
-    out = f" data-msg='{e(json.dumps(msg, ensure_ascii=False, separators=(',', ':')))}'"
+    """What the scripts need besides markup: endpoints, messages, counter."""
+    out = f' data-endpoint="{e(S["endpoint"])}" data-msg="{e(json.dumps(T["msg"], ensure_ascii=False, separators=(",", ":")))}"'
     if C.CONNECT.get('metrika'):
         out += f' data-metrika="{e(C.CONNECT["metrika"])}"'
         if C.CONNECT.get('webvisor'):
             out += ' data-webvisor'
     return out
-
-
-def cookie_banner(p):
-    """Shown only with a counter: Metrika starts after «Принять»."""
-    K = C.CONNECT
-    if not K.get('metrika'):
-        return ''
-    return (f'<div class="cookie" role="region" aria-label="cookie" data-cookie hidden><p>{e(K["cookie_text"])} '
-            f'<a href="{p.u("privacy/")}">{e(K["cookie_more"])}</a></p><div class="cookie__act">'
-            f'<button type="button" class="btn btn--dark btn--sm" data-cookie-yes>{e(K["cookie_accept"])}</button>'
-            f'<button type="button" class="btn btn--outline btn--sm" data-cookie-no>{e(K["cookie_decline"])}</button></div></div>')
-
-
-def modal(p):
-    uid = 'm'
-    channels = ''.join(
-        f'<label class="pick"><input type="radio" name="channel" value="{v}"{" checked" if i == 0 else ""} '
-        f'data-label="{e(lbl)}" data-placeholder="{e(ph)}" data-type="{t}" data-autocomplete="{ac}">'
-        f'<span>{e(name)}</span></label>'
-        for i, (v, name, lbl, ph, t, ac) in enumerate(C.CHANNELS))
-    first = C.CHANNELS[0]
-    M = T['modal']
-    return f'''<dialog class="modal" id="order" aria-labelledby="order-title">
-<button class="modal__close" type="button" data-close aria-label="Закрыть">{icon("close")}</button>
-<div class="modal__box">
-<form class="lead" method="dialog" data-lead data-source="modal" novalidate>
-<div class="lead__form">
-<div class="modal__head">
-<h2 class="modal__title" id="order-title">{e(M["title"])}</h2>
-<p class="modal__sub">{e(M["sub"].replace("{hours}", S["hours"]))}</p>
-</div>
-<fieldset class="switch">
-<legend class="sr">Как с вами связаться</legend>
-<label class="switch__opt"><input type="radio" name="mode" value="call" checked>
-<span class="switch__tile"><span class="switch__ico">{icon("phone")}</span><span class="switch__txt"><b>{e(M["call"])}</b><small>{e(M["call_sub"])}</small></span></span></label>
-<label class="switch__opt"><input type="radio" name="mode" value="write">
-<span class="switch__tile"><span class="switch__ico">{icon("chat")}</span><span class="switch__txt"><b>{e(M["write"])}</b><small>{e(M["write_sub"])}</small></span></span></label>
-</fieldset>
-<div class="fields">
-{field(uid, "name", M["name"], placeholder=M["name_ph"], autocomplete="name", maxlength=80)}
-<fieldset class="fields__group" data-mode-fields="call">
-{field(uid, "phone", M["phone"], type_="tel", placeholder="+7 (900) 000-00-00", autocomplete="tel", inputmode="tel", maxlength=24, extra=" data-phone")}
-<fieldset class="field"><legend class="field__label">{e(M["when"])}</legend>{picks("when", C.CALL_TIMES, "hour")}</fieldset>
-</fieldset>
-<fieldset class="fields__group" data-mode-fields="write" hidden disabled>
-<fieldset class="field"><legend class="field__label">{e(M["where"])}</legend><div class="picks" data-channels>{channels}</div></fieldset>
-{field(uid, "contact", first[2], placeholder=first[3], autocomplete=first[5], extra=" data-contact")}
-{field(uid, "message", M["message"], kind="textarea", required=False, placeholder=M["message_ph"], maxlength=3000, optional_note=True)}
-</fieldset>
-<fieldset class="field"><legend class="field__label">{e(M["interest"])}</legend>{picks("interest", C.INTERESTS, "unknown")}</fieldset>
-{HONEYPOT}
-{consent(p, uid)}
-</div>
-<button class="btn btn--dark btn--lg btn--block lead__submit" type="submit" data-submit>
-<span data-submit-label>{e(M["submit_call"])}</span>{icon("arrow")}</button>
-<p class="lead__status" role="status" aria-live="polite"></p>
-</div>
-{done_block()}
-</form>
-</div>
-</dialog>'''
-
-
-def demo_badge():
-    if not S.get('demo'):
-        return ''
-    return (f'<p class="demo" role="note" data-demo><b>{e(T["demo"]["b"])}</b><span>{e(T["demo"]["text"])}</span>'
-            f'<button class="demo__x" type="button" aria-label="Скрыть пометку" data-demo-close>{icon("close")}</button></p>')
 
 
 def ld(obj):
@@ -520,66 +336,80 @@ def ld(obj):
             + '</script>')
 
 
-def breadcrumbs_ld(items):
-    return {'@context': 'https://schema.org', '@type': 'BreadcrumbList', 'itemListElement': [
-        {'@type': 'ListItem', 'position': i + 1, 'name': name, 'item': S['url'] + '/' + path}
-        for i, (name, path) in enumerate(items)]}
+def design_css():
+    """The panel's colours and sizes over the designer's variables. Nothing
+    is written while every value is empty."""
+    D = C.DESIGN
+    tokens = []
+    for key, var in (('brand', 'brand'), ('brand_hover', 'brand-hover'), ('brand_light', 'brand-light'), ('heading', 'heading'),
+                     ('body', 'body'), ('surface', 'surface'), ('surface_muted', 'surface-muted'), ('dark', 'dark'), ('dark_text', 'dark-text')):
+        v = D.get(key) or ''
+        if re.match(r'^#[0-9A-Fa-f]{6}$', v):
+            r, g, b = int(v[1:3], 16), int(v[3:5], 16), int(v[5:7], 16)
+            tokens.append(f'--c-{var}:{r} {g} {b}')
+    num = lambda k: D.get(k) if isinstance(D.get(k), (int, float)) and not isinstance(D.get(k), bool) else None  # noqa: E731
+    if num('radius') is not None:
+        n = num('radius')
+        tokens.append(f'--r-card:{n:g}px;--r-section:{n * 1.25:g}px;--r-inner:{n * .75:g}px')
+    if num('width') is not None:
+        tokens.append(f'--w-container:{num("width"):g}px')
+    if not tokens:
+        return ''
+    return '\n/* panel: design settings (generated) */\n:root{' + ';'.join(tokens) + '}\n'
 
 
 VERSIONS = {}
 WRITTEN = set()  # index.html files this run wrote; anything else is stale
 
+CSS = ['css/main.css', 'css/footer.css', 'css/layout.css', 'css/modal.css', 'css/site.css']
 
-def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', index=True, preload=''):
+
+def render(p, *, title, desc, body, active=None, kind='inner', extra_css=(), extra_js=(), jsonld=(), index=True):
     url = S['url'] + '/' + p.path
-    full_title = title if title.startswith(S['name']) else f'{title} — {S["name"]}'
-    robots = '' if index and C.SEO.get('index', True) else '<meta name="robots" content="noindex">\n'
+    robots = '' if index and C.SEO.get('index', True) else '<meta name="robots" content="noindex">\n  '
     og_src, og_w, og_h = og_image()
+    og_img = (f'<meta property="og:image" content="{e(og_src)}">\n  <meta property="og:image:width" content="{og_w}">\n  '
+              f'<meta property="og:image:height" content="{og_h}">\n  ') if og_src else ''
     verify = ''
     if C.SEO.get('yandex_verification'):
-        verify += f'<meta name="yandex-verification" content="{e(C.SEO["yandex_verification"])}">\n'
+        verify += f'<meta name="yandex-verification" content="{e(C.SEO["yandex_verification"])}">\n  '
     if C.SEO.get('google_verification'):
-        verify += f'<meta name="google-site-verification" content="{e(C.SEO["google_verification"])}">\n'
-    js = lambda name: f'<script src="{p.u("assets/js/" + name)}?v={VERSIONS["js"]}" defer></script>'  # noqa: E731
-    doc = f'''<!doctype html>
+        verify += f'<meta name="google-site-verification" content="{e(C.SEO["google_verification"])}">\n  '
+    css = ''.join(f'\n  <link rel="stylesheet" href="{p.u("assets/" + c)}?v={VERSIONS["css"]}">' for c in CSS + list(extra_css))
+    js = ''.join(f'\n  <script src="{p.u("assets/js/" + j)}?v={VERSIONS["js"]}" defer></script>' for j in ['main.js'] + list(extra_js))
+    body_cls = {'home': '', 'inner': 'inner-page ', 'legal': 'inner-page legal-page '}[kind]
+    doc = f'''<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>{e(full_title)}</title>
-<meta name="description" content="{e(desc)}">
-{robots}<link rel="canonical" href="{e(url)}">
-<meta property="og:type" content="{og_type}">
-<meta property="og:site_name" content="{e(S["name"])}">
-<meta property="og:locale" content="ru_RU">
-<meta property="og:title" content="{e(full_title)}">
-<meta property="og:description" content="{e(desc)}">
-<meta property="og:url" content="{e(url)}">
-<meta property="og:image" content="{e(og_src)}">
-<meta property="og:image:width" content="{og_w}">
-<meta property="og:image:height" content="{og_h}">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="{e(C.SEO.get("theme_color") or "#0B0E33")}">
-<meta name="color-scheme" content="light">
-<meta name="referrer" content="strict-origin-when-cross-origin">
-{verify}{favicon_links(p)}
-<link rel="preload" href="{p.u("assets/fonts/inter-cyrillic-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="{p.u("assets/fonts/inter-latin-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
-{preload}<link rel="stylesheet" href="{p.u("assets/css/main.css")}?v={VERSIONS["css"]}">
-<script src="{p.u("assets/js/boot.js")}?v={VERSIONS["js"]}"></script>
-{js("main.js")}
-{js("motion.js")}
-{"".join(ld(j) for j in jsonld)}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="{e(C.SEO.get("theme_color") or "#ffffff")}">
+  <title>{e(title)}</title>
+  <meta name="description" content="{e(desc)}">
+  {robots}<link rel="canonical" href="{e(url)}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{e(S["name"])}">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="{e(title)}">
+  <meta property="og:description" content="{e(desc)}">
+  <meta property="og:url" content="{e(url)}">
+  {og_img}{verify}{favicon_links(p)}
+  <link rel="preload" href="{p.u("assets/fonts/inter-cyrillic-opsz-normal.woff2")}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{p.u("assets/vendor/fontawesome/css/all.min.css")}">{css}{js}
+  {"".join(ld(j) for j in jsonld)}
 </head>
-<body data-endpoint="{e(S["endpoint"])}"{body_data()}>
-<a class="skip" href="#main">Перейти к содержанию</a>
-{header(p, active)}
-<main id="main">
+<body id="top" class="{body_cls}bg-surface font-sans text-base leading-relaxed text-text-body"{body_data()}>
+  <a href="#main" class="sr-only z-[60] rounded-full bg-dark px-6 py-3 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">{e(T["skip"])}</a>
+
+  {header(p, active)}
+
+  <main id="main">
 {body}
-</main>
-{footer(p)}
-{modal(p)}
-{demo_badge()}{cookie_banner(p)}
+  </main>
+
+  {footer(p)}
+  {modal(p)}
+  {cookie(p)}
 </body>
 </html>
 '''
@@ -592,228 +422,189 @@ def render(p, *, title, desc, body, active=None, jsonld=(), og_type='website', i
     return url
 
 
+def breadcrumbs_ld(items):
+    return {'@context': 'https://schema.org', '@type': 'BreadcrumbList', 'itemListElement': [
+        {'@type': 'ListItem', 'position': i + 1, 'name': name, 'item': S['url'] + '/' + path}
+        for i, (name, path) in enumerate(items)]}
+
+
 # --------------------------------------------------------------- pieces
 
-def shead(eyebrow, title, lead='', aside='', tone='', cls='', light=False):
-    """Section heading: eyebrow, a two-tone title (words slide in), a lead."""
-    t = words(title)
-    if tone:
-        t += ' <span class="tone">' + words(tone) + '</span>'
-    lead_html = f'<p class="shead__lead" data-reveal>{e(lead)}</p>' if lead else ''
-    aside_html = f'<div class="shead__aside" data-reveal>{aside}</div>' if aside else ''
-    return (f'<header class="shead {cls}"><div class="shead__main"><p class="eyebrow{" eyebrow--dark" if light else ""}" data-reveal>{e(eyebrow)}</p>'
-            f'<h2 class="h2{" h2--light" if light else ""}" data-split>{t}</h2>{lead_html}</div>{aside_html}</header>')
+def check_points(p, points, icon_cls='text-brand'):
+    return ''.join(f'''
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs {icon_cls}" aria-hidden="true"></i><span><strong>{e(b)}</strong> {md(p, t)}</span></li>'''
+                   for b, t in points)
 
 
-# `sizes` follow main.css. The content box of .wrap is 100vw minus a 5.6vw
-# gutter each side (88.8vw) until it reaches 1600px at 1824px; in
-# .section--soft it is 91.2vw and 1640px. Grids: 2 columns from 768px,
-# 3 (or the 4-column bento) from 1024px (1280px for the bento); gap 24px.
-# A size a little over the box only costs bytes; one under it gets a
-# picture smaller than the box, so they round up.
-
-def case_card(p, c, cls='', sizes='(min-width: 1824px) 788px, (min-width: 768px) 44.4vw, 88.8vw', h=3, eager=False):
-    """h: heading level (2 where the cards sit right under the page's H1);
-    eager: the first card of a list is on screen at once, so it is not lazy."""
-    result_n, result_t = c['results'][0]
-    return f'''<a class="case t-{c["slug"]} {cls}" href="{p.u("projects/" + c["slug"] + "/")}" data-cat="{c["type"]}" data-reveal>
-<div class="case__media">{case_picture(p, c, sizes=sizes, eager=eager)}</div>
-<div class="case__body">
-<div class="case__meta"><span class="tag">{e(C.CATEGORIES[c["type"]])}</span><span>{e(c["term"])}</span></div>
-<h{h} class="case__title">{e(c["title"])}</h{h}>
-<p class="case__res"><b>{e(result_n)}</b> {e(result_t)}</p>
-</div>
-<span class="go">{icon("arrow-ur")}</span>
-</a>'''
+def dark_cta(cta, button, cls='px-6 py-24', inner=''):
+    return f'''    <section class="{cls}">
+      <div class="{inner}mx-auto max-w-4xl rounded-section bg-dark p-8 text-center text-white sm:p-12">
+        <h2 class="text-4xl font-bold tracking-tight sm:text-5xl">{e(cta["title"])}</h2>
+        <p class="mx-auto mt-5 max-w-lg text-base leading-relaxed text-dark-text lg:text-lg">{e(cta["text"])}</p>
+        {modal_btn("mt-8 inline-flex items-center justify-center rounded-full px-8 py-4 font-medium btn-inverse", button)}
+      </div>
+    </section>'''
 
 
-def post_card(p, a, cls='', sizes='(min-width: 1824px) 531px, (min-width: 1024px) 30.4vw, (min-width: 768px) 45.6vw, 92vw',
-              h=3, eager=False):
-    """The default sizes are for "Читайте также" under an article (.section--soft)."""
-    return f'''<a class="post {cls}" href="{p.u("blog/" + a["slug"] + "/")}" data-cat="{a["cat"]}" data-reveal>
-<div class="post__media">{post_picture(p, a, sizes=sizes, eager=eager)}</div>
-<div class="post__body">
-<div class="post__meta"><span class="tag">{e(C.BLOG_CATEGORIES[a["cat"]])}</span><time datetime="{a["date"]}">{date_ru(a["date"])}</time></div>
-<h{h} class="post__title">{e(a["title"])}</h{h}>
-<p class="post__desc">{e(a["desc"])}</p>
-<span class="post__read">{icon("clock")}{a["read"]} {e(T["blog"]["read"])}</span>
-</div>
-</a>'''
+def contact_block(p, tag, title_id, source, intro_cls=''):
+    K = C.CONTACT_BLOCK
+    title = C.CONTACTS['title'] if tag == 'h1' else K['title']
+    lead = C.CONTACTS['lead'] if tag == 'h1' else K['lead']
+    tg = (f'''
+              <a href="{e(S["telegram"])}" target="_blank" rel="noopener" class="flex items-center gap-4 rounded-full px-5 py-3 font-medium btn-light">
+                <i class="fa-brands fa-telegram text-lg text-brand" aria-hidden="true"></i> {e(K["telegram"])}
+              </a>''' if S.get('telegram') else '')
+    mx = (f'''
+              <a href="{e(S["max"])}" target="_blank" rel="noopener" class="flex items-center gap-4 rounded-full px-5 py-3 font-medium btn-light">
+                <i class="fa-solid fa-comment-dots text-lg text-brand" aria-hidden="true"></i> {e(K["max"])}
+              </a>''' if S.get('max') else '')
+    container = 'page-container ' if tag == 'h1' else ''
+    return f'''    <section id="contact" aria-labelledby="{title_id}" class="{intro_cls}py-24">
+      <div class="{container}mx-auto grid max-w-container grid-cols-1 gap-12 px-6 lg:grid-cols-2 lg:px-8">
+        <div>
+          <{tag} id="{title_id}" class="text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(title)}</{tag}>
+          <p class="mt-6 max-w-sm text-base leading-relaxed text-text-body lg:text-lg">{e(lead)}</p>
+          <div class="mt-10 space-y-4">
+            <div class="rounded-2xl bg-surface-muted p-5 flex items-start gap-4">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface text-brand">
+                <i class="fa-solid fa-phone text-sm" aria-hidden="true"></i>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide text-text-body">{e(K["call_label"])}</p>
+                <a href="tel:{e(S["phone_href"])}" class="mt-1 block text-xl font-semibold text-text-heading hover:text-brand transition-colors">{e(S["phone"])}</a>
+                <p class="mt-1 text-xs text-text-body">{e(S["hours"])}</p>
+              </div>
+            </div>
+            <div class="flex flex-col gap-3">{tg}{mx}
+            </div>
+          </div>
+        </div>
+        {lead_form(p, "contact-form", source, "min-w-0 rounded-card bg-surface-muted p-8 lg:p-10")}
+      </div>
+    </section>'''
 
 
-def cta_scene(p):
-    K = T['cta']
-    return f'''<section class="scene scene--cta" aria-labelledby="cta-title">
-<div class="wrap cta">
-<div class="cta__text">
-<p class="eyebrow eyebrow--dark" data-reveal>{icon("diamond")}{e(K["eyebrow"])}</p>
-<h2 class="h2 h2--light" id="cta-title" data-split>{words(K["title"])} <span class="tone">{words(K["tone"])}</span></h2>
-<p class="cta__lead" data-reveal>{e(K["lead"])}</p>
-<div class="cta__act" data-reveal>
-<a class="btn btn--white btn--lg" href="{p.u("contacts/")}" data-order data-mode="call">{icon("phone")}{e(K["call"])}</a>
-<a class="btn btn--glass btn--lg" href="{p.u("contacts/")}" data-order data-mode="write">{icon("chat")}{e(K["write"])}</a>
-</div>
-</div>
-<div class="cta__art" data-parallax>{slot(p, "hero", sizes="(min-width: 1280px) 460px, (min-width: 1024px) 40vw, (min-width: 508px) 360px, 72vw")}</div>
-</div>
-</section>'''
+def placeholder(icon, label, aspect, extra='', big=False):
+    size = 'text-5xl mb-4 opacity-50' if big else 'text-4xl mb-3 opacity-40'
+    text = 'text-lg font-medium text-text-body' if big else 'font-medium text-text-body'
+    return f'''<div class="flex {aspect} items-center justify-center rounded-card {extra or "bg-surface-muted"} text-text-muted">
+              <div class="text-center">
+                <i class="{"fa-regular" if icon == "fa-image" else "fa-solid"} {e(icon)} {size}" aria-hidden="true"></i>
+                <p class="{text}">{e(label)}</p>
+              </div>
+            </div>'''
 
 
-def page_hero(p, crumbs, title, lead='', meta=''):
-    trail = ''.join(f'<a href="{p.u(href)}">{e(name)}</a><span aria-hidden="true">/</span>' for name, href in crumbs[:-1])
-    trail += f'<span aria-current="page">{e(crumbs[-1][0])}</span>'
-    lead_html = f'<p class="phero__lead" data-intro="2">{e(lead)}</p>' if lead else ''
-    return f'''<section class="phero">
-<div class="wrap phero__in">
-<nav class="crumbs" aria-label="Навигационная цепочка" data-intro="1">{trail}</nav>
-{meta}
-<h1 class="h1" data-intro-split>{words(title)}</h1>
-{lead_html}
-</div>
-</section>'''
+def picture_box(p, image, icon, label, aspect, sizes, extra='', big=False, eager=False):
+    """An uploaded screen in the designer's box, or the designer's placeholder."""
+    img = media_img(p, image, label, sizes, 'h-full w-full object-cover', eager) if image else None
+    if img:
+        return f'<div class="flex {aspect} overflow-hidden rounded-card {extra or "bg-surface-muted"}">{img}</div>'
+    return placeholder(icon, label, aspect, extra, big)
 
 
-def filters(label, options, total_counts, all_label):
-    btns = [f'<button type="button" class="filter" data-filter="all" aria-pressed="true">{e(all_label)}<sup>{sum(total_counts.values())}</sup></button>']
-    for key, name in options.items():
-        btns.append(f'<button type="button" class="filter" data-filter="{key}" aria-pressed="false">{e(name)}<sup>{total_counts.get(key, 0)}</sup></button>')
-    return f'<div class="filters" role="group" aria-label="{e(label)}" data-filters>{"".join(btns)}</div>'
+def case_card(p, c, home=False):
+    tag = c.get('home_tag') if home and c.get('home_tag') else c['card_tag']
+    text = c.get('home_text') if home and c.get('home_text') else c['card_text']
+    n, label, green = c['card_metric']
+    hl = 'h3' if home else 'h2'
+    cover = media_img(p, c.get('cover'), '', '(min-width: 768px) 33vw, 100vw', 'h-full w-full object-cover') if c.get('cover') else None
+    if cover:
+        media = f'<div class="flex aspect-[4/3] overflow-hidden rounded-inner bg-slate-200">{cover}</div>'
+    elif home:
+        media = '<div class="flex aspect-[4/3] items-center justify-center rounded-inner bg-slate-200 text-sm text-text-body">Превью</div>'
+    else:
+        media = ('<div class="flex aspect-[4/3] items-center justify-center rounded-inner border-2 border-dashed border-slate-300 bg-surface/50 text-slate-400 '
+                 'group-hover:border-slate-400 transition-colors">\n              <i class="fa-regular fa-image text-3xl" aria-hidden="true"></i>\n            </div>')
+    text_cls = 'text-base' if home else 'text-sm'
+    return f'''
+          <a href="{p.u("cases/" + c["slug"] + "/")}" class="group flex min-w-0 flex-col rounded-card bg-surface-muted p-4 transition-all duration-300 hover:-translate-y-1 hover:bg-slate-200">
+            {media}
+            <div class="flex flex-1 flex-col p-4 pt-6">
+              <span class="self-start rounded-full bg-surface px-3 py-1 text-xs font-medium text-brand">{e(tag)}</span>
+              <{hl} class="mt-4 text-xl font-semibold text-text-heading lg:text-2xl group-hover:text-brand transition-colors">{e(c["card_title"])}</{hl}>
+              <p class="mb-6 mt-3 {text_cls} leading-relaxed text-text-body">{e(text)}</p>
+              <p class="mt-auto border-t border-slate-200 pt-5 text-sm text-text-body"><span class="mr-2 text-2xl font-bold {"text-emerald-600" if green else "text-text-heading"}">{e(n)}</span>{e(label)}</p>
+            </div>
+          </a>'''
 
 
-def hero_media(p):
-    """The 3D «а»: poster picture first (it is the LCP), the loop on top of it
-    once it can play. motion.js picks the size and never plays it for
-    reduced motion or Save-Data."""
-    poster = slot(p, 'hero', alt=T['hero']['art_alt'], sizes='(min-width: 1024px) 46vw, 92vw',
-                  cls='hero__poster', eager=True)
-    if IMG.get('hero') or not IMG.get('hero_video', True):
-        return f'<div class="hero__media">{poster}</div>'
-    v = lambda n: p.u(f'assets/video/hero-loop-{n}')  # noqa: E731
-    return (f'<div class="hero__media" data-hero-media>{poster}'
-            f'<video class="hero__video" muted playsinline loop preload="none" aria-hidden="true" tabindex="-1" '
-            f'data-webm="{v("960.webm")}" data-mp4="{v("960.mp4")}" data-webm-sm="{v("640.webm")}" data-mp4-sm="{v("640.mp4")}"></video>'
-            f'</div>')
-
+# -------------------------------------------------- blocks of the old admin
 
 def problems_sec(p):
     K = C.PROBLEMS
     if not K.get('show'):
         return ''
-    cards = ''.join(f'<li class="plain-card" data-reveal><span class="plain-card__n">{i + 1:02d}</span>'
-                    f'<h3 class="plain-card__t">{e(t)}</h3><p class="plain-card__x">{e(x)}</p></li>'
-                    for i, (t, x) in enumerate(K['items']))
-    return (f'<section class="section" id="problems"><div class="wrap">{shead(K["eyebrow"], K["title"], tone=K["tone"])}'
-            f'<ul class="plain-grid">{cards}</ul></div></section>')
-
-
-def terms_sec(p):
-    K = C.TERMS
-    if not K.get('show'):
-        return ''
-    cards = ''.join(f'<li class="plain-card plain-card--soft" data-reveal><span class="plain-card__ico">{icon("check")}</span>'
-                    f'<h3 class="plain-card__t">{e(t)}</h3><p class="plain-card__x">{e(x)}</p></li>'
-                    for t, x in K['items'])
-    return (f'<section class="section" id="terms"><div class="wrap">{shead(K["eyebrow"], K["title"], tone=K["tone"])}'
-            f'<ul class="plain-grid">{cards}</ul></div></section>')
+    cards = ''.join(f'''
+          <article class="flex flex-col rounded-card bg-surface-muted p-8 lg:p-10">
+            <span class="text-sm font-medium text-brand">{i + 1:02d}</span>
+            <h3 class="mt-6 text-2xl font-semibold leading-tight tracking-tight text-text-heading">{e(t)}</h3>
+            <p class="mt-4 text-base leading-relaxed lg:text-lg text-text-body">{e(x)}</p>
+          </article>''' for i, (t, x) in enumerate(K['items']))
+    lead = f'<p class="mx-auto mt-5 max-w-xl text-center text-base leading-relaxed lg:text-lg text-text-body">{e(K["lead"])}</p>' if K.get('lead') else ''
+    return f'''    <section id="problems" class="py-24">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(K["title"])}</h2>{lead}
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">{cards}
+        </div>
+      </div>
+    </section>
+'''
 
 
 def compare_sec(p):
     K = C.COMPARE
     if not K.get('show'):
         return ''
-    rows = ''.join(f'<tr><th scope="row">{e(a)}</th><td>{e(b)}</td><td class="cmp__us">{e(c)}</td></tr>' for a, b, c in K['rows'])
-    return (f'<section class="section section--soft" id="compare"><div class="wrap">{shead(K["eyebrow"], K["title"], tone=K["tone"])}'
-            f'<div class="cmp" data-reveal><table><thead><tr><td></td><th scope="col">{e(K["left"])}</th>'
-            f'<th scope="col" class="cmp__us">{e(K["right"])}</th></tr></thead><tbody>{rows}</tbody></table></div></div></section>')
+    rows = ''.join(f'<tr class="border-t border-slate-200"><th scope="row" class="px-6 py-5 text-left font-semibold text-text-heading">{e(a)}</th>'
+                   f'<td class="px-6 py-5 text-text-body">{e(b)}</td><td class="px-6 py-5 font-semibold text-text-heading">{e(c)}</td></tr>'
+                   for a, b, c in K['rows'])
+    return f'''    <section id="compare" class="mx-4 rounded-card bg-surface-muted py-24 lg:mx-8">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(K["title"])}</h2>
+        <div class="mt-14 overflow-x-auto rounded-card bg-surface">
+          <table class="w-full min-w-[560px] border-collapse text-base">
+            <thead><tr><td class="px-6 py-5"></td><th scope="col" class="px-6 py-5 text-left text-sm font-medium text-text-body">{e(K["left"])}</th><th scope="col" class="px-6 py-5 text-left text-sm font-medium text-brand">{e(K["right"])}</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+'''
 
 
-def home_form(p):
-    K = C.HOME_FORM
+def terms_sec(p):
+    K = C.TERMS
     if not K.get('show'):
         return ''
-    return (f'<section class="section" id="order-form"><div class="wrap"><div class="card card--form card--wide" data-reveal>'
-            f'<h2 class="card__title">{e(K["title"])}</h2><p class="card__sub">{e(K["sub"])}</p>'
-            f'{project_form(p, "h", "contacts")}</div></div></section>')
+    cards = ''.join(f'''
+          <article class="flex flex-col rounded-card bg-surface-muted p-8">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-lg text-brand"><i class="fa-solid fa-check" aria-hidden="true"></i></div>
+            <h3 class="mt-6 text-2xl font-semibold tracking-tight text-text-heading">{e(t)}</h3>
+            <p class="mt-3 text-base leading-relaxed text-text-body">{e(x)}</p>
+          </article>''' for t, x in K['items'])
+    return f'''    <section id="terms" class="py-24">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(K["title"])}</h2>
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">{cards}
+        </div>
+      </div>
+    </section>
+'''
 
 
-def block_page(p, title, lead, body, cover, active, seo_title, seo_desc, crumbs):
-    cover_html = ''
-    if cover:
-        pic = media_picture(p, cover, '', '(min-width: 960px) 880px, 100vw', '', True)
-        if pic:
-            cover_html = f'<div class="article__cover" data-reveal>{pic}</div>'
-    page = (page_hero(p, crumbs, title, lead)
-            + f'''<div class="sheet">
-<section class="section section--first">
-<div class="wrap">
-<article class="article">
-{cover_html}<div class="prose">{prose_blocks(body)}</div>
-<aside class="article__cta" data-reveal>
-<p><b>{e(T["blog"]["cta_b"])}</b> {e(T["blog"]["cta"])}</p>
-<a class="btn btn--dark" href="{p.u("contacts/")}" data-order>{e(T["blog"]["cta_button"])} {icon("arrow")}</a>
-</aside>
-</article>
-</div>
-</section>
-{cta_scene(p)}
-</div>''')
-    return render(p, title=seo_title or title, desc=seo_desc or lead, body=page, active=active,
-                  jsonld=(breadcrumbs_ld([(name, path) for name, path in crumbs[:-1]] + [(title, p.path)]),))
-
-
-def about():
-    A = C.ABOUT
-    p = Page('about/')
-    return block_page(p, A['title'], A['lead'], A['body'], A.get('cover'), 'about',
-                      C.SEO.get('about_title'), C.SEO.get('about_desc'), [(home_label(), ''), (A['title'], '')])
-
-
-RESERVED = {'projects', 'blog', 'contacts', 'privacy', 'consent', 'about', '404', 'assets', 'api', 'admin'}
-
-
-def landing(x):
-    if x['slug'] in RESERVED:
-        sys.exit(f'Адрес /{x["slug"]}/ занят страницей сайта — выберите другой ключ посадочной страницы')
-    p = Page(x['slug'] + '/')
-    return block_page(p, x['title'], x['lead'], x['body'], x.get('cover'), 'l-' + x['slug'],
-                      x.get('seo_title'), x.get('seo_desc'), [(home_label(), ''), (x['title'], '')])
-
-
-def design_css():
-    """The panel's colours and sizes over the designer's tokens. Nothing is
-    written while every value is empty."""
-    D = C.DESIGN
-    tokens = []
-    rules = []
-    num = lambda k: D.get(k) if isinstance(D.get(k), (int, float)) and not isinstance(D.get(k), bool) else None  # noqa: E731
-    fmt = lambda v: ('%.3f' % v).rstrip('0').rstrip('.')  # noqa: E731
-    if num('section') is not None:
-        n = num('section')
-        tokens.append(f'--section:clamp({fmt(n / 2)}px,{fmt(n / 16)}vw,{fmt(n)}px)')
-    if num('wrap') is not None:
-        tokens.append(f'--wrap:{fmt(num("wrap"))}px')
-    if num('radius') is not None:
-        n = num('radius')
-        tokens.append(f'--r-xl:clamp({fmt(n * .6)}px,3.2vw,{fmt(n)}px);--r-l:{fmt(n * 2 / 3)}px;--r-m:{fmt(n / 2)}px;--r-s:{fmt(n / 3)}px')
-    for key, var in (('accent', '--indigo'), ('accent_dark', '--lilac'), ('ink', '--ink'), ('muted', '--muted'),
-                     ('bg', '--bg'), ('bg_soft', '--bg-2'), ('line', '--line')):
-        if D.get(key):
-            tokens.append(f'{var}:{D[key]}')
-    if D.get('dark'):
-        tokens.append(f'--hero-bg:{D["dark"]};--scene-bg:{D["dark"]};--navy-900:{D["dark"]}')
-    if num('hero_pad') is not None:
-        n = num('hero_pad')
-        rules.append(f'.phero{{padding-top:calc(var(--hdr) + {fmt(n)}px)}}')
-    if num('font_size') is not None:
-        rules.append(f'body{{font-size:{fmt(num("font_size"))}px}}')
-    if num('heading_ls') is not None:
-        rules.append(f'.display,.h1,.h2{{letter-spacing:{fmt(num("heading_ls"))}em}}')
-    if not tokens and not rules:
-        return ''
-    out = '\n/* panel: design settings (generated) */\n'
-    if tokens:
-        out += ':root{' + ';'.join(tokens) + '}\n'
-    return out + '\n'.join(rules) + ('\n' if rules else '')
+def prose(p, body):
+    out = []
+    for kind, val in body:
+        if kind == 'p':
+            out.append(f'<p>{md(p, val)}</p>')
+        elif kind == 'h2':
+            out.append(f'<h2>{e(val)}</h2>')
+        elif kind == 'ul':
+            out.append('<ul>' + ''.join(f'<li>{md(p, x)}</li>' for x in val) + '</ul>')
+        elif kind == 'quote':
+            out.append(f'<blockquote><p>{md(p, val)}</p></blockquote>')
+    return '\n'.join(out)
 
 
 # ---------------------------------------------------------------- pages
@@ -821,386 +612,561 @@ def design_css():
 def home():
     p = Page('')
     H = C.HERO
-    feats = ''.join(f'<li>{icon(ic)}<span>{e(t)}</span></li>' for ic, t in C.FEATURES)
-    hero = f'''<section class="hero">
-<div class="wrap hero__in">
-<div class="hero__text">
-<p class="eyebrow eyebrow--dark" data-intro="1">{icon("diamond")}{e(H["eyebrow"])}</p>
-<h1 class="display"><span class="line"><span>{e(H["lines"][0])}</span></span> <span class="line line--accent"><span>{e(H["lines"][1])}</span></span></h1>
-<p class="hero__lead" data-intro="2">{e(H["lead"])}</p>
-<div class="hero__cta" data-intro="3">
-<a class="btn btn--white btn--xl" href="{p.u("contacts/")}" data-order>{e(T["hero"]["cta"])}</a>
-<a class="link-under" href="{p.u("projects/")}">{e(T["hero"]["link"])}</a>
-</div>
-<p class="hero__caption" data-intro="4">{e(H["caption"])}</p>
-</div>
-<div class="hero__art" data-intro-art>
-{hero_media(p)}
-<p class="hero__art-caption">{e(H["art_caption"])}</p>
-<button class="hero__pause" type="button" aria-label="Остановить анимацию" aria-pressed="false" hidden data-video-toggle>{icon("pause", "ico ico--pause")}{icon("play", "ico ico--play")}</button>
-</div>
-</div>
-<div class="wrap"><ul class="hero__feats">{feats}</ul></div>
-</section>'''
-
-    lead_a, lead_b = C.STATEMENT
-    statement = f'''<section class="section statement" aria-label="{e(S["name"])}" data-statement-section>
-<div class="wrap">
-<p class="statement__text" data-statement><span class="statement__a">{e(lead_a)}</span> <span class="statement__b">{words(lead_b, "sw")}</span></p>
-<ul class="stats">{"".join(f'<li class="stat" data-reveal><b class="stat__n" data-count>{e(n)}</b><span class="stat__l">{e(l)}</span><span class="stat__s">{e(s)}</span></li>' for n, l, s in C.STATS)}</ul>
-</div>
-</section>'''
-
-    A = T['approach']
-    roles = ''.join(f'<li{" class=is-ai" if ic == "spark" else ""}>{e(name)}</li>' for ic, name, _ in C.ROLES)
-    steps = ''.join(f'''<li class="astep" data-step>
-<span class="astep__n">{i + 1:02d}</span>
-<h3 class="astep__title">{e(title)}</h3>
-<p class="astep__text">{e(text)}</p>
-<dl class="astep__meta">
-<div><dt>{icon("user")}{e(A["who"])}</dt><dd>{e(who)}</dd></div>
-<div><dt>{icon("spark")}{e(A["ai"])}</dt><dd>{e(ai)}</dd></div>
-<div><dt>{icon("clock")}{e(A["term"])}</dt><dd>{e(days)}</dd></div>
-</dl>
-</li>''' for i, (title, who, text, ai, days) in enumerate(C.STEPS))
-    approach = f'''<section class="scene scene--approach" id="approach" aria-labelledby="approach-title">
-<div class="wrap approach">
-<div class="approach__side">
-<div class="approach__sticky">
-<p class="eyebrow eyebrow--dark" data-reveal>{icon("diamond")}{e(A["eyebrow"])}</p>
-<h2 class="h2 h2--light" id="approach-title" data-split>{words(A["title"])} <span class="tone">{words(A["tone"])}</span></h2>
-<ul class="formula" aria-label="Команда проекта" data-reveal>{roles}</ul>
-<p class="approach__count" aria-hidden="true">{e(A["step"])} <b data-step-now>01</b> из {len(C.STEPS):02d}</p>
-<div class="approach__art" data-parallax>{slot(p, "approach", sizes="(min-width: 1200px) 500px, (min-width: 1024px) 42vw, (min-width: 473px) 420px, 88.8vw")}</div>
-</div>
-</div>
-<ol class="approach__steps">{steps}</ol>
-</div>
-<div class="wrap"><p class="approach__total" data-reveal>{icon("clock")}<span><b>{e(A["total_b"])}</b> {e(A["total"])}</span></p></div>
-</section>'''
-
-    V = T['services']
-    svc_img = {'landing': 'svc-landing', 'multi-base': 'svc-multi', 'multi-custom': 'svc-custom'}
-    services = ''.join(f'''<article class="svc" data-reveal>
-<div class="svc__media">{slot(p, svc_img[sid], sizes="(min-width: 1824px) 517px, (min-width: 1024px) 29.6vw, (min-width: 768px) 44.4vw, 88.8vw")}</div>
-<div class="svc__body">
-<span class="badge">{icon("search")}{e(V["badge"])}</span>
-<h3 class="svc__title">{e(name)}</h3>
-<p class="svc__text">{e(text)}</p>
-<ul class="chips">{"".join(f"<li>{e(t)}</li>" for t in tags)}</ul>
-<a class="link-arrow" href="#tariffs">{e(V["link"])} {icon("arrow")}</a>
-</div>
-</article>''' for sid, name, text, tags in C.SERVICES)
-    services_sec = f'''<section class="section" id="services">
-<div class="wrap">
-{shead(V["eyebrow"], V["title"], tone=V["tone"], lead=V["lead"])}
-<div class="svc-grid">{services}</div>
-</div>
-</section>'''
-
-    BENTO_SIZES = '(min-width: 1824px) 404px, (min-width: 1280px) 22.8vw, (min-width: 768px) 45.6vw, 92vw'
-    W = T['why']
-    seo_list = ''.join(f'<li>{icon("check")}{e(s)}</li>' for s in C.SEO_ITEMS)
-    why = f'''<section class="section section--soft" id="why">
-<div class="wrap">
-{shead(W["eyebrow"], W["title"], tone=W["tone"])}
-<div class="bento">
-<article class="bc bc--human" data-reveal>
-<div class="bc__media">{slot(p, "why-human", sizes="(min-width: 1824px) 808px, (min-width: 768px) 45.6vw, 92vw")}</div>
-<div class="bc__body"><h3 class="bc__title">{e(W["human_t"])}</h3>
-<p class="bc__text">{e(W["human"])}</p></div>
-</article>
-<article class="bc bc--fast" data-reveal>
-<div class="bc__media">{slot(p, "why-fast", sizes=BENTO_SIZES)}</div>
-<div class="bc__body"><h3 class="bc__title">{e(W["fast_t"])}</h3>
-<p class="bc__text">{e(W["fast"])}</p></div>
-</article>
-<article class="bc bc--seo" data-reveal>
-<div class="bc__media">{slot(p, "why-seo", sizes=BENTO_SIZES)}</div>
-<div class="bc__body"><h3 class="bc__title">{e(W["seo_t"])}</h3><ul class="ticks">{seo_list}</ul></div>
-</article>
-<article class="bc bc--team" data-reveal>
-<div class="bc__media">{slot(p, "why-team", sizes=BENTO_SIZES)}</div>
-<div class="bc__body"><h3 class="bc__title">{e(W["team_t"])}</h3>
-<p class="bc__text">{e(W["team"])}</p></div>
-</article>
-</div>
-</div>
-</section>'''
-
-    featured = [c for c in C.CASES if c.get('featured')][:4]
-    works = f'''<section class="section" id="works">
-<div class="wrap">
-{shead(T["works"]["eyebrow"], T["works"]["title"], tone=T["works"]["tone"], aside=f'<a class="btn btn--outline" href="{p.u("projects/")}">{e(T["works"]["button"])} {icon("arrow")}</a>')}
-<div class="works">{"".join(case_card(p, c) for c in featured)}</div>
-</div>
-</section>'''
-
-    tariffs = []
-    for t in C.TARIFFS:
-        pop = t.get('popular')
-        feats_t = ''.join(f'<li>{icon("check")}{e(f)}</li>' for f in t['features'])
-        badge = f'<span class="badge badge--pop">{e(T["tariffs"]["popular"])}</span>' if pop else ''
-        price_cls = '' if t['price'][0].isdigit() else ' tariff__price--text'
-        tariffs.append(f'''<article class="tariff{" tariff--pop" if pop else ""}" data-reveal>
-<div class="tariff__head"><h3 class="tariff__name">{e(t["name"])}<span>{e(t["sub"])}</span></h3>{badge}</div>
-<p class="tariff__price{price_cls}"><b>{e(t["price"])}</b><span>{e(t["price_note"])}</span></p>
-<p class="tariff__term">{icon("clock")}{e(t["term"])}</p>
-<ul class="ticks">{feats_t}</ul>
-<a class="btn {"btn--white" if pop else "btn--dark"} btn--lg btn--block" href="{p.u("contacts/")}" data-order data-interest="{t["id"]}">{e(T["tariffs"]["button"])} {icon("arrow")}</a>
-</article>''')
-    tariffs_sec = f'''<section class="section" id="tariffs">
-<div class="wrap">
-{shead(T["tariffs"]["eyebrow"], T["tariffs"]["title"], tone=T["tariffs"]["tone"])}
-<div class="tariffs">{"".join(tariffs)}</div>
-<p class="note" data-reveal><span class="note__ico">{icon("spark")}</span><span>{e(C.TARIFF_NOTE)}</span></p>
-</div>
-</section>'''
-
-    reviews = ''.join(f'''<div class="review" data-reveal>
-<blockquote class="review__text">«{e(text)}»</blockquote>
-<p class="review__who"><span class="avatar" aria-hidden="true">{e(name[0])}</span><span><b>{e(name)}</b><small>{e(role)}</small></span></p>
-<a class="link-arrow" href="{p.u("projects/" + slug + "/")}">{e(T["reviews"]["link"])} {icon("arrow")}</a>
-</div>''' for name, role, slug, text in C.REVIEWS)
-    reviews_sec = f'''<section class="section section--soft" id="reviews">
-<div class="wrap">
-{shead(T["reviews"]["eyebrow"], T["reviews"]["title"], tone=T["reviews"]["tone"])}
-<div class="reviews">{reviews}</div>
-</div>
-</section>'''
-
-    qa = ''.join(f'<details class="qa"><summary class="qa__q"><span>{e(q)}</span><span class="qa__ico">{icon("plus")}</span></summary>'
-                 f'<div class="qa__a"><p>{e(a)}</p></div></details>' for q, a in C.FAQ)
-    faq = f'''<section class="section" id="faq">
-<div class="wrap faq">
-<div class="faq__head">
-<p class="eyebrow" data-reveal>{e(T["faq"]["eyebrow"])}</p>
-<h2 class="h2" data-split>{words(T["faq"]["title"])}</h2>
-<p class="shead__lead" data-reveal>{e(T["faq"]["lead"])}</p>
-<a class="btn btn--outline" href="{p.u("contacts/")}" data-order data-mode="write" data-reveal>{icon("chat")}{e(T["faq"]["button"])}</a>
-</div>
-<div class="faq__list" data-reveal>{qa}</div>
-</div>
-</section>'''
-
-    body = (hero + '<div class="sheet">' + statement + problems_sec(p) + approach + services_sec + why + compare_sec(p)
-            + works + tariffs_sec + reviews_sec + terms_sec(p) + faq + home_form(p) + cta_scene(p) + '</div>')
-    org = {
-        '@context': 'https://schema.org', '@type': 'Organization', 'name': S['name'],
-        'alternateName': S['name_lat'], 'url': S['url'], 'logo': S['url'] + '/' + favicon_path(),
-        'email': S['email'], 'telephone': S['phone_href'],
-        'description': C.SEO['org_desc'],
-    }
-    faq_ld = {'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
-        {'@type': 'Question', 'name': q, 'acceptedAnswer': {'@type': 'Answer', 'text': a}} for q, a in C.FAQ]}
-    offers = {'@context': 'https://schema.org', '@type': 'ItemList', 'name': 'Тарифы', 'itemListElement': [
-        {'@type': 'ListItem', 'position': i + 1, 'item': {
-            '@type': 'Service', 'name': t['name'] + ('' if t['id'] == 'landing' else ' · ' + t['sub']),
-            'provider': {'@type': 'Organization', 'name': S['name']}}}
-        for i, t in enumerate(C.TARIFFS)]}
-    hero_img = None if IMG.get('hero') else MANIFEST.get('hero')
-    preload = ''
-    if hero_img:
-        srcset = ', '.join(f'{p.u(src)} {w}w' for w, src in hero_img['avif'])
-        preload = (f'<link rel="preload" as="image" type="image/avif" imagesrcset="{srcset}" '
-                   f'imagesizes="(min-width: 1024px) 46vw, 92vw" fetchpriority="high">\n')
-    return render(p, title=C.SEO['home_title'], desc=C.SEO['home_desc'],
-                  body=body, active='home', jsonld=(org, faq_ld, offers), preload=preload)
+    title = '<br class="hidden sm:block"> '.join(e(x) for x in H['title'])
+    teams = '<li aria-hidden="true" class="font-normal text-slate-300">·</li>\n            '.join(f'<li>{e(t)}</li>' for t in H['teams'])
+    hero = f'''    <section id="hero" aria-labelledby="hero-title" class="px-6 py-24 lg:py-32">
+      <div class="mx-auto max-w-4xl text-center">
+        <div class="mb-8 inline-flex items-center gap-2.5 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-medium text-text-heading">
+          <span class="h-2 w-2 rounded-full bg-brand" aria-hidden="true"></span>
+          {e(H["badge"])}
+        </div>
+        <h1 id="hero-title" class="text-5xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-6xl lg:text-7xl">{title}</h1>
+        <p class="mx-auto mt-6 max-w-2xl text-xl leading-relaxed text-text-body">{e(H["lead"])}</p>
+        <div class="mt-10 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+          {modal_btn("inline-flex items-center justify-center rounded-full px-8 py-4 font-medium btn-dark", H["cta"])}
+          <a href="{p.u("portfolio/")}" class="inline-flex items-center justify-center gap-3 rounded-full px-8 py-4 font-medium btn-light">{e(H["link"])} <i class="fa-solid fa-arrow-right text-sm" aria-hidden="true"></i></a>
+        </div>
+        <div class="mt-16">
+          <p class="text-sm text-text-body">{e(H["teams_label"])}</p>
+          <ul aria-label="Опыт команды" class="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xl font-bold tracking-tight text-text-heading sm:gap-x-8 sm:text-2xl">
+            {teams}
+          </ul>
+        </div>
+      </div>
+    </section>
+'''
+    A = C.AUDIENCE
+    audience = f'''    <section aria-labelledby="audience-title" class="py-24">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 id="audience-title" class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(A["title"])}</h2>
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">''' + ''.join(f'''
+          <article class="flex flex-col rounded-card bg-surface-muted p-8 lg:p-10">
+            <span class="text-sm font-medium text-brand">{e(lbl)}</span>
+            <h3 class="mt-10 text-2xl font-semibold leading-tight tracking-tight text-text-heading">{e(t)}</h3>
+            <p class="mt-4 text-base leading-relaxed lg:text-lg text-text-body">{e(x)}</p>
+          </article>''' for lbl, t, x in A['items']) + '''
+        </div>
+      </div>
+    </section>
+'''
+    P = C.PROCESS
+    pill = 'rounded-full border border-slate-200 bg-surface px-5 py-4'
+    row = lambda items: ''.join(f'\n            <li data-flow-target class="{pill}">{e(x)}</li>' for x in items)  # noqa: E731
+    down = ('<div class="relative h-12"><div class="absolute inset-y-0 left-1/2 w-0 border-l border-dashed border-slate-300"></div>'
+            '<div class="absolute left-[16.666667%] right-[16.666667%] top-0 hidden h-6 border-x border-b border-dashed border-slate-300 md:block"></div></div>')
+    up = ('<div class="relative h-12"><div class="absolute inset-y-0 left-1/2 w-0 border-l border-dashed border-slate-300"></div>'
+          '<div class="absolute bottom-0 left-[16.666667%] right-[16.666667%] hidden h-6 border-x border-t border-dashed border-slate-300 md:block"></div></div>')
+    process = f'''    <section id="axiomantic-process" aria-labelledby="process-title" class="mx-4 rounded-card bg-surface-muted py-24 lg:mx-8">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 id="process-title" class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(P["title"])}</h2>
+        <div class="text-center mb-12 mt-6">
+          <div class="inline-flex items-center gap-2 rounded-full bg-dark px-6 py-3 text-sm font-medium text-white sm:text-base">
+            {e(P["badge"])}
+          </div>
+        </div>
+        <div class="mx-auto mt-8 max-w-3xl flow-board" data-flow-board>
+          <div class="flow-overlay text-brand" data-flow-overlay aria-hidden="true"></div>
+          <ul class="grid grid-cols-1 gap-3 text-center font-medium text-text-heading md:grid-cols-3 md:gap-6">{row(P["top"])}
+          </ul>
+          {down}
+          <div class="flex justify-center"><div data-flow-hub class="rounded-full bg-dark px-10 py-5 text-2xl font-extrabold tracking-tighter text-white">{e(P["hub"])}</div></div>
+          {up}
+          <ul class="grid grid-cols-1 gap-3 text-center font-medium text-text-heading md:grid-cols-3 md:gap-6">{row(P["bottom"])}
+          </ul>
+          {down}
+          <div class="flex justify-center"><div data-flow-target class="rounded-full border border-slate-200 bg-surface px-6 py-4 text-center font-medium text-text-heading sm:px-10">{e(P["last"])}</div></div>
+        </div>
+      </div>
+    </section>
+'''
+    AP = C.APPROACH
+    approach = f'''    <section aria-labelledby="product-title" class="py-24">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <div class="max-w-3xl">
+          <h2 id="product-title" class="text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{"<br>".join(e(x) for x in AP["title"])}</h2>
+          <p class="mt-5 text-lg leading-relaxed text-text-body">{e(AP["lead"])}</p>
+        </div>
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">''' + ''.join(f'''
+          <article class="flex flex-col rounded-card bg-surface-muted p-8">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-lg text-brand">{fa(it["icon"])}</div>
+            <h3 class="mt-6 text-2xl font-semibold tracking-tight text-text-heading">{e(it["title"])}</h3>
+            <p class="mt-3 text-base leading-relaxed text-text-body">{e(it["text"])}</p>
+            <ul class="mt-6 space-y-4 text-sm text-text-body">{check_points(p, it["points"])}
+            </ul>
+          </article>''' for it in AP['items']) + '''
+        </div>
+      </div>
+    </section>
+'''
+    SV = C.SERVICES_HOME
+    services = f'''    <section id="services" aria-labelledby="services-title" class="py-24">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 id="services-title" class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(SV["title"])}</h2>
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">''' + ''.join(f'''
+          <article class="rounded-card bg-surface-muted p-8 lg:p-10"><div class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-lg text-brand">{fa(ic)}</div><h3 class="mt-8 text-2xl font-semibold text-text-heading">{e(t)}</h3><p class="mt-3 text-base leading-relaxed lg:text-lg text-text-body">{e(x)}</p></article>'''
+                                                                                                for ic, t, x in SV['items']) + '''
+        </div>
+      </div>
+    </section>
+'''
+    CH = C.CASES_HOME
+    featured = [c for c in C.CASES if c.get('featured')][:3]
+    cases = f'''    <section id="cases" aria-labelledby="cases-title" class="py-24">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <div class="flex flex-wrap items-center justify-between gap-6">
+          <h2 id="cases-title" class="text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(CH["title"])}</h2>
+          <a href="{p.u("portfolio/")}" class="inline-flex min-h-11 items-center gap-2 rounded-full px-5 text-sm font-medium btn-light">{e(CH["button"])} <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+        </div>
+        <div id="cases-grid" class="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">{"".join(case_card(p, c, home=True) for c in featured)}
+        </div>
+      </div>
+    </section>
+''' if featured else ''
+    PR = C.PRICING
+    plans = []
+    for pl in PR['plans']:
+        dark = pl.get('dark')
+        prefix = f'<span class="text-base font-normal {"text-dark-text" if dark else "text-text-body"}">{e(pl["prefix"])} </span>' if pl.get('prefix') else ''
+        price = e(pl['price']).replace(' ', '&nbsp;')
+        feats = ''.join(f'\n              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs {"text-white" if dark else "text-brand"}" aria-hidden="true"></i><span>{e(f)}</span></li>'
+                        for f in pl['features'])
+        if dark:
+            plans.append(f'''
+          <article class="flex min-w-0 flex-col rounded-card border border-slate-900 bg-dark p-8 text-white">
+            <h3 class="text-lg font-semibold lg:text-2xl">{e(pl["name"])}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-dark-text">{e(pl["text"])}</p>
+            <p class="mt-8 text-3xl font-bold lg:text-4xl">{prefix}{price}</p>
+            <ul class="mb-8 mt-8 space-y-4 border-t border-slate-700 pt-8 text-sm text-dark-text flex-1">{feats}
+            </ul>
+            {modal_btn("mt-auto inline-flex items-center justify-center rounded-full px-6 py-4 text-center font-medium btn-inverse", pl["button"], pl.get("interest", ""))}
+          </article>''')
+        else:
+            plans.append(f'''
+          <article class="flex min-w-0 flex-col rounded-card border border-slate-200 bg-surface p-8">
+            <h3 class="text-lg font-semibold text-text-heading lg:text-2xl">{e(pl["name"])}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-text-body">{e(pl["text"])}</p>
+            <p class="mt-8 text-3xl font-bold text-text-heading lg:text-4xl">{prefix}{price}</p>
+            <ul class="mb-8 mt-8 space-y-4 border-t border-slate-200 pt-8 text-sm flex-1 text-text-body">{feats}
+            </ul>
+            {modal_btn("mt-auto inline-flex items-center justify-center rounded-full px-6 py-4 text-center font-medium btn-dark", pl["button"], pl.get("interest", ""))}
+          </article>''')
+    pricing = f'''    <section id="pricing" aria-labelledby="pricing-title" class="mx-4 rounded-card bg-surface-muted py-24 lg:mx-8">
+      <div class="mx-auto max-w-container px-6 lg:px-8">
+        <h2 id="pricing-title" class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(PR["title"])}</h2>
+        <p class="mx-auto mt-5 max-w-xl text-center text-base leading-relaxed lg:text-lg text-text-body">{e(PR["lead"])}</p>
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">{"".join(plans)}
+        </div>
+      </div>
+    </section>
+'''
+    CT = C.CTA_HOME
+    cta = f'''    <section aria-labelledby="cta-title" class="px-6 py-24">
+      <div class="mx-auto max-w-4xl rounded-section bg-dark p-8 text-center text-white sm:p-12">
+        <h2 id="cta-title" class="text-4xl font-bold tracking-tight sm:text-5xl">{e(CT["title"])}</h2>
+        <p class="mx-auto mt-5 max-w-lg text-base leading-relaxed text-dark-text lg:text-lg">{e(CT["text"])}</p>
+        {modal_btn("mt-8 inline-flex items-center justify-center rounded-full px-8 py-4 font-medium btn-inverse", CT["button"])}
+      </div>
+    </section>
+'''
+    contact = contact_block(p, 'h2', 'contact-title', 'home') + '\n' if C.HOME_FORM.get('show', True) else ''
+    body = (hero + problems_sec(p) + audience + process + approach + services + compare_sec(p) + cases + pricing
+            + terms_sec(p) + cta + contact)
+    org = {'@context': 'https://schema.org', '@type': 'Organization', 'name': S['name'], 'url': S['url'],
+           'email': S['email'], 'telephone': S['phone_href'], 'description': C.SEO.get('org_desc', '')}
+    return render(p, title=C.SEO['home_title'], desc=C.SEO['home_desc'], body=body, active='home', kind='home',
+                  extra_css=['css/home.css'], extra_js=['process-flow.js'], jsonld=(org,))
 
 
-def projects():
-    p = Page('projects/')
-    counts = {}
-    for c in C.CASES:
-        counts[c['type']] = counts.get(c['type'], 0) + 1
-    grid = ''.join(case_card(p, c, sizes='(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw', h=2, eager=i == 0)
-                   for i, c in enumerate(C.CASES))
-    P = T['projects']
-    body = (page_hero(p, [(home_label(), ''), (P['title'], 'projects/')], P['title'], P['lead'])
-            + f'''<div class="sheet">
-<section class="section section--first">
-<div class="wrap">
-{filters(P["filter"], C.CATEGORIES, counts, P["all"])}
-<div class="works works--3" data-filter-grid>{grid}</div>
-<p class="empty" hidden data-empty>{e(P["empty"])}</p>
-</div>
-</section>
-{cta_scene(p)}
-</div>''')
-    return render(p, title=C.SEO['projects_title'], desc=C.SEO['projects_desc'],
-                  body=body, active='projects', jsonld=(breadcrumbs_ld([(home_label(), ''), (P['title'], 'projects/')]),))
+def services():
+    p = Page('services/')
+    K = C.SERVICES_PAGE
+    items = ''.join(f'''
+          <article class="flex min-w-0 flex-col gap-6 rounded-card bg-surface-muted p-8 sm:flex-row lg:p-10">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-light text-lg text-brand">
+              {fa(ic)}
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-2xl font-semibold tracking-tight text-text-heading">{e(t)}</h2>
+              <p class="mt-3 text-base leading-relaxed text-text-body lg:text-lg">{e(x)}</p>
+            </div>
+          </article>''' for ic, t, x in K['items'])
+    body = f'''    <section aria-labelledby="hero-title" class="page-intro px-6 pt-24 pb-16">
+      <div class="page-container mx-auto max-w-4xl text-center">
+        <h1 id="hero-title" class="text-5xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-6xl lg:text-7xl">{e(K["title"])}</h1>
+        <p class="mx-auto mt-6 max-w-2xl text-xl leading-relaxed text-text-body">{e(K["lead"])}</p>
+      </div>
+    </section>
+
+    <section aria-label="Список услуг" class="pb-24">
+      <div class="page-container mx-auto max-w-container px-6 lg:px-8">
+        <div class="flex flex-col gap-6">{items}
+        </div>
+      </div>
+    </section>
+
+{dark_cta(K["cta"], K["cta"]["button"], inner="page-container ")}
+'''
+    return render(p, title=C.SEO['services_title'], desc=C.SEO['services_desc'], body=body, active='services',
+                  jsonld=(breadcrumbs_ld([('Главная', ''), (K['title'], p.path)]),))
 
 
-def case_page(i, c):
-    p = Page(f'projects/{c["slug"]}/')
-    nxt = C.CASES[(i + 1) % len(C.CASES)]
-    K = T['case']
-    P = T['projects']
-    meta = (f'<div class="phero__meta" data-intro="1"><span class="tag tag--dark">{e(C.CATEGORIES[c["type"]])}</span>'
-            f'<span>{icon("clock")}{e(c["term"])}</span><span>{icon("layers")}{e(c["tariff"])}</span></div>')
-    solution = ''.join(f'<li>{e(s)}</li>' for s in c['solution'])
-    ai = ''.join(f'<li>{icon("spark")}<span>{e(s)}</span></li>' for s in c['ai'])
-    tech = ''.join(f'<li>{e(t)}</li>' for t in c['tech'])
-    results = ''.join(f'<div class="kpi" data-reveal><b data-count>{e(n)}</b><span>{e(t)}</span></div>' for n, t in c['results'])
-    body = (page_hero(p, [(home_label(), ''), (P['title'], 'projects/'), (c['title'], '')], c['title'], c['lead'], meta)
-            + f'''<div class="sheet">
-<div class="section section--first">
-<div class="wrap">
-<div class="case-hero t-{c["slug"]}" data-reveal>{case_picture(p, c, alt=K["cover_alt"], sizes="(min-width: 1824px) 1600px, 88.8vw", eager=True)}</div>
-<div class="case-grid">
-<aside class="case-facts" data-reveal>
-<dl>
-<div><dt>{e(K["client"])}</dt><dd>{e(c["client"])}</dd></div>
-<div><dt>{e(K["type"])}</dt><dd>{e(C.CATEGORIES[c["type"]])}</dd></div>
-<div><dt>{e(K["term"])}</dt><dd>{e(c["term"])}</dd></div>
-<div><dt>{e(K["tariff"])}</dt><dd>{e(c["tariff"])}</dd></div>
-</dl>
-<h2 class="case-facts__h">{e(K["tech"])}</h2>
-<ul class="chips">{tech}</ul>
-<a class="btn btn--dark btn--block" href="{p.u("contacts/")}" data-order>{e(K["button"])} {icon("arrow")}</a>
-</aside>
-<div class="case-body">
-<section class="case-part" data-reveal><h2 class="eyebrow">{e(K["task"])}</h2><p class="case-part__lead">{e(c["task"])}</p></section>
-<section class="case-part" data-reveal><h2 class="eyebrow">{e(K["solution"])}</h2><ol class="numlist">{solution}</ol></section>
-<section class="case-part case-part--ai" data-reveal><h2 class="eyebrow">{e(K["ai"])}</h2><ul class="ailist">{ai}</ul>
-<p class="case-part__note">{icon("user")}{e(K["ai_note"])}</p></section>
-<section class="case-part"><h2 class="eyebrow" data-reveal>{e(K["results"])}</h2><div class="kpis">{results}</div></section>
-</div>
-</div>
-<a class="next t-{nxt["slug"]}" href="{p.u("projects/" + nxt["slug"] + "/")}" data-reveal>
-<span class="next__label">{e(K["next"])}</span>
-<span class="next__title">{e(nxt["title"])}</span>
-<span class="go">{icon("arrow-ur")}</span>
-</a>
-</div>
-</div>
-{cta_scene(p)}
-</div>''')
-    return render(p, title=c['title'], desc=c['lead'], body=body, active='projects', og_type='article',
-                  jsonld=(breadcrumbs_ld([(home_label(), ''), (P['title'], 'projects/'), (c['title'], p.path)]),))
+def portfolio():
+    p = Page('portfolio/')
+    K = C.PORTFOLIO
+    body = f'''    <section class="page-intro px-6 py-24">
+      <div class="page-container mx-auto max-w-container">
+        <div class="max-w-3xl">
+          <h1 class="text-5xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-6xl lg:text-7xl">{e(K["title"])}</h1>
+          <p class="mt-6 text-xl leading-relaxed text-text-body">{e(K["lead"])}</p>
+        </div>
+        <div class="mt-16 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">{"".join(case_card(p, c) for c in C.CASES)}
+        </div>
+      </div>
+    </section>
+
+{dark_cta(K["cta"], K["cta"]["button"], inner="page-container ")}
+'''
+    return render(p, title=C.SEO['portfolio_title'], desc=C.SEO['portfolio_desc'], body=body, active='portfolio',
+                  jsonld=(breadcrumbs_ld([('Главная', ''), (K['title'], p.path)]),))
+
+
+def case_page(c):
+    p = Page(f'cases/{c["slug"]}/')
+    tags = ''.join(f'\n          <span class="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-medium {"text-brand" if i == 0 else "text-text-heading"}">{e(t)}</span>'
+                   for i, t in enumerate(c['tags']))
+    meta = ''.join(f'''
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-text-body mb-2">{e(k)}</p>
+            <p class="text-base font-medium text-text-heading">{e(v)}</p>
+          </div>''' for k, v in c['meta'])
+
+    def card(k):
+        return f'''
+          <article class="flex flex-col rounded-card bg-surface-muted p-8 lg:p-10">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-lg text-brand mb-6">
+              {fa(k["icon"])}
+            </div>
+            <h2 class="text-2xl font-semibold tracking-tight text-text-heading mb-3">{e(k["title"])}</h2>
+            <p class="text-base leading-relaxed text-text-body mb-6">{e(k["text"])}</p>
+            <ul class="space-y-4 text-sm text-text-body mt-auto">{check_points(p, k["points"])}
+            </ul>
+          </article>'''
+    gallery = ''
+    if c['gallery']:
+        slots = []
+        for g in c['gallery']:
+            aspect = 'aspect-[16/9] md:aspect-[21/9]' if g.get('wide') else 'aspect-[4/3]'
+            cap_cls = 'text-sm text-text-body italic px-2 text-center' if g.get('wide') else 'text-sm text-text-body italic px-2'
+            box = picture_box(p, g.get('image'), g['icon'], g['label'], aspect, '(min-width: 768px) 50vw, 100vw')
+            cap = f'\n            <p class="{cap_cls}">{e(g["caption"])}</p>' if g.get('caption') else ''
+            slots.append(f'''
+          <div{' class="md:col-span-2"' if g.get('wide') else ''}>
+            <div class="mb-4">{box}</div>{cap}
+          </div>''')
+        gallery = f'''
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-container">
+        <h2 class="text-3xl font-bold tracking-tight text-text-heading mb-10">{e(c["gallery_title"])}</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">{"".join(slots)}
+        </div>
+      </div>
+    </section>
+'''
+    mobile = ''
+    M = c.get('mobile') or {}
+    if M.get('show'):
+        box = picture_box(p, M.get('image'), 'fa-mobile-screen-button', M['label'], 'aspect-[4/5]', '(min-width: 768px) 40vw, 100vw', extra='bg-surface')
+        mobile = f'''
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-container">
+        <div class="rounded-section bg-surface-muted p-8 lg:p-12">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+            <div>
+              <h2 class="text-3xl font-bold tracking-tight text-text-heading mb-4">{e(M["title"])}</h2>
+              <p class="text-base leading-relaxed text-text-body mb-6">{e(M["text"])}</p>
+              <ul class="space-y-4 text-sm text-text-body">{check_points(p, M["points"])}
+              </ul>
+            </div>
+            <div class="flex flex-col gap-4">
+              {box}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+'''
+    features = ''
+    FE = c.get('features') or {}
+    if FE.get('show') and FE.get('items'):
+        items = ''.join(f'''
+          <article class="flex flex-col rounded-card bg-surface-muted p-8">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-lg text-brand mb-6">
+              {fa(ic)}
+            </div>
+            <h3 class="text-xl font-semibold tracking-tight text-text-heading">{e(t)}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-text-body">{e(x)}</p>
+          </article>''' for ic, t, x in FE['items'])
+        features = f'''
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-container">
+        <h2 class="text-3xl font-bold tracking-tight text-text-heading mb-10">{e(FE["title"])}</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">{items}
+        </div>
+      </div>
+    </section>
+'''
+    results = ''.join(f'''
+          <div>
+            <p class="text-5xl font-extrabold {"text-emerald-600" if green else "text-text-heading"}">{e(n)}</p>
+            <p class="text-sm font-medium text-text-body mt-2">{e(lbl)}</p>
+          </div>''' for n, lbl, green in c['results'])
+    hero_box = picture_box(p, c.get('hero_image'), 'fa-image', c['hero_label'], 'aspect-[21/9]', '(min-width: 1152px) 1152px, 100vw',
+                           big=True, eager=True)
+    body = f'''    <section class="page-intro px-6 pt-24 pb-12">
+      <div class="page-container mx-auto max-w-5xl">
+        <a href="{p.u("portfolio/")}" class="inline-flex items-center gap-2 text-sm font-medium text-text-body hover:text-text-heading transition-colors mb-8">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> {e(T["case"]["back"])}
+        </a>
+        <div class="flex flex-wrap gap-3 mb-6">{tags}
+        </div>
+        <h1 class="text-4xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-5xl lg:text-6xl">{e(c["title"])}</h1>
+        <p class="mt-6 text-xl leading-relaxed text-text-body">{e(c["lead"])}</p>
+      </div>
+    </section>
+
+    <section class="px-6 pb-16">
+      <div class="page-container mx-auto max-w-5xl">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 bg-surface-muted rounded-card p-8 lg:p-10">{meta}
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 pb-16">
+      <div class="page-container mx-auto max-w-container">
+        {hero_box}
+      </div>
+    </section>
+
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-5xl">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">{card(c["pain"])}{card(c["done"])}
+        </div>
+      </div>
+    </section>
+{gallery}{mobile}{features}
+    <section class="px-6 py-24">
+      <div class="page-container mx-auto max-w-4xl">
+        <h2 class="text-3xl font-bold tracking-tight text-text-heading mb-12 text-center">{e(T["case"]["results"])}</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center bg-surface-muted rounded-section p-10 lg:p-16">{results}
+        </div>
+      </div>
+    </section>
+
+{dark_cta(c["cta"], T["case"]["cta_button"], cls="px-6 pb-24", inner="page-container ")}
+'''
+    return render(p, title=c.get('seo_title') or c['title'], desc=c.get('seo_desc') or c['lead'], body=body, active='portfolio',
+                  jsonld=(breadcrumbs_ld([('Главная', ''), (C.PORTFOLIO['title'], 'portfolio/'), (c['title'], p.path)]),))
+
+
+THUMBZONE = '''<svg viewBox="0 0 400 220" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full max-w-sm h-auto" role="img" aria-label="Схема Thumb Zone: зоны досягаемости большого пальца на экране телефона">
+                <rect x="130" y="10" width="140" height="200" rx="20" stroke="#cbd5e1" stroke-width="4" fill="#f8fafc"/>
+                <rect x="180" y="20" width="40" height="6" rx="3" fill="#cbd5e1"/>
+                <path d="M 134 110 Q 200 90 266 110 L 266 190 Q 200 210 134 190 Z" fill="#10b981" fill-opacity="0.15"/>
+                <text x="200" y="160" text-anchor="middle" font-size="12" fill="#047857" font-weight="600">Легко (Easy)</text>
+                <text x="200" y="175" text-anchor="middle" font-size="10" fill="#047857">Главные кнопки (CTA)</text>
+                <path d="M 134 40 Q 200 20 266 40 L 266 110 Q 200 90 134 110 Z" fill="#f59e0b" fill-opacity="0.15"/>
+                <text x="200" y="75" text-anchor="middle" font-size="12" fill="#b45309" font-weight="600">Средне (Stretch)</text>
+                <text x="200" y="90" text-anchor="middle" font-size="10" fill="#b45309">Навигация, меню</text>
+                <path d="M 134 10 L 266 10 L 266 40 Q 200 20 134 40 Z" fill="#ef4444" fill-opacity="0.15"/>
+                <text x="200" y="28" text-anchor="middle" font-size="10" fill="#b91c1c" font-weight="600">Сложно (Hard)</text>
+                <path d="M 320 220 Q 300 180 270 150" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4" fill="none"/>
+                <circle cx="320" cy="220" r="10" fill="#94a3b8"/>
+              </svg>'''
+
+
+def post_block(p, i, kind, val):
+    """One block of a post, in the designer's paragraph style."""
+    gap = ' class="mt-2"' if i else ''
+    if kind == 'h2':
+        return f'<p class="{"mt-4 " if i else ""}font-semibold">{e(val)}</p>'
+    if kind == 'ul':
+        return f'<ul class="{"mt-2 " if i else ""}list-disc space-y-1 pl-5">' + ''.join(f'<li>{md(p, x)}</li>' for x in val) + '</ul>'
+    if kind == 'quote':
+        return f'<blockquote class="{"mt-2 " if i else ""}border-l-2 border-brand pl-4 italic">{md(p, val)}</blockquote>'
+    return f'<p{gap}>{md(p, val)}</p>'
 
 
 def blog():
     p = Page('blog/')
-    counts = {}
-    for a in C.ARTICLES:
-        counts[a['cat']] = counts.get(a['cat'], 0) + 1
-    cards = ''.join(post_card(p, a, 'post--wide' if a.get('featured') else '',
-                              sizes='(min-width: 1024px) 50vw, 100vw' if a.get('featured') else '(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw',
-                              h=2, eager=i == 0)
-                    for i, a in enumerate(C.ARTICLES))
-    B = T['blog']
-    body = (page_hero(p, [(home_label(), ''), (B['title'], 'blog/')], B['title'], B['lead'])
-            + f'''<div class="sheet">
-<section class="section section--first">
-<div class="wrap">
-{filters(B["filter"], C.BLOG_CATEGORIES, counts, T["projects"]["all"])}
-<div class="posts" data-filter-grid>{cards}</div>
-<p class="empty" hidden data-empty>{e(B["empty"])}</p>
-</div>
-</section>
-{cta_scene(p)}
-</div>''')
-    return render(p, title=C.SEO['blog_title'], desc=C.SEO['blog_desc'],
-                  body=body, active='blog', jsonld=(breadcrumbs_ld([(home_label(), ''), (B['title'], 'blog/')]),))
+    B = C.BLOG
+    BT = T['blog']
+    filters = [f'<button type="button" data-filter="all" aria-pressed="true" class="filter-btn rounded-full bg-dark px-5 py-2 text-sm font-medium text-white transition-colors">{e(B["all"])}</button>']
+    cats = dict(B['categories'])
+    for key, label in B['categories']:
+        filters.append(f'<button type="button" data-filter="{e(key)}" aria-pressed="false" class="filter-btn rounded-full bg-surface-muted px-5 py-2 text-sm font-medium text-text-body hover:bg-slate-200 transition-colors">{e(label)}</button>')
+    posts = []
+    for a in C.POSTS:
+        tone = 'bg-emerald-50 text-emerald-600' if a.get('tone') == 'emerald' else 'bg-brand-light text-brand'
+        paras = '\n              '.join(post_block(p, i, k, v) for i, (k, v) in enumerate(a['body']))
+        art = ''
+        if a.get('image'):
+            img = media_img(p, a['image'], '', '(min-width: 768px) 720px, 100vw', 'w-full h-auto rounded-xl')
+            if img:
+                art = f'\n            <div class="mt-4 w-full overflow-hidden rounded-xl border border-slate-200">{img}</div>'
+        elif a.get('illustration') == 'thumbzone':
+            art = f'\n            <div class="mt-4 w-full rounded-xl bg-surface p-4 flex flex-col items-center justify-center border border-slate-200">\n              {THUMBZONE}\n            </div>'
+        cat = cats.get(a['cat'], a['cat'])
+        pid = e(a['id'])
+        posts.append(f'''
+          <article id="{pid}" data-category="{e(a["cat"])}" data-post="{pid}" class="rounded-card bg-surface-muted p-6 sm:p-8">
+            <header class="flex items-center gap-3">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full {tone} text-xl font-bold" aria-hidden="true">{e(a["author"][:1])}</div>
+              <div>
+                <p class="font-semibold text-text-heading">{e(a["author"])} <span class="text-text-body font-normal">• {e(a["role"])}</span></p>
+                <p class="text-sm text-text-body"><time datetime="{e(a["date"])}">{date_ru(a["date"])}</time> • #{e(cat.lower())}</p>
+              </div>
+            </header>
 
+            <div class="mt-4 text-text-heading">
+              {paras}
+            </div>{art}
 
-def article(a):
-    p = Page(f'blog/{a["slug"]}/')
-    B = T['blog']
-    blocks = prose_blocks(a['body'])
-    same = [x for x in C.ARTICLES if x['cat'] == a['cat'] and x is not a]
-    rest = [x for x in C.ARTICLES if x['cat'] != a['cat']]
-    related = (same + rest)[:3]
-    meta = (f'<div class="phero__meta" data-intro="1"><span class="tag tag--dark">{e(C.BLOG_CATEGORIES[a["cat"]])}</span>'
-            f'<span><time datetime="{a["date"]}">{date_ru(a["date"])}</time></span><span>{icon("clock")}{a["read"]} {e(B["read"])}</span></div>')
-    body = (page_hero(p, [(home_label(), ''), (B['title'], 'blog/'), (a['title'], '')], a['title'], a['desc'], meta)
-            + f'''<div class="sheet">
-<section class="section section--first">
-<div class="wrap">
-<article class="article">
-<div class="article__cover" data-reveal>{post_picture(p, a, sizes="(min-width: 960px) 880px, 100vw", eager=True)}</div>
-<div class="prose">{blocks}</div>
-<aside class="article__cta" data-reveal>
-<p><b>{e(B["cta_b"])}</b> {e(B["cta"])}</p>
-<a class="btn btn--dark" href="{p.u("contacts/")}" data-order>{e(B["cta_button"])} {icon("arrow")}</a>
-</aside>
-</article>
-</div>
-</section>
-<section class="section section--soft">
-<div class="wrap">
-{shead(B["related_eyebrow"], B["related"], tone=B["related_tone"], aside=f'<a class="btn btn--outline" href="{p.u("blog/")}">{e(B["all"])} {icon("arrow")}</a>')}
-<div class="posts">{"".join(post_card(p, x) for x in related)}</div>
-</div>
-</section>
-</div>''')
-    posting = {
-        '@context': 'https://schema.org', '@type': 'BlogPosting', 'headline': a['title'], 'description': a['desc'],
-        'datePublished': a['date'], 'inLanguage': 'ru', 'mainEntityOfPage': S['url'] + '/' + p.path,
-        'author': {'@type': 'Organization', 'name': S['name']},
-        'publisher': {'@type': 'Organization', 'name': S['name']},
-    }
-    return render(p, title=a['title'], desc=a['desc'], body=body, active='blog', og_type='article',
-                  jsonld=(breadcrumbs_ld([(home_label(), ''), (B['title'], 'blog/'), (a['title'], p.path)]), posting))
+            <div class="mt-6 flex items-center gap-6 text-sm font-medium text-text-body">
+              <button type="button" class="like-btn flex items-center gap-2 hover:text-red-500 transition-colors" aria-pressed="false" aria-label="{e(BT["like"])}" data-base="{int(a.get("likes", 0))}"><i class="fa-regular fa-heart text-lg" aria-hidden="true"></i> <span>{int(a.get("likes", 0))}</span></button>
+              <button type="button" class="dislike-btn flex items-center gap-2 hover:text-text-heading transition-colors" aria-pressed="false" aria-label="{e(BT["dislike"])}" data-base="{int(a.get("dislikes", 0))}"><i class="fa-regular fa-thumbs-down text-lg" aria-hidden="true"></i> <span>{int(a.get("dislikes", 0))}</span></button>
+              <button type="button" class="comment-toggle flex items-center gap-2 hover:text-brand transition-colors" aria-expanded="false"><i class="fa-regular fa-comment text-lg" aria-hidden="true"></i> {e(B["comment_toggle"])} <span class="comment-count"></span></button>
+            </div>
+
+            <div class="comments-section hidden mt-6 pt-6 border-t border-slate-200">
+              <div class="comments-list space-y-3 mb-4" aria-live="polite"></div>
+              <form class="comment-form flex gap-2" novalidate>
+                <label class="sr-only" for="c-{pid}">{e(B["comment_ph"])}</label>
+                <input id="c-{pid}" name="text" type="text" placeholder="{e(B["comment_ph"])}" required maxlength="1000" class="w-full rounded-full border-none bg-surface px-4 py-2 text-sm text-text-heading focus:ring-2 focus:ring-brand outline-none">
+                <span class="hp" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></span>
+                <button type="submit" class="rounded-full px-4 py-2 text-sm btn-dark">{e(B["comment_send"])}</button>
+              </form>
+              <p class="comment-status mt-2 text-sm text-text-body" role="status" aria-live="polite"></p>
+            </div>
+          </article>''')
+    blog_msg = json.dumps({k: BT[k] for k in ('anon', 'pending', 'failed', 'empty', 'off')}, ensure_ascii=False, separators=(',', ':'))
+    body = f'''    <section class="page-intro px-6 pt-24 pb-12">
+      <div class="page-container mx-auto max-w-3xl">
+        <h1 class="text-5xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-6xl">{e(B["title"])}</h1>
+        <p class="mt-6 text-xl leading-relaxed text-text-body">{e(B["lead"])}</p>
+      </div>
+    </section>
+
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-3xl">
+        <div class="flex flex-wrap gap-2 mb-10" role="group" aria-label="Рубрики">
+          {"".join(filters)}
+        </div>
+        <div id="feed" class="flex flex-col gap-6" data-blog="{e(S.get("blog_endpoint", ""))}" data-blog-msg="{e(blog_msg)}">{"".join(posts)}
+        </div>
+      </div>
+    </section>
+'''
+    return render(p, title=C.SEO['blog_title'], desc=C.SEO['blog_desc'], body=body, active='blog', extra_js=['blog.js'],
+                  jsonld=(breadcrumbs_ld([('Главная', ''), (B['title'], p.path)]),))
 
 
 def contacts():
     p = Page('contacts/')
-    uid = 'c'
-    map_src = f'https://yandex.ru/map-widget/v1/?ll={S["map_ll"]}&z={S["map_z"]}&pt={S["map_ll"]},pm2blm'
-    map_link = f'https://yandex.ru/maps/?ll={S["map_ll"]}&z={S["map_z"]}&pt={S["map_ll"]}'
-    K = T['contacts']
-    body = (page_hero(p, [(home_label(), ''), (K['title'], 'contacts/')], K['title'], K['lead'])
-            + f'''<div class="sheet">
-<section class="section section--first">
-<div class="wrap contacts">
-<div class="card card--form" data-reveal>
-<h2 class="card__title">{e(K["form_title"])}</h2>
-<p class="card__sub">{e(K["form_sub"])}</p>
-{project_form(p, uid, "contacts")}
-</div>
-<div class="contacts__side">
-<div class="card card--info" data-reveal>
-<ul class="info">
-<li><span class="info__ico">{icon("phone")}</span><span><small>{e(K["phone"])}</small><a href="tel:{e(S["phone_href"])}">{e(S["phone"])}</a></span></li>
-<li><span class="info__ico">{icon("mail")}</span><span><small>{e(K["email"])}</small><a href="mailto:{e(S["email"])}">{e(S["email"])}</a></span></li>
-<li><span class="info__ico">{icon("clock")}</span><span><small>{e(K["hours"])}</small>{e(S["hours"])}</span></li>
-<li><span class="info__ico">{icon("pin")}</span><span><small>{e(K["office"])}</small>{e(S["address"])}</span></li>
-</ul>
-<div class="info__soc"><small>{e(K["socials"])}</small>{socials()}</div>
-</div>
-<div class="map" data-map="{e(map_src)}" data-map-title="{e(K["map_title"])}" data-reveal>
-<div class="map__ph" aria-hidden="true"><i class="map__road map__road--1"></i><i class="map__road map__road--2"></i><i class="map__road map__road--3"></i><i class="map__river"></i><span class="map__pin">{icon("pin")}</span></div>
-<div class="map__act">
-<button type="button" class="btn btn--dark btn--sm" data-map-load>{e(K["map_button"])}</button>
-<a class="map__ext" href="{e(map_link)}" target="_blank" rel="noopener">{e(K["map_link"])} {icon("arrow-ur")}</a>
-</div>
-<p class="map__note">{e(K["map_note"])}</p>
-</div>
-</div>
-</div>
-</section>
-</div>''')
-    return render(p, title=C.SEO['contacts_title'], desc=C.SEO['contacts_desc'],
-                  body=body, active='contacts', jsonld=(breadcrumbs_ld([(home_label(), ''), (K['title'], 'contacts/')]),))
+    TM = C.TEAM
+    people = ''.join(f'''
+          <article class="rounded-card bg-surface-muted p-8">
+            <div class="flex flex-col items-start gap-4 lg:flex-row lg:items-center">
+              <div aria-hidden="true" class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full {"bg-emerald-50 text-emerald-600" if tone == "emerald" else "bg-brand-light text-brand"} text-xl font-bold">{e(name[:1])}</div>
+              <div class="min-w-0">
+                <h3 class="text-2xl font-semibold tracking-tight text-text-heading">{e(name)}</h3>
+                <p class="mt-1 text-sm text-text-body">{e(role)}</p>
+              </div>
+            </div>
+            <p class="mt-6 text-base leading-relaxed text-text-body">{e(text)}</p>
+          </article>''' for name, role, text, tone in TM['people'])
+    team = f'''
+    <section aria-labelledby="team-title" class="py-24">
+      <div class="page-container mx-auto max-w-container px-6 lg:px-8">
+        <div class="mx-auto max-w-3xl text-center">
+          <h2 id="team-title" class="text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(TM["title"])}</h2>
+          <p class="mt-5 text-base leading-relaxed text-text-body lg:text-lg">{e(TM["lead"])}</p>
+        </div>
+        <div class="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">{people}
+        </div>
+      </div>
+    </section>
+''' if TM['people'] else ''
+    F = C.FAQ
+    qa = ''.join(f'''
+          <details class="group h-fit rounded-inner bg-surface-muted px-6 py-5 sm:px-8 sm:py-6 cursor-pointer transition-colors hover:bg-slate-200">
+            <summary class="flex list-none items-center justify-between gap-6 text-lg font-semibold leading-snug tracking-tight text-text-heading sm:text-xl [&::-webkit-details-marker]:hidden">
+              <span>{e(q)}</span>
+              <i class="fa-solid fa-chevron-down shrink-0 text-sm text-text-muted transition-transform duration-300 group-open:rotate-180" aria-hidden="true"></i>
+            </summary>
+            <p class="mt-4 text-base leading-relaxed text-text-body">{md(p, a)}</p>
+          </details>''' for q, a in F['items'])
+    faq = f'''
+    <section aria-labelledby="faq-title" class="py-24">
+      <div class="page-container mx-auto max-w-container px-6 lg:px-8">
+        <h2 id="faq-title" class="text-center text-4xl font-bold tracking-tight text-text-heading sm:text-5xl">{e(F["title"])}</h2>
+        <div class="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">{qa}
+        </div>
+      </div>
+    </section>
+''' if F['items'] else ''
+    body = contact_block(p, 'h1', 'contact-title', 'contacts', intro_cls='page-intro ') + '\n' + team + faq
+    faq_ld = {'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
+        {'@type': 'Question', 'name': q, 'acceptedAnswer': {'@type': 'Answer', 'text': re.sub(r'\*\*|\[|\]\([^)]*\)', '', a)}} for q, a in F['items']]}
+    return render(p, title=C.SEO['contacts_title'], desc=C.SEO['contacts_desc'], body=body, active='contacts',
+                  jsonld=(breadcrumbs_ld([('Главная', ''), (C.CONTACTS['title'], p.path)]), faq_ld))
 
 
-def legal_page(path, title, lead, sections):
+def legal_page(path, doc, seo_title, seo_desc):
     p = Page(path)
-    blocks = []
-    for h, items in sections:
-        blocks.append(f'<h2>{e(h)}</h2>')
-        for it in items:
-            if isinstance(it, list):
-                blocks.append('<ul>' + ''.join(f'<li>{e(x)}</li>' for x in it) + '</ul>')
-            else:
-                blocks.append(f'<p>{e(it)}</p>')
-    body = (page_hero(p, [(home_label(), ''), (title, '')], title, lead)
-            + f'''<div class="sheet"><section class="section section--first"><div class="wrap">
-<article class="article"><div class="prose prose--legal">{"".join(blocks)}</div></article>
-</div></section></div>''')
-    return render(p, title=title, desc=lead, body=body)
+    F = T['footer']
+    body = f'''    <section class="page-intro legal-section">
+      <div class="page-container">
+        <p class="legal-kicker">{e(doc["kicker"])}</p>
+        <h1>{e(doc["title"])}</h1>
+        <article class="legal-copy">{prose(p, doc["body"])}</article>
+        <nav class="legal-navigation" aria-label="Правовые документы"><a href="{p.u("privacy/")}">{e(F["privacy"])}</a><a href="{p.u("consent/")}">{e(F["consent"])}</a></nav>
+      </div>
+    </section>
+'''
+    return render(p, title=seo_title, desc=seo_desc, body=body, kind='legal', extra_css=['css/legal.css'])
+
+
+def block_page(p, title, lead, blocks, cover, active, seo_title, seo_desc):
+    pic = media_img(p, cover, '', '(min-width: 1152px) 1152px, 100vw', 'h-full w-full object-cover', True) if cover else None
+    cover_html = f'\n        <div class="mt-12 overflow-hidden rounded-card">{pic}</div>' if pic else ''
+    body = f'''    <section class="page-intro legal-section">
+      <div class="page-container">
+        <h1>{e(title)}</h1>
+        <p class="legal-kicker legal-lead">{e(lead)}</p>{cover_html}
+        <article class="legal-copy mt-10">{prose(p, blocks)}</article>
+      </div>
+    </section>
+
+{dark_cta(C.CTA_HOME, C.CTA_HOME["button"], cls="px-6 pb-24", inner="page-container ")}
+'''
+    return render(p, title=seo_title or f'{title} — {S["logo"]}', desc=seo_desc or lead, body=body, active=active, kind='legal',
+                  extra_css=['css/legal.css'])
+
+
+def about():
+    A = C.ABOUT
+    return block_page(Page('about/'), A['title'], A['lead'], A['body'], A.get('cover'), 'about',
+                      C.SEO.get('about_title'), C.SEO.get('about_desc'))
+
+
+RESERVED = {'services', 'portfolio', 'cases', 'blog', 'contacts', 'privacy', 'consent', 'about', '404', 'assets', 'api', 'admin'}
+
+
+def landing(x):
+    if x['slug'] in RESERVED:
+        sys.exit(f'Адрес /{x["slug"]}/ занят страницей сайта — выберите другой ключ посадочной страницы')
+    return block_page(Page(x['slug'] + '/'), x['title'], x['lead'], x['body'], x.get('cover'), 'l-' + x['slug'],
+                      x.get('seo_title'), x.get('seo_desc'))
 
 
 def not_found():
@@ -1208,46 +1174,50 @@ def not_found():
     # absolute because the page answers at every depth.
     p = Page('404/', absolute=True)
     K = T['p404']
-    body = f'''<section class="phero phero--404">
-<div class="wrap phero__in p404">
-<div>
-<p class="eyebrow eyebrow--dark" data-intro="1">{icon("diamond")}{e(K["eyebrow"])}</p>
-<h1 class="h1" data-intro-split>{words(K["title"])}</h1>
-<p class="phero__lead" data-intro="2">{e(K["lead"])}</p>
-<div class="hero__cta" data-intro="3"><a class="btn btn--white btn--lg" href="/">{e(K["home"])} {icon("arrow")}</a><a class="link-under" href="/projects/">{e(K["link"])}</a></div>
-</div>
-<div class="p404__art" data-intro-art><div class="hero__media">{slot(p, "hero", sizes="(min-width: 1024px) 40vw, 80vw")}</div></div>
-</div>
-</section>'''
-    return render(p, title=C.SEO['p404_title'], desc=C.SEO['p404_title'] + '.', body=body, index=False)
+    body = f'''    <section class="page-intro px-6 pt-24 pb-24">
+      <div class="page-container mx-auto max-w-4xl">
+        <h1 class="text-5xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-6xl lg:text-7xl">{e(K["title"])}</h1>
+        <p class="mt-6 max-w-2xl text-xl leading-relaxed text-text-body">{e(K["lead"])}</p>
+        <div class="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+          <a href="/" class="inline-flex items-center justify-center rounded-full px-8 py-4 font-medium btn-dark">{e(K["home"])}</a>
+          <a href="/portfolio/" class="inline-flex items-center justify-center gap-3 rounded-full px-8 py-4 font-medium btn-light">{e(K["link"])} <i class="fa-solid fa-arrow-right text-sm" aria-hidden="true"></i></a>
+        </div>
+      </div>
+    </section>
+'''
+    return render(p, title=C.SEO['p404_title'], desc=K['lead'], body=body, index=False)
 
 
 def write_favicon():
-    """The tab icon is the logo mark on a navy tile, from the same glyph path."""
-    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-           '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-           '<stop offset="0" stop-color="#2A3196"/><stop offset="1" stop-color="#0B0E33"/></linearGradient></defs>'
-           '<rect width="64" height="64" rx="16" fill="url(#g)"/>'
-           '<g transform="translate(32 33.5) scale(.034) translate(-756 540)">'
-           f'<path transform="scale(1 -1)" fill="#fff" d="{A_PATH}"/>'
-           '<circle cx="1300" cy="-122" r="132" fill="#A9ACF7"/></g></svg>\n')
+    """The default tab icon: the word mark's «a.» on the dark tile."""
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#111827"/>'
+           '<text x="29" y="44" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="40" font-weight="800" fill="#fff">a</text>'
+           '<circle cx="47" cy="41" r="4.5" fill="#7457E6"/></svg>\n')
     with open(os.path.join(OUT, 'assets', 'favicon.svg'), 'w', encoding='utf-8') as f:
         f.write(svg)
 
 
-def write_themes():
-    rules = [f'.t-{c["slug"]}{{--c1:{c["colors"][0]};--c2:{c["colors"][1]};--c3:{c["colors"][2]}}}' for c in C.CASES]
-    path = os.path.join(OUT, 'assets', 'css', 'themes.css')
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write('/* Generated by build.py from content.py: colours of each case. */\n' + '\n'.join(rules) + '\n')
+def write_styles():
+    """site.css: the blog's states and the panel's design settings."""
+    base = '''/* Generated by build.py. Blog states, then the panel's design settings. */
+.liked { color: #ef4444 !important; font-weight: 900; }
+.disliked { color: #64748b !important; font-weight: 900; }
+.comment-link { color: rgb(var(--c-brand)); text-decoration: underline; }
+.comment-link:hover { color: rgb(var(--c-brand-hover)); }
+.consent-text a { color: rgb(var(--c-heading)); text-decoration: underline; }
+.consent-text a:hover { color: rgb(var(--c-brand)); }
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.legal-page .legal-lead { font-size: 20px; line-height: 1.6; max-width: 48rem; }
+.legal-copy blockquote { margin: 0 0 20px; padding-left: 20px; border-left: 3px solid rgb(var(--c-brand)); }
+'''
+    with open(os.path.join(OUT, 'assets', 'css', 'site.css'), 'w', encoding='utf-8') as f:
+        f.write(base + design_css())
 
 
 def remove_stale():
-    """Deletes pages this run did not write: a case or an article removed
-    from content.py, or one whose slug changed. Without this the old page
-    would stay in git and keep being deployed, and CI's check that site/ is
-    exactly what the sources give would pass. The deletion shows in
-    `git status`, so CI fails until it is committed."""
+    """Deletes pages this run did not write: a case removed from content.py
+    or one whose slug changed. The deletion shows in `git status`, so CI
+    fails until it is committed."""
     stale = []
     for root, dirs, files in os.walk(OUT, topdown=True):
         if root == OUT:
@@ -1259,44 +1229,24 @@ def remove_stale():
     for path in sorted(stale):
         os.remove(path)
         print('removed stale page', os.path.relpath(path, OUT))
-    # folders left empty by the deletions (deepest first)
     for root, dirs, files in os.walk(OUT, topdown=False):
         if root != OUT and not os.listdir(root) and os.path.relpath(root, OUT).split(os.sep)[0] != 'assets':
             os.rmdir(root)
 
 
 def main():
-    global MANIFEST
-    path = os.path.join(OUT, 'assets', 'img', 'manifest.json')
-    if os.path.exists(path):
-        with open(path, encoding='utf-8') as f:
-            MANIFEST = json.load(f)
     write_favicon()
-    write_themes()
-    # one stylesheet: the case colours are appended so pages make one request
-    with open(os.path.join(OUT, 'assets', 'css', 'themes.css'), encoding='utf-8') as f:
-        themes = f.read()
-    css_path = os.path.join(OUT, 'assets', 'css', 'main.css')
-    with open(css_path, encoding='utf-8') as f:
-        css = f.read()
-    marker = '/* --- case colours (generated) --- */\n'
-    css = css.split(marker)[0].rstrip('\n') + '\n\n' + marker + themes + design_css()
-    with open(css_path, 'w', encoding='utf-8') as f:
-        f.write(css)
-    os.remove(os.path.join(OUT, 'assets', 'css', 'themes.css'))
-    VERSIONS['css'] = asset_version('css/main.css')
-    VERSIONS['js'] = asset_version('js/boot.js', 'js/main.js', 'js/motion.js', 'js/vendor/gsap.min.js', 'js/vendor/ScrollTrigger.min.js')
-    urls = [home(), projects()]
-    urls += [case_page(i, c) for i, c in enumerate(C.CASES)]
-    urls.append(blog())
-    urls += [article(a) for a in C.ARTICLES]
-    urls.append(contacts())
-    L = T['legal']
+    write_styles()
+    VERSIONS['css'] = asset_version(*CSS, 'css/home.css', 'css/legal.css')
+    VERSIONS['js'] = asset_version('js/main.js', 'js/blog.js', 'js/process-flow.js')
+    urls = [home(), services(), portfolio()]
+    urls += [case_page(c) for c in C.CASES]
+    urls += [blog(), contacts()]
     if C.ABOUT.get('show'):
         urls.append(about())
     urls += [landing(x) for x in C.LANDINGS if x.get('show', True)]
-    urls.append(legal_page('privacy/', L['privacy_title'], L['privacy_lead'], legal.PRIVACY))
-    urls.append(legal_page('consent/', L['consent_title'], L['consent_lead'], legal.CONSENT))
+    urls.append(legal_page('privacy/', C.PRIVACY, C.SEO['privacy_title'], C.SEO['privacy_desc']))
+    urls.append(legal_page('consent/', C.CONSENT, C.SEO['consent_title'], C.SEO['consent_desc']))
     not_found()
     remove_stale()
     with open(os.path.join(OUT, 'sitemap.xml'), 'w', encoding='utf-8') as f:
@@ -1310,10 +1260,6 @@ def main():
         else:
             f.write('User-agent: *\nDisallow: /\n')
     print(f'{len(urls)} pages in {OUT}')
-    if MISSING:
-        print('pictures not rendered yet:', ', '.join(sorted(MISSING)))
-        if not os.environ.get('AXM_ALLOW_MISSING'):
-            sys.exit(1)
 
 
 def export_content(path):

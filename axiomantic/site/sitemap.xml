@@ -1,22 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://axiomantic.example/</loc></url>
-<url><loc>https://axiomantic.example/projects/</loc></url>
-<url><loc>https://axiomantic.example/projects/english-school/</loc></url>
-<url><loc>https://axiomantic.example/projects/run-app/</loc></url>
-<url><loc>https://axiomantic.example/projects/arch-bureau/</loc></url>
-<url><loc>https://axiomantic.example/projects/dental-clinic/</loc></url>
-<url><loc>https://axiomantic.example/projects/ceramics-shop/</loc></url>
-<url><loc>https://axiomantic.example/projects/sport-nutrition/</loc></url>
-<url><loc>https://axiomantic.example/blog/</loc></url>
-<url><loc>https://axiomantic.example/blog/ai-v-razrabotke/</loc></url>
-<url><loc>https://axiomantic.example/blog/dizajn-ne-nejroset/</loc></url>
-<url><loc>https://axiomantic.example/blog/dizajn-sistema/</loc></url>
-<url><loc>https://axiomantic.example/blog/lending-ili-mnogostranichnyj/</loc></url>
-<url><loc>https://axiomantic.example/blog/skorost-sajta/</loc></url>
-<url><loc>https://axiomantic.example/blog/bazovoe-seo/</loc></url>
-<url><loc>https://axiomantic.example/blog/ai-pomoshchnik-dizajnera/</loc></url>
-<url><loc>https://axiomantic.example/contacts/</loc></url>
-<url><loc>https://axiomantic.example/privacy/</loc></url>
-<url><loc>https://axiomantic.example/consent/</loc></url>
+<url><loc>https://axiomantic.ru/</loc></url>
+<url><loc>https://axiomantic.ru/services/</loc></url>
+<url><loc>https://axiomantic.ru/portfolio/</loc></url>
+<url><loc>https://axiomantic.ru/cases/auto/</loc></url>
+<url><loc>https://axiomantic.ru/cases/tenders/</loc></url>
+<url><loc>https://axiomantic.ru/cases/monitoring/</loc></url>
+<url><loc>https://axiomantic.ru/cases/med/</loc></url>
+<url><loc>https://axiomantic.ru/cases/expert/</loc></url>
+<url><loc>https://axiomantic.ru/blog/</loc></url>
+<url><loc>https://axiomantic.ru/contacts/</loc></url>
+<url><loc>https://axiomantic.ru/privacy/</loc></url>
+<url><loc>https://axiomantic.ru/consent/</loc></url>
 </urlset>

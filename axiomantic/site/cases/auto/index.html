@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Кейс: Автоподписка — axiomantic.</title>
+  <meta name="description" content="Кейс: Разработка и продвижение сервиса автоподписки.">
+  <link rel="canonical" href="https://axiomantic.ru/cases/auto/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Axiomantic">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="Кейс: Автоподписка — axiomantic.">
+  <meta property="og:description" content="Кейс: Разработка и продвижение сервиса автоподписки.">
+  <meta property="og:url" content="https://axiomantic.ru/cases/auto/">
+  <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="../../assets/fonts/inter-cyrillic-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../../assets/vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="../../assets/css/main.css?v=6dd32d38ae">
+  <link rel="stylesheet" href="../../assets/css/footer.css?v=6dd32d38ae">
+  <link rel="stylesheet" href="../../assets/css/layout.css?v=6dd32d38ae">
+  <link rel="stylesheet" href="../../assets/css/modal.css?v=6dd32d38ae">
+  <link rel="stylesheet" href="../../assets/css/site.css?v=6dd32d38ae">
+  <script src="../../assets/js/main.js?v=b1f50ddfcd" defer></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Главная","item":"https://axiomantic.ru/"},{"@type":"ListItem","position":2,"name":"Кейсы. Без прикрас.","item":"https://axiomantic.ru/portfolio/"},{"@type":"ListItem","position":3,"name":"Сервис автоподписки: от идеи до экосистемы","item":"https://axiomantic.ru/cases/auto/"}]}</script>
+</head>
+<body id="top" class="inner-page bg-surface font-sans text-base leading-relaxed text-text-body" data-endpoint="/api/lead" data-msg="{&quot;sending&quot;:&quot;Отправляем…&quot;,&quot;done&quot;:&quot;Спасибо! Свяжемся с вами в течение рабочего дня.&quot;,&quot;failed&quot;:&quot;Не удалось отправить заявку. Попробуйте ещё раз или напишите нам в Telegram.&quot;,&quot;off&quot;:&quot;Отправка через форму пока недоступна. Напишите нам в Telegram или позвоните по указанному номеру.&quot;,&quot;too_many&quot;:&quot;Слишком много заявок подряд. Попробуйте через несколько минут или позвоните нам.&quot;,&quot;name&quot;:&quot;Напишите, как к вам обращаться&quot;,&quot;contact&quot;:&quot;Укажите телефон (+7…) или ник в Telegram (@username)&quot;,&quot;consent&quot;:&quot;Без согласия мы не сможем ответить на заявку&quot;,&quot;demo&quot;:&quot;Это предпросмотр: заявка никуда не отправлена.&quot;}">
+  <a href="#main" class="sr-only z-[60] rounded-full bg-dark px-6 py-3 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Перейти к содержимому</a>
+
+  <header class="fixed top-0 left-0 right-0 z-50 h-20 border-b border-slate-200 bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-full max-w-container items-center justify-between gap-6 px-6 lg:px-8">
+    <a href="../../" aria-label="Axiomantic — на главную" class="text-2xl font-extrabold tracking-tighter text-text-heading">axiomantic.</a>
+    <div class="flex items-center gap-6 lg:gap-8">
+      <nav aria-label="Основная навигация" class="hidden items-center gap-6 text-sm font-medium text-text-body lg:flex">
+        <a href="../../services/" class="nav-link transition-colors duration-300 hover:text-text-heading">Услуги</a>
+        <a href="../../portfolio/" class="nav-link transition-colors duration-300 hover:text-text-heading text-text-heading" aria-current="page">Кейсы</a>
+        <a href="../../blog/" class="nav-link transition-colors duration-300 hover:text-text-heading">Блог</a>
+        <a href="../../contacts/" class="nav-link transition-colors duration-300 hover:text-text-heading">Контакты</a>
+      </nav>
+      <button type="button" data-project-modal aria-haspopup="dialog" aria-controls="project-modal" class="hidden rounded-full px-6 py-3 text-sm font-medium sm:inline-flex btn-dark">Обсудить проект</button>
+      <button id="menu-toggle" aria-controls="mobile-menu" aria-expanded="false" type="button" aria-label="Открыть меню" data-label-open="Открыть меню" data-label-close="Закрыть меню" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full lg:hidden btn-dark">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+  <nav id="mobile-menu" aria-label="Мобильная навигация" hidden class="absolute inset-x-0 top-20 border-b border-slate-200 bg-surface px-6 py-6 lg:hidden">
+    <div class="mx-auto flex max-w-container flex-col gap-1 font-medium text-text-heading">
+      <a href="../../services/" class="rounded-full px-4 py-3 hover:bg-surface-muted">Услуги</a>
+        <a href="../../portfolio/" class="rounded-full px-4 py-3 hover:bg-surface-muted" aria-current="page">Кейсы</a>
+        <a href="../../blog/" class="rounded-full px-4 py-3 hover:bg-surface-muted">Блог</a>
+        <a href="../../contacts/" class="rounded-full px-4 py-3 hover:bg-surface-muted">Контакты</a>
+      <button type="button" data-project-modal aria-haspopup="dialog" aria-controls="project-modal" class="mt-3 rounded-full px-8 py-4 text-center btn-dark">Обсудить проект</button>
+    </div>
+  </nav>
+</header>
+
+  <main id="main">
+    <section class="page-intro px-6 pt-24 pb-12">
+      <div class="page-container mx-auto max-w-5xl">
+        <a href="../../portfolio/" class="inline-flex items-center gap-2 text-sm font-medium text-text-body hover:text-text-heading transition-colors mb-8">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Все кейсы
+        </a>
+        <div class="flex flex-wrap gap-3 mb-6">
+          <span class="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-medium text-brand">Fintech / Highload</span>
+          <span class="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-medium text-text-heading">Web + Промо</span>
+          <span class="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-medium text-text-heading">B2C Сервис</span>
+        </div>
+        <h1 class="text-4xl font-extrabold leading-[1.05] tracking-tighter text-text-heading sm:text-5xl lg:text-6xl">Сервис автоподписки: от идеи до экосистемы</h1>
+        <p class="mt-6 text-xl leading-relaxed text-text-body">Запуск сложного digital-продукта с нуля. Мы не просто нарисовали сайт — мы спроектировали механику, которая приносит деньги.</p>
+      </div>
+    </section>
+
+    <section class="px-6 pb-16">
+      <div class="page-container mx-auto max-w-5xl">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8 bg-surface-muted rounded-card p-8 lg:p-10">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-text-body mb-2">Роль</p>
+            <p class="text-base font-medium text-text-heading">Full-cycle партнер</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-text-body mb-2">Срок</p>
+            <p class="text-base font-medium text-text-heading">4 месяца (MVP)</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-text-body mb-2">Стек</p>
+            <p class="text-base font-medium text-text-heading">React, Node.js, PostgreSQL</p>
+          </div>
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-text-body mb-2">Команда</p>
+            <p class="text-base font-medium text-text-heading">Маркетолог, UI/UX, Dev</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 pb-16">
+      <div class="page-container mx-auto max-w-container">
+        <div class="flex aspect-[21/9] items-center justify-center rounded-card bg-surface-muted text-text-muted">
+              <div class="text-center">
+                <i class="fa-regular fa-image text-5xl mb-4 opacity-50" aria-hidden="true"></i>
+                <p class="text-lg font-medium text-text-body">Главный макет проекта (Desktop)</p>
+              </div>
+            </div>
+      </div>
+    </section>
+
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-5xl">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+          <article class="flex flex-col rounded-card bg-surface-muted p-8 lg:p-10">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-lg text-brand mb-6">
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            </div>
+            <h2 class="text-2xl font-semibold tracking-tight text-text-heading mb-3">В чем была боль</h2>
+            <p class="text-base leading-relaxed text-text-body mb-6">Рынок автоподписки — это не просто «картинка машины и кнопка». Это сложная математика и логистика.</p>
+            <ul class="space-y-4 text-sm text-text-body mt-auto">
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs text-brand" aria-hidden="true"></i><span><strong>Кредитные риски.</strong> Нужен был мгновенный скоринг и интеграция с банками.</span></li>
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs text-brand" aria-hidden="true"></i><span><strong>Высокие нагрузки.</strong> Сайт не должен падать при запуске рекламных кампаний.</span></li>
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs text-brand" aria-hidden="true"></i><span><strong>Бесшовный путь.</strong> От выбора авто до подписания договора в онлайне.</span></li>
+            </ul>
+          </article>
+          <article class="flex flex-col rounded-card bg-surface-muted p-8 lg:p-10">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-lg text-brand mb-6">
+              <i class="fa-solid fa-code" aria-hidden="true"></i>
+            </div>
+            <h2 class="text-2xl font-semibold tracking-tight text-text-heading mb-3">Что сделали</h2>
+            <p class="text-base leading-relaxed text-text-body mb-6">Спроектировали систему, которая выдерживает пиковые нагрузки и автоматизирует рутину.</p>
+            <ul class="space-y-4 text-sm text-text-body mt-auto">
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs text-brand" aria-hidden="true"></i><span><strong>Архитектура.</strong> Собрали надежный монолит без лишних микросервисов.</span></li>
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs text-brand" aria-hidden="true"></i><span><strong>Интеграции.</strong> Связали CRM, платежи и скоринг банка в один поток.</span></li>
+              <li class="flex gap-3"><i class="fa-solid fa-check mt-1 text-xs text-brand" aria-hidden="true"></i><span><strong>Промо-конвейер.</strong> Маркетологи собирают лендинги за пару часов сами.</span></li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-container">
+        <h2 class="text-3xl font-bold tracking-tight text-text-heading mb-10">Интерфейсы и промо</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+          <div>
+            <div class="mb-4"><div class="flex aspect-[4/3] items-center justify-center rounded-card bg-surface-muted text-text-muted">
+              <div class="text-center">
+                <i class="fa-solid fa-car text-4xl mb-3 opacity-40" aria-hidden="true"></i>
+                <p class="font-medium text-text-body">Каталог автомобилей</p>
+              </div>
+            </div></div>
+            <p class="text-sm text-text-body italic px-2">«Умный фильтр, который не виснет при 10 000 авто в базе. Выбор машины занимает пару кликов».</p>
+          </div>
+          <div>
+            <div class="mb-4"><div class="flex aspect-[4/3] items-center justify-center rounded-card bg-surface-muted text-text-muted">
+              <div class="text-center">
+                <i class="fa-solid fa-user-gear text-4xl mb-3 opacity-40" aria-hidden="true"></i>
+                <p class="font-medium text-text-body">Личный кабинет / Чекаут</p>
+              </div>
+            </div></div>
+            <p class="text-sm text-text-body italic px-2">«Место, где клиент подписывает договор. Сделали максимально прозрачно, чтобы не возникало вопросов».</p>
+          </div>
+          <div class="md:col-span-2">
+            <div class="mb-4"><div class="flex aspect-[16/9] md:aspect-[21/9] items-center justify-center rounded-card bg-surface-muted text-text-muted">
+              <div class="text-center">
+                <i class="fa-solid fa-rectangle-ad text-4xl mb-3 opacity-40" aria-hidden="true"></i>
+                <p class="font-medium text-text-body">Промо-лендинги под акции</p>
+              </div>
+            </div></div>
+            <p class="text-sm text-text-body italic px-2 text-center">«Шаблонизатор для акций. Маркетологи собирают страницы за 2 часа. Разработчик в это время пьет кофе».</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 py-24">
+      <div class="page-container mx-auto max-w-4xl">
+        <h2 class="text-3xl font-bold tracking-tight text-text-heading mb-12 text-center">Результаты</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center bg-surface-muted rounded-section p-10 lg:p-16">
+          <div>
+            <p class="text-5xl font-extrabold text-text-heading">0.8s</p>
+            <p class="text-sm font-medium text-text-body mt-2">Скорость загрузки каталога</p>
+          </div>
+          <div>
+            <p class="text-5xl font-extrabold text-text-heading">50+</p>
+            <p class="text-sm font-medium text-text-body mt-2">Промо-макетов и лендингов</p>
+          </div>
+          <div>
+            <p class="text-5xl font-extrabold text-text-heading">24/7</p>
+            <p class="text-sm font-medium text-text-body mt-2">Мониторинг и техподдержка</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="px-6 pb-24">
+      <div class="page-container mx-auto max-w-4xl rounded-section bg-dark p-8 text-center text-white sm:p-12">
+        <h2 class="text-4xl font-bold tracking-tight sm:text-5xl">У вас похожая задача?</h2>
+        <p class="mx-auto mt-5 max-w-lg text-base leading-relaxed text-dark-text lg:text-lg">Обсудим ваш проект. Предложим решение и честно скажем по срокам.</p>
+        <button type="button" data-project-modal aria-haspopup="dialog" aria-controls="project-modal" class="mt-8 inline-flex items-center justify-center rounded-full px-8 py-4 font-medium btn-inverse">Обсудить проект</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer"><div class="af"><div class="af-top"><a class="ax-logo" href="../../" aria-label="Axiomantic — главная страница">axiomantic.</a><nav class="ax-nav" aria-label="Навигация по сайту"><a href="../../services/">Услуги</a><a href="../../portfolio/">Кейсы</a><a href="../../blog/">Блог</a><a href="../../contacts/">Контакты</a></nav></div><div class="af-row"><p class="ax-tagline">Сайты для бизнеса под ключ.<br>Запуск за 72 часа.</p><address class="ax-contact"><a class="ax-phone" href="tel:+79090013099">+7 909 001-30-99</a><div class="ax-social"><a href="mailto:landing@axiomantic.ru" aria-label="Почта: landing@axiomantic.ru"><span class="ax-social-tile" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path fill-rule="evenodd" d="M4.5 4a2.5 2.5 0 0 0-2.5 2.5v11A2.5 2.5 0 0 0 4.5 20h15a2.5 2.5 0 0 0 2.5-2.5v-11A2.5 2.5 0 0 0 19.5 4h-15Zm-.02 2.86a.8.8 0 0 0-.96 1.28l8 6a.8.8 0 0 0 .96 0l8-6a.8.8 0 1 0-.96-1.28L12 12.5 4.48 6.86Z" clip-rule="evenodd"/></svg></span></a><a href="https://t.me/axiomantic_support" aria-label="Telegram"><span class="ax-social-tile" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="M21.4 3.5 18.2 20c-.2 1.2-.9 1.5-1.9.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L5.6 13.8.8 12.3c-1-.3-1-1 .2-1.5L20 3.4c.9-.3 1.7.2 1.4 1.1Z"/></svg></span></a><a href="https://max.ru/id380806643503_biz" aria-label="MAX"><span class="ax-social-tile" aria-hidden="true"><img class="ax-max-logo" src="../../assets/images/social/max.png" alt="" width="26" height="26" decoding="async"></span></a></div></address></div><div class="af-bottom"><div class="ax-legal"><p class="ax-copyright">© <span id="year">2026</span> Axiomantic · Екатеринбург</p><p>ИП Задорожный Владислав Витальевич</p><p>ИНН 380806643503 · ОГРНИП 326385000091769</p></div><div class="ax-docs"><a href="../../privacy/">Политика обработки персональных данных</a><a href="../../consent/">Согласие на обработку персональных данных</a></div></div></div></footer>
+  <dialog id="project-modal" class="project-modal" aria-labelledby="project-modal-title">
+  <div class="project-modal-heading">
+    <h2 id="project-modal-title">Обсудить проект</h2>
+    <button type="button" class="project-modal-close" data-close-modal aria-label="Закрыть окно">×</button>
+  </div>
+  <form id="project-modal-form" class="min-w-0 rounded-card bg-surface-muted p-8 lg:p-10" data-source="modal" novalidate>
+          <input id="modal-selected-project" type="hidden" name="interest" value="">
+          <div class="hp" aria-hidden="true"><label>Не заполняйте это поле <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          <div>
+            <label for="modal-name" class="mb-2 block text-sm font-medium text-text-heading">Как вас зовут <span aria-hidden="true">*</span></label>
+            <input id="modal-name" name="name" type="text" autocomplete="name" placeholder="Ваше имя" required maxlength="80" class="w-full min-w-0 rounded-xl border-none bg-surface px-5 py-4 text-base text-text-heading placeholder:text-slate-400">
+          </div>
+          <div class="mt-5">
+            <label for="modal-contact-value" class="mb-2 block text-sm font-medium text-text-heading">Телефон или Telegram <span aria-hidden="true">*</span></label>
+            <input id="modal-contact-value" name="contact" type="text" inputmode="tel" placeholder="+7 или @username" required minlength="3" maxlength="120" class="w-full min-w-0 rounded-xl border-none bg-surface px-5 py-4 text-base text-text-heading placeholder:text-slate-400">
+          </div>
+          <div class="mt-5">
+            <label for="modal-project" class="mb-2 block text-sm font-medium text-text-heading">Текст задачи</label>
+            <textarea id="modal-project" name="message" rows="4" maxlength="3000" placeholder="Что делаете и какая задача у сайта?" class="block w-full min-w-0 resize-y rounded-xl border-none bg-surface px-5 py-4 text-base text-text-heading placeholder:text-slate-400"></textarea>
+          </div>
+          <div class="mt-6 flex items-start gap-3">
+            <input type="checkbox" id="modal-privacy" name="consent" value="accepted" required class="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-text-heading focus:ring-brand">
+            <label for="modal-privacy" class="text-sm text-text-body leading-snug consent-text">Я ознакомлен с <a href="../../privacy/">политикой обработки персональных данных</a> и даю <a href="../../consent/">согласие на обработку персональных данных</a>.</label>
+          </div>
+          <button type="submit" disabled class="mt-6 w-full rounded-full py-4 font-medium btn-dark">Обсудить проект</button>
+          <p class="mt-3 text-sm leading-relaxed text-text-body">
+            <i class="fa-solid fa-check text-brand mr-1" aria-hidden="true"></i> Перезвоним в течение рабочего дня. Без спама.
+          </p>
+          <p id="modal-form-status" role="status" aria-live="polite" aria-atomic="true" class="mt-4 text-sm font-medium text-text-body"></p>
+        <noscript><p>Для отправки формы включите JavaScript или свяжитесь с нами по телефону или в Telegram.</p></noscript>
+        </form>
+  <p class="project-modal-direct">Или <a href="https://t.me/axiomantic_support" target="_blank" rel="noopener">напишите в Telegram</a> / <a href="tel:+79090013099">+7 909 001-30-99</a></p>
+</dialog>
+  
+</body>
+</html>

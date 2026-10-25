@@ -486,7 +486,10 @@ func contactOf(l Lead) (kind, value string) {
 		}
 		return l.Channel, l.Contact
 	}
-	if strings.Contains(l.Contact, "@") {
+	if l.Mode == "brief" && !isPhone(l.Contact) && reTelegram.MatchString(l.Contact) {
+		return "telegram", l.Contact
+	}
+	if strings.Contains(l.Contact, "@") && reEmail.MatchString(l.Contact) {
 		return "email", l.Contact
 	}
 	return "phone", l.Contact
@@ -586,7 +589,7 @@ func parseFilter(q url.Values) (leadFilter, string) {
 	if f.status != "all" && f.status != "open" && f.status != "closed" && f.status != "progress" && statusLabels[f.status] == "" {
 		return f, "status"
 	}
-	if f.mode != "" && f.mode != "call" && f.mode != "write" && f.mode != "form" {
+	if f.mode != "" && f.mode != "call" && f.mode != "write" && f.mode != "form" && f.mode != "brief" {
 		return f, "mode"
 	}
 	if f.interest != "" && !oneOf(f.interest, interestLabels) {
@@ -848,7 +851,7 @@ func (a *Admin) handleErase(w http.ResponseWriter, r *http.Request, ac *actor) {
 
 // ---------------------------------------------------------------- dashboard
 
-var modeLabels = map[string]string{"call": "Звонок", "write": "Сообщение", "form": "Форма"}
+var modeLabels = map[string]string{"call": "Звонок", "write": "Сообщение", "form": "Форма", "brief": "Заявка"}
 
 type ranked struct {
 	Key   string `json:"key"`

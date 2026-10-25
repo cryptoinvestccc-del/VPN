@@ -73,6 +73,9 @@ func (a *Admin) siteRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/site/media", a.auth(roleManager, a.handleUpload))
 	mux.HandleFunc("GET /api/admin/site/health", a.auth(roleViewer, a.handleHealth))
 	mux.HandleFunc("GET /api/admin/site/media", a.auth(roleViewer, a.handleMediaList))
+	mux.HandleFunc("GET /api/admin/site/comments", a.auth(roleViewer, a.handleComments))
+	mux.HandleFunc("PATCH /api/admin/site/comments/{id}", a.auth(roleManager, a.handleComment))
+	mux.HandleFunc("DELETE /api/admin/site/comments/{id}", a.auth(roleManager, a.handleComment))
 	mux.HandleFunc("DELETE /api/admin/site/media/{id}", a.auth(roleManager, a.handleMediaDelete))
 	mux.HandleFunc("GET /api/admin/site/activity", a.auth(roleViewer, a.handleSiteActivity))
 	mux.HandleFunc("GET /api/admin/site/diff", a.auth(roleViewer, a.handleDiff))
@@ -595,6 +598,9 @@ func (a *Admin) handlePreview(w http.ResponseWriter, r *http.Request, ac *actor)
 	// them only pretend to.
 	content := deepCopy(d.Content).(map[string]any)
 	setPath(content, "SITE.endpoint", "")
+	if getPath(content, "SITE.blog_endpoint") != nil {
+		setPath(content, "SITE.blog_endpoint", "")
+	}
 	res, err := a.build(r.Context(), sc, content, tmp, "preview")
 	if err != nil {
 		a.log.Printf("site %s: preview: %v", ac.ws.ID, err)

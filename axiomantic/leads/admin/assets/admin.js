@@ -41,11 +41,11 @@
   var OPEN = { new: 1, contacted: 1, proposal: 1 };
   var WHEN = { hour: 'в течение часа', today: 'сегодня', tomorrow: 'завтра' };
   var CHANNEL = { telegram: 'Telegram', whatsapp: 'WhatsApp', email: 'Email' };
-  var INTEREST = { landing: 'Лендинг', 'multi-base': 'Многостаночник · Базовый', 'multi-custom': 'Многостаночник · Под вас', unknown: 'пока не знает' };
+  var INTEREST = { landing: 'Лендинг', business: 'Бизнес', custom: 'Индивидуальный', 'multi-base': 'Многостаночник · Базовый', 'multi-custom': 'Многостаночник · Под вас', unknown: 'пока не знает' };
   var BUDGET = { lt100: 'до 100 000 ₽', '100-300': '100–300 000 ₽', gt300: 'от 300 000 ₽', unknown: 'пока не знает' };
-  var MODE = { call: 'Звонок', write: 'Сообщение', form: 'Форма' };
-  var MODE_ICON = { call: 'phone', write: 'message', form: 'form' };
-  var SOURCE = { modal: 'Окно заявки', contacts: 'Страница контактов' };
+  var MODE = { call: 'Звонок', write: 'Сообщение', form: 'Форма', brief: 'Заявка' };
+  var MODE_ICON = { call: 'phone', write: 'message', form: 'form', brief: 'form' };
+  var SOURCE = { modal: 'Окно заявки', contacts: 'Страница контактов', home: 'Главная' };
   var ROLE = { owner: 'Владелец', manager: 'Менеджер', viewer: 'Наблюдатель' };
   var KIND = { phone: 'Телефон', telegram: 'Telegram', whatsapp: 'WhatsApp', email: 'Email' };
   var KIND_ICON = { phone: 'phone', telegram: 'send', whatsapp: 'chat', email: 'mail' };
@@ -701,6 +701,7 @@
     ['#/team', 'users', 'Пользователи', 'team', 'команда роли доступ участники логин пароль владелец менеджер наблюдатель'],
     ['#/indexing', 'compass', 'Индексация', 'indexing', 'яндекс поиск indexnow вебмастер страницы роботы', true],
     ['#/health', 'pulse', 'Проверка сайта', 'health', 'ошибки ссылки сборка картинки поиск seo проверить', true],
+    ['#/comments', 'chat', 'Комментарии', 'comments', 'блог модерация отзывы одобрить скрыть', true],
     ['#/media', 'image', 'Медиатека', 'media', 'картинки фото изображения загрузки файлы удалить', true],
     ['#/activity', 'clock', 'Журнал действий', 'activity', 'история кто что изменил правки события', true],
     ['#/releases', 'history', 'Резервные копии', 'releases', 'версии публикации история вернуть откат восстановить', true],
@@ -972,10 +973,10 @@
     else location.hash = hash;
   }
 
-  var SIMPLE_ROUTES = { team: 1, settings: 1, analytics: 1, releases: 1, health: 1, password: 1, media: 1, activity: 1, indexing: 1 };
+  var SIMPLE_ROUTES = { team: 1, settings: 1, analytics: 1, releases: 1, health: 1, password: 1, media: 1, activity: 1, indexing: 1, comments: 1 };
   var VIEW_TITLE = { dash: 'Обзор', leads: 'Заявки', analytics: 'Аналитика заявок', team: 'Пользователи', settings: 'Рабочее пространство',
     releases: 'Резервные копии', health: 'Проверка сайта', password: 'Сменить пароль', edit: 'Раздел', missing: 'Не найдено',
-    media: 'Медиатека', activity: 'Журнал действий', indexing: 'Индексация' };
+    media: 'Медиатека', activity: 'Журнал действий', indexing: 'Индексация', comments: 'Комментарии' };
 
   function onRoute() {
     if (!S.user || !E.shell) return;
@@ -1016,6 +1017,7 @@
     } else if (r.name === 'releases') { if (!same) render(viewReleases, r); }
     else if (r.name === 'health') { if (!same) render(viewHealth, r); }
     else if (r.name === 'media') { if (!same) render(viewMedia, r); }
+    else if (r.name === 'comments') { if (!same) render(viewComments, r); }
     else if (r.name === 'activity') { if (!same) render(viewActivity, r); }
     else if (r.name === 'indexing') { if (!same) render(viewIndexing, r); }
     else if (r.name === 'password') { if (!same) render(viewPassword, r); }
@@ -3139,6 +3141,14 @@
       var parts = String(f.optionsFrom).split('.'), name = parts[0], sub = parts[1];
       // values being edited in this section win over the saved draft
       var src = ctx && ctx.values && has(ctx.values, name) ? ctx.values[name] : (S.site && S.site.content ? S.site.content[name] : null);
+      // "BLOG.categories" inside an object: a map, or a list of [key, label] pairs
+      if (src && typeof src === 'object' && !Array.isArray(src) && sub && Array.isArray(src[sub])) {
+        src[sub].forEach(function (pair) {
+          if (Array.isArray(pair) && typeof pair[0] === 'string' && pair[0]) out.push([pair[0], typeof pair[1] === 'string' && pair[1].trim() ? pair[1] : pair[0]]);
+        });
+        return out;
+      }
+      if (src && typeof src === 'object' && !Array.isArray(src) && sub && src[sub] && typeof src[sub] === 'object' && !Array.isArray(src[sub])) { src = src[sub]; sub = ''; }
       if (src && typeof src === 'object' && !Array.isArray(src) && !sub) {
         Object.keys(src).forEach(function (k) { out.push([k, typeof src[k] === 'string' && src[k].trim() ? src[k] : k]); });
       } else if (Array.isArray(src) && sub) {
@@ -4215,10 +4225,14 @@
       case 'unschedule': return v('отменил', 'отменила') + ' запланированную публикацию';
       case 'publish_failed': return '— запланированная публикация не прошла: ' + (it.note || '');
       case 'indexnow': return v('отправил', 'отправила') + ' страницы сайта в Яндекс';
+      case 'comment_approved': return v('одобрил', 'одобрила') + ' комментарий';
+      case 'comment_hidden': return v('скрыл', 'скрыла') + ' комментарий';
+      case 'comment_pending': return v('вернул', 'вернула') + ' комментарий на проверку';
+      case 'comment_delete': return v('удалил', 'удалила') + ' комментарий';
     }
     return it.kind;
   }
-  var ACT_ICON = { save: 'save', publish: 'rocket', restore: 'history', upload: 'upload', 'delete': 'trash', schedule: 'calendar', unschedule: 'calendar', publish_failed: 'alert', indexnow: 'compass' };
+  var ACT_ICON = { comment_approved: 'check', comment_hidden: 'eye-off', comment_pending: 'clock', comment_delete: 'trash', save: 'save', publish: 'rocket', restore: 'history', upload: 'upload', 'delete': 'trash', schedule: 'calendar', unschedule: 'calendar', publish_failed: 'alert', indexnow: 'compass' };
   function viewActivity(root, r, token) {
     var list = h('div', { class: 'card alog', 'aria-busy': 'true' }, h('div', { class: 'skel skel--line', vars: { width: '60%' } }));
     fill(root, pageHead('Журнал действий', 'Кто и что менял на сайте'), list);
@@ -4307,6 +4321,73 @@
         fill(box, errorCard(e, load));
       });
     }
+    load();
+  }
+
+
+  /* ------------------------------------------------------------------ site: blog comments */
+
+  var CSTATUS = [['pending', 'На проверке'], ['approved', 'Опубликованы'], ['hidden', 'Скрыты']];
+  function viewComments(root, r, token) {
+    var tabs = h('div', { class: 'seg', role: 'group', 'aria-label': 'Показать' });
+    var list = h('div', { class: 'card alog', 'aria-busy': 'true' }, h('div', { class: 'skel skel--line', vars: { width: '60%' } }));
+    var intro = h('p', { class: 'note' }, icon('chat', 'ico--sm'), h('span', { text: 'Посетители комментируют анонимно. Комментарий появляется в блоге только после того, как его одобрят здесь.' }));
+    fill(root, pageHead('Комментарии', 'Модерация комментариев в блоге'), intro, tabs, list);
+    var mode = 'pending', counts = {};
+    function drawTabs() {
+      fill(tabs, CSTATUS.map(function (x) {
+        var n = counts[x[0]] || 0;
+        return h('button', { class: 'seg__opt', type: 'button', 'aria-pressed': String(mode === x[0]), onclick: function () { mode = x[0]; drawTabs(); load(); } },
+          x[1] + (n ? ' · ' + n : ''));
+      }));
+    }
+    function act(it, status, btn) {
+      working(btn, true);
+      var req = status === 'delete' ? api('/site/comments/' + encodeURIComponent(it.id), { method: 'DELETE' })
+        : api('/site/comments/' + encodeURIComponent(it.id), { method: 'PATCH', body: { status: status } });
+      req.then(function () {
+        toast(status === 'approved' ? 'Комментарий опубликован' : status === 'hidden' ? 'Комментарий скрыт' : status === 'delete' ? 'Комментарий удалён' : 'Возвращён на проверку', 'chat', 'ok');
+        if (alive(token)) load();
+      }, function (e) { working(btn, false); if (e.code !== 'auth') toast(errText(e), 'alert', 'error'); });
+    }
+    function load() {
+      list.setAttribute('aria-busy', 'true');
+      api('/site/comments?status=' + mode).then(function (d) {
+        if (!alive(token)) return;
+        list.removeAttribute('aria-busy');
+        counts = (d && d.counts) || {};
+        drawTabs();
+        var items = (d && d.items) || [];
+        if (!items.length) {
+          fill(list, h('div', { class: 'empty fade' }, h('span', { class: 'empty__art' }, icon('chat')),
+            h('h2', { class: 'empty__title', text: mode === 'pending' ? 'Новых комментариев нет' : 'Пусто' }),
+            h('p', { class: 'empty__text', text: mode === 'pending' ? 'Когда посетитель оставит комментарий, он появится здесь.' : 'Здесь пока ничего нет.' })));
+          return;
+        }
+        fill(list, items.map(function (it) {
+          var btns = [];
+          if (can('site')) {
+            if (it.status !== 'approved') btns.push(h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: function (e) { act(it, 'approved', e.currentTarget); } }, icon('check', 'ico--sm'), h('span', { class: 'btn__label', text: 'Опубликовать' })));
+            if (it.status !== 'hidden') btns.push(h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: function (e) { act(it, 'hidden', e.currentTarget); } }, icon('eye-off', 'ico--sm'), h('span', { class: 'btn__label', text: 'Скрыть' })));
+            btns.push(h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: function (e) {
+              var bt = e.currentTarget;
+              confirmDialog({ title: 'Удалить комментарий?', text: 'Он пропадёт насовсем.', ok: 'Удалить', cancel: 'Отмена', danger: true, icon: 'trash' })
+                .then(function (yes) { if (yes) act(it, 'delete', bt); });
+            } }, icon('trash', 'ico--sm'), h('span', { class: 'btn__label', text: 'Удалить' })));
+          }
+          return h('article', { class: 'cmt' },
+            h('p', { class: 'cmt__post', text: it.postTitle || it.post }),
+            h('p', { class: 'cmt__text', text: it.text }),
+            h('p', { class: 'cmt__meta', text: fullTime(it.time) + (it.by && it.by.name ? ' · ' + it.by.name : '') }),
+            btns.length ? h('div', { class: 'cmt__btns' }, btns) : null);
+        }));
+      }, function (e) {
+        if (!alive(token) || e.code === 'auth') return;
+        list.removeAttribute('aria-busy');
+        fill(list, errorCard(e, load));
+      });
+    }
+    drawTabs();
     load();
   }
 

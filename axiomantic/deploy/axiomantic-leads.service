@@ -23,7 +23,7 @@ UMask=0077
 # systemd reads this file as root: keep it root:root, mode 600. The site
 # generator never sees these variables.
 EnvironmentFile=-/etc/axiomantic/leads.env
-ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -admin /var/lib/axiomantic/admin.json -origins https://axiomantic.example,https://www.axiomantic.example -trust-proxy
+ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -admin /var/lib/axiomantic/admin.json -origins https://axiomantic.ru,https://www.axiomantic.ru -trust-proxy
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ProtectSystem=strict

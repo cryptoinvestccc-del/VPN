@@ -38,8 +38,13 @@ func newSiteHarness(t *testing.T) *adminHarness {
 	if err := SaveAdminConfig(h.cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
+	// the site's address is real: publishing would report pages to
+	// Yandex. Tests never reach the network.
+	old := indexNowSend
+	indexNowSend = func(context.Context, []byte) (int, error) { return http.StatusOK, nil }
 	h.clock.Add(2 * time.Second)
 	h.start()
+	t.Cleanup(func() { h.srv.admin.bg.Wait(); indexNowSend = old })
 	return h
 }
 
@@ -68,7 +73,7 @@ func TestSiteEditPublishRestore(t *testing.T) {
 		t.Fatalf("first state %+v", st.Changed)
 	}
 	hero := st.Content["HERO"].(map[string]any)
-	hero["lines"] = []any{"Новая строка", "второй строкой."}
+	hero["title"] = []any{"Новая строка", "второй строкой."}
 	rec := owner.save("hero", st.Version, map[string]any{"HERO": hero})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("save hero: %d %s", rec.Code, rec.Body)
@@ -115,7 +120,7 @@ func TestSiteEditPublishRestore(t *testing.T) {
 	}
 	// second release, then roll back to the first
 	h.clock.Add(2 * time.Second)
-	hero["lines"] = []any{"Третья версия", "заголовка."}
+	hero["title"] = []any{"Третья версия", "заголовка."}
 	owner.save("hero", st.Version, map[string]any{"HERO": hero})
 	owner.do("POST", "/api/admin/site/publish", map[string]any{"note": ""})
 	if currentRelease(sc) == first {
@@ -126,7 +131,7 @@ func TestSiteEditPublishRestore(t *testing.T) {
 		t.Fatalf("restore: %d", rec.Code)
 	}
 	st = decode[siteResp](t, rec)
-	if st.Content["HERO"].(map[string]any)["lines"].([]any)[0] != "Новая строка" {
+	if st.Content["HERO"].(map[string]any)["title"].([]any)[0] != "Новая строка" {
 		t.Fatal("restore did not bring the draft back")
 	}
 	// old releases are pruned to Keep
@@ -145,45 +150,37 @@ func TestSiteValidation(t *testing.T) {
 	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
 	c := st.Content
 	cp := func(v any) any { return deepCopy(v) }
-	services := cp(c["SERVICES"]).([]any)
-	services[0].([]any)[0] = "hacked"
+	nav := cp(c["NAV"]).([]any)
+	nav[0].([]any)[0] = "hacked"
+	navShort := cp(c["NAV"]).([]any)[:2]
 	cases := cp(c["CASES"]).([]any)
 	badSlug := cp(cases).([]any)
 	badSlug[0].(map[string]any)["slug"] = "../../etc"
-	badColor := cp(cases).([]any)
-	badColor[0].(map[string]any)["colors"] = []any{"red;}body{display:none", "#FFFFFF", "#FFFFFF"}
+	badIcon := cp(cases).([]any)
+	badIcon[0].(map[string]any)["pain"].(map[string]any)["icon"] = `fa-x" onload="alert(1)`
 	dup := cp(cases).([]any)
 	dup[1].(map[string]any)["slug"] = dup[0].(map[string]any)["slug"]
-	reviews := cp(c["REVIEWS"]).([]any)
-	reviews[0].([]any)[2] = "no-such-case"
-	withoutReferenced := []any{}
-	for _, x := range cp(cases).([]any) {
-		if x.(map[string]any)["slug"] != reviews[1].([]any)[2] {
-			withoutReferenced = append(withoutReferenced, x)
-		}
-	}
+	posts := cp(c["POSTS"]).([]any)
+	posts[0].(map[string]any)["cat"] = "no-such-rubric"
 	extra := cp(c["HERO"]).(map[string]any)
 	extra["script"] = "<script>"
 	bidi := cp(c["HERO"]).(map[string]any)
 	bidi["lead"] = "текст‮перевёрнут"
 	site := cp(c["SITE"]).(map[string]any)
-	site["map_ll"] = "37.6&z=1&pt=evil"
-	tariffs := cp(c["TARIFFS"]).([]any)
-	tariffs = tariffs[:2]
+	site["telegram"] = "javascript:alert(1)"
 	cases2 := []struct {
 		name, section string
 		values        map[string]any
 	}{
-		{"read-only key", "services", map[string]any{"SERVICES": services}},
+		{"read-only key", "site", map[string]any{"NAV": nav}},
+		{"fixed list shortened", "site", map[string]any{"NAV": navShort}},
 		{"slug outside the pattern", "cases", map[string]any{"CASES": badSlug}},
-		{"colour that is CSS", "cases", map[string]any{"CASES": badColor}},
+		{"icon outside the list", "cases", map[string]any{"CASES": badIcon}},
 		{"repeated slug", "cases", map[string]any{"CASES": dup}},
-		{"review of a missing case", "reviews", map[string]any{"REVIEWS": reviews}},
-		{"case a review points at removed", "cases", map[string]any{"CASES": withoutReferenced}},
+		{"post in a missing rubric", "blog", map[string]any{"BLOG": c["BLOG"], "POSTS": posts}},
 		{"unknown field", "hero", map[string]any{"HERO": extra}},
 		{"bidi override", "hero", map[string]any{"HERO": bidi}},
-		{"map parameters smuggled", "site", map[string]any{"SITE": site}},
-		{"fixed list shortened", "tariffs", map[string]any{"TARIFFS": tariffs}},
+		{"script address", "site", map[string]any{"SITE": site}},
 		{"field of another section", "hero", map[string]any{"FAQ": c["FAQ"]}},
 		{"no such section", "nope", map[string]any{}},
 	}
@@ -197,17 +194,24 @@ func TestSiteValidation(t *testing.T) {
 	if after.Version != st.Version {
 		t.Fatal("a refused save changed the draft")
 	}
-	// operator lives on SITE but is edited in «legal»: saving «site» keeps it
-	rec := owner.save("legal", after.Version, map[string]any{"SITE.operator": "ИП Тестов Т. Т."})
+	// the counter lives on CONNECT but is edited in «connect»: saving the
+	// cookie texts in «legal» keeps it
+	rec := owner.save("connect", after.Version, map[string]any{"CONNECT.metrika": "12345678"})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("legal: %d %s", rec.Code, rec.Body)
+		t.Fatalf("connect: %d %s", rec.Code, rec.Body)
 	}
 	v := decode[siteResp](t, rec)
-	if rec := owner.save("site", v.Version, map[string]any{"SITE": c["SITE"]}); rec.Code != http.StatusOK {
-		t.Fatalf("site: %d %s", rec.Code, rec.Body)
+	cookieTexts := map[string]any{}
+	for k, x := range c["CONNECT"].(map[string]any) {
+		if strings.HasPrefix(k, "cookie_") {
+			cookieTexts[k] = x
+		}
+	}
+	if rec := owner.save("legal", v.Version, map[string]any{"CONNECT": cookieTexts}); rec.Code != http.StatusOK {
+		t.Fatalf("legal: %d %s", rec.Code, rec.Body)
 	}
 	got := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
-	if got.Content["SITE"].(map[string]any)["operator"] != "ИП Тестов Т. Т." {
+	if got.Content["CONNECT"].(map[string]any)["metrika"] != "12345678" {
 		t.Fatal("saving one section dropped another section's field")
 	}
 }
@@ -219,13 +223,13 @@ func TestSiteRolesAndWorkspaces(t *testing.T) {
 	owner := h.login("owner@alpha.example")
 	beta := h.login("owner@beta.example")
 	st := decode[siteResp](t, viewer.do("GET", "/api/admin/site", nil))
-	if rec := viewer.save("faq", st.Version, map[string]any{"FAQ": st.Content["FAQ"]}); rec.Code != http.StatusForbidden {
+	if rec := viewer.save("contacts_page", st.Version, map[string]any{"FAQ": st.Content["FAQ"]}); rec.Code != http.StatusForbidden {
 		t.Fatalf("viewer save: %d", rec.Code)
 	}
 	if rec := viewer.do("POST", "/api/admin/site/publish", map[string]any{}); rec.Code != http.StatusForbidden {
 		t.Fatalf("viewer publish: %d", rec.Code)
 	}
-	if rec := manager.save("faq", st.Version, map[string]any{"FAQ": st.Content["FAQ"]}); rec.Code != http.StatusOK {
+	if rec := manager.save("contacts_page", st.Version, map[string]any{"FAQ": st.Content["FAQ"]}); rec.Code != http.StatusOK {
 		t.Fatalf("manager save: %d %s", rec.Code, rec.Body)
 	}
 	owner.do("POST", "/api/admin/site/publish", map[string]any{})
@@ -315,10 +319,9 @@ func TestSiteMediaCover(t *testing.T) {
 	if rec := owner.do("POST", "/api/admin/site/publish", map[string]any{}); rec.Code != http.StatusOK {
 		t.Fatalf("publish: %d %s", rec.Code, rec.Body)
 	}
-	slug := cases[0].(map[string]any)["slug"].(string)
-	page, _ := os.ReadFile(filepath.Join(h.site("alpha").Root, "current", "projects", slug, "index.html"))
+	page, _ := os.ReadFile(filepath.Join(h.site("alpha").Root, "current", "portfolio", "index.html"))
 	if !strings.Contains(string(page), "assets/media/"+up.ID+"-") {
-		t.Fatal("case page does not use the uploaded cover")
+		t.Fatal("the cases page does not use the uploaded cover")
 	}
 	if _, err := os.Stat(filepath.Join(h.site("alpha").Root, "current", "assets", "media", up.ID+"-480.jpg")); err != nil {
 		t.Fatal("cover file not published")
@@ -440,31 +443,22 @@ func TestSiteBlogBlocksAndHealth(t *testing.T) {
 			t.Fatalf("untouched draft reported as broken: %s %v", c.Title, c.Details)
 		}
 	}
-	arts := deepCopy(st.Content["ARTICLES"]).([]any)
-	quotes := 0
-	for _, a := range arts {
-		for _, b := range a.(map[string]any)["body"].([]any) {
-			if b.([]any)[0] == "quote" {
-				quotes++
-			}
-		}
-	}
-	if quotes == 0 {
-		t.Fatal("the site's articles have no quotes to round-trip")
-	}
-	cats := st.Content["BLOG_CATEGORIES"]
-	if rec := owner.save("blog", st.Version, map[string]any{"BLOG_CATEGORIES": cats, "ARTICLES": arts}); rec.Code != http.StatusOK {
-		t.Fatalf("blog with quotes: %d %s", rec.Code, rec.Body)
+	posts := deepCopy(st.Content["POSTS"]).([]any)
+	first := posts[0].(map[string]any)
+	first["body"] = append(first["body"].([]any), []any{"quote", "Цитата"}, []any{"ul", []any{"один", "два"}}, []any{"h2", "Подзаголовок"})
+	blogText := st.Content["BLOG"]
+	if rec := owner.save("blog", st.Version, map[string]any{"BLOG": blogText, "POSTS": posts}); rec.Code != http.StatusOK {
+		t.Fatalf("blog with every block kind: %d %s", rec.Code, rec.Body)
 	}
 	st = decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
 	for name, block := range map[string][]any{
 		"long quote": {"quote", strings.Repeat("ц", 601)},
 		"unknown":    {"script", "x"},
 	} {
-		bad := deepCopy(arts).([]any)
+		bad := deepCopy(posts).([]any)
 		body := bad[0].(map[string]any)["body"].([]any)
 		bad[0].(map[string]any)["body"] = append(body, block)
-		if rec := owner.save("blog", st.Version, map[string]any{"BLOG_CATEGORIES": cats, "ARTICLES": bad}); rec.Code != http.StatusBadRequest {
+		if rec := owner.save("blog", st.Version, map[string]any{"BLOG": blogText, "POSTS": bad}); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s: %d", name, rec.Code)
 		}
 	}
@@ -596,8 +590,8 @@ func TestSiteDiffScheduleAndDesign(t *testing.T) {
 	hero["lead"] = "Новое описание"
 	design := deepCopy(st.Content["DESIGN"]).(map[string]any)
 	design["radius"] = 12.0
-	design["accent"] = "#FF0A0A"
-	design["section"] = nil
+	design["brand"] = "#FF0A0A"
+	design["width"] = nil
 	if rec := owner.save("hero", st.Version, map[string]any{"HERO": hero}); rec.Code != http.StatusOK {
 		t.Fatalf("save hero: %d %s", rec.Code, rec.Body)
 	}
@@ -646,8 +640,8 @@ func TestSiteDiffScheduleAndDesign(t *testing.T) {
 	if currentRelease(sc) == before {
 		t.Fatal("scheduled publication did not happen")
 	}
-	css, _ := os.ReadFile(filepath.Join(sc.Root, "current", "assets", "css", "main.css"))
-	if !strings.Contains(string(css), "--indigo:#FF0A0A") || !strings.Contains(string(css), "--r-l:8px") {
+	css, _ := os.ReadFile(filepath.Join(sc.Root, "current", "assets", "css", "site.css"))
+	if !strings.Contains(string(css), "--c-brand:255 10 10") || !strings.Contains(string(css), "--r-card:12px") {
 		t.Fatal("design settings not in the published styles")
 	}
 	if readSchedule(sc) != nil {
@@ -698,6 +692,12 @@ func TestSiteIndexNow(t *testing.T) {
 	indexNowSend = func(_ context.Context, body []byte) (int, error) { sent <- body; return http.StatusOK, nil }
 	t.Cleanup(func() { indexNowSend = old })
 	// demo address: nothing is sent, and no key is published
+	st0 := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	demo := deepCopy(st0.Content["SITE"]).(map[string]any)
+	demo["url"] = "https://axiomantic.example"
+	if rec := owner.save("site", st0.Version, map[string]any{"SITE": demo}); rec.Code != http.StatusOK {
+		t.Fatalf("save demo url: %d %s", rec.Code, rec.Body)
+	}
 	owner.do("POST", "/api/admin/site/publish", map[string]any{})
 	if rec := owner.do("POST", "/api/admin/site/indexing", map[string]any{}); rec.Code != http.StatusConflict {
 		t.Fatalf("IndexNow for a demo address: %d", rec.Code)
@@ -736,4 +736,178 @@ func TestSiteIndexNow(t *testing.T) {
 	}
 	<-sent
 	h.srv.admin.bg.Wait()
+}
+
+// blogReq is a request from a page of the alpha site.
+func (h *adminHarness) blogReq(method, path string, body any, ip string) *httptest.ResponseRecorder {
+	var rd *bytes.Reader
+	if body != nil {
+		raw, _ := json.Marshal(body)
+		rd = bytes.NewReader(raw)
+	} else {
+		rd = bytes.NewReader(nil)
+	}
+	req := httptest.NewRequest(method, "https://alpha.example"+path, rd)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "https://alpha.example")
+	}
+	req.RemoteAddr = ip + ":5000"
+	return h.serve(req)
+}
+
+func TestBlogCommentsAndReactions(t *testing.T) {
+	h := newSiteHarness(t)
+	owner := h.login("owner@alpha.example")
+	viewer := h.login("viewer@alpha.example")
+	beta := h.login("owner@beta.example")
+	st := decode[siteResp](t, owner.do("GET", "/api/admin/site", nil))
+	post := st.Content["POSTS"].([]any)[0].(map[string]any)["id"].(string)
+	// nothing is accepted before the blog is published
+	if rec := h.blogReq("POST", "/api/blog/comments", map[string]any{"post": post, "text": "Привет"}, "203.0.113.1"); rec.Code != http.StatusNotFound {
+		t.Fatalf("comment before publishing: %d", rec.Code)
+	}
+	owner.do("POST", "/api/admin/site/publish", map[string]any{})
+	for name, body := range map[string]map[string]any{
+		"unknown post":  {"post": "no-such-post", "text": "Привет"},
+		"too short":     {"post": post, "text": "a"},
+		"too long":      {"post": post, "text": strings.Repeat("я", 1001)},
+		"control chars": {"post": post, "text": "текст\x07звонок"},
+		"extra field":   {"post": post, "text": "Привет", "name": "Иван"},
+	} {
+		if rec := h.blogReq("POST", "/api/blog/comments", body, "203.0.113.2"); rec.Code < 400 {
+			t.Fatalf("%s accepted: %d", name, rec.Code)
+		}
+	}
+	// a page of another site, and no Origin at all, are refused
+	req := httptest.NewRequest("POST", "https://alpha.example/api/blog/comments", strings.NewReader(`{"post":"`+post+`","text":"Привет"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example")
+	if rec := h.serve(req); rec.Code != http.StatusForbidden {
+		t.Fatalf("foreign origin: %d", rec.Code)
+	}
+	if rec := h.blogReq("POST", "/api/blog/comments", map[string]any{"post": post, "text": "Хороший пост <b>!</b>"}, "203.0.113.3"); rec.Code != http.StatusOK {
+		t.Fatalf("comment: %d %s", rec.Code, rec.Body)
+	}
+	// the honeypot answers ok and stores nothing
+	h.blogReq("POST", "/api/blog/comments", map[string]any{"post": post, "text": "Спам", "website": "x"}, "203.0.113.4")
+	// pending: not on the site yet
+	var pub struct {
+		Items []struct {
+			Text string `json:"text"`
+		} `json:"items"`
+	}
+	json.Unmarshal(h.blogReq("GET", "/api/blog/comments?post="+post, nil, "203.0.113.5").Body.Bytes(), &pub)
+	if len(pub.Items) != 0 {
+		t.Fatal("a comment shows before moderation")
+	}
+	type modList struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Text   string `json:"text"`
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	list := decode[modList](t, viewer.do("GET", "/api/admin/site/comments?status=pending", nil))
+	if len(list.Items) != 1 || list.Items[0].Text != "Хороший пост <b>!</b>" {
+		t.Fatalf("moderation queue: %+v", list.Items)
+	}
+	id := list.Items[0].ID
+	// a viewer cannot approve, another site's owner cannot see it
+	if rec := viewer.do("PATCH", "/api/admin/site/comments/"+id, map[string]any{"status": "approved"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer approves: %d", rec.Code)
+	}
+	if rec := beta.do("PATCH", "/api/admin/site/comments/"+id, map[string]any{"status": "approved"}); rec.Code != http.StatusNotFound {
+		t.Fatalf("beta approves alpha's comment: %d", rec.Code)
+	}
+	if rec := beta.do("DELETE", "/api/admin/site/comments/"+id, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("beta deletes alpha's comment: %d", rec.Code)
+	}
+	if strings.Contains(beta.do("GET", "/api/admin/site/comments", nil).Body.String(), id) {
+		t.Fatal("beta lists alpha's comments")
+	}
+	if rec := owner.do("PATCH", "/api/admin/site/comments/"+id, map[string]any{"status": "approved"}); rec.Code != http.StatusOK {
+		t.Fatalf("approve: %d %s", rec.Code, rec.Body)
+	}
+	json.Unmarshal(h.blogReq("GET", "/api/blog/comments?post="+post, nil, "203.0.113.5").Body.Bytes(), &pub)
+	if len(pub.Items) != 1 {
+		t.Fatal("an approved comment does not show")
+	}
+	// reactions: one per address, taken back by the same address only
+	react := func(ip, kind, prev string) map[string]int {
+		var out map[string]int
+		rec := h.blogReq("POST", "/api/blog/react", map[string]any{"post": post, "kind": kind, "prev": prev}, ip)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("react %s: %d %s", kind, rec.Code, rec.Body)
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		return out
+	}
+	if c := react("198.51.100.1", "like", ""); c["likes"] != 1 {
+		t.Fatalf("like: %v", c)
+	}
+	if c := react("198.51.100.2", "", "like"); c["likes"] != 1 {
+		t.Fatalf("someone else took a like back: %v", c)
+	}
+	if c := react("198.51.100.1", "dislike", "like"); c["likes"] != 0 || c["dislikes"] != 1 {
+		t.Fatalf("switch to dislike: %v", c)
+	}
+	var stats struct {
+		Posts map[string]map[string]int `json:"posts"`
+	}
+	json.Unmarshal(h.blogReq("GET", "/api/blog/stats", nil, "198.51.100.3").Body.Bytes(), &stats)
+	if stats.Posts[post]["dislikes"] != 1 || stats.Posts[post]["comments"] != 1 {
+		t.Fatalf("stats: %v", stats.Posts[post])
+	}
+	// a hidden comment leaves the site; a deleted one leaves the queue
+	owner.do("PATCH", "/api/admin/site/comments/"+id, map[string]any{"status": "hidden"})
+	json.Unmarshal(h.blogReq("GET", "/api/blog/comments?post="+post, nil, "203.0.113.5").Body.Bytes(), &pub)
+	if len(pub.Items) != 0 {
+		t.Fatal("a hidden comment still shows")
+	}
+	if rec := owner.do("DELETE", "/api/admin/site/comments/"+id, nil); rec.Code != http.StatusOK {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	// nothing about the visitor is stored
+	raw, _ := os.ReadFile(filepath.Join(h.site("alpha").Data, "blog.json"))
+	if strings.Contains(string(raw), "203.0.113") || strings.Contains(string(raw), "198.51.100") {
+		t.Fatal("an address was stored")
+	}
+	// the comment limit per address
+	n := 0
+	for i := 0; i < 8; i++ {
+		if rec := h.blogReq("POST", "/api/blog/comments", map[string]any{"post": post, "text": "Комментарий"}, "192.0.2.9"); rec.Code == http.StatusTooManyRequests {
+			n++
+		}
+	}
+	if n == 0 {
+		t.Fatal("no limit on comments from one address")
+	}
+}
+
+func TestBriefLead(t *testing.T) {
+	h := newAdminHarness(t)
+	for name, lead := range map[string]map[string]any{
+		"telegram": {"source": "home", "mode": "brief", "name": "Иван", "contact": "@ivan_petrov", "interest": "business", "consent": true},
+		"phone":    {"source": "modal", "mode": "brief", "name": "Иван", "contact": "+7 900 123-45-67", "message": "Нужен лендинг", "consent": true},
+	} {
+		if id := h.postLead("https://alpha.example", lead); id == "" {
+			t.Fatalf("%s: not stored", name)
+		}
+	}
+	for name, lead := range map[string]map[string]any{
+		"short phone":   {"source": "home", "mode": "brief", "name": "Иван", "contact": "+7 900 123", "consent": true},
+		"no consent":    {"source": "home", "mode": "brief", "name": "Иван", "contact": "@ivan_petrov"},
+		"bad interest":  {"source": "home", "mode": "brief", "name": "Иван", "contact": "@ivan_petrov", "interest": "x", "consent": true},
+		"unknown place": {"source": "footer", "mode": "brief", "name": "Иван", "contact": "@ivan_petrov", "consent": true},
+	} {
+		raw, _ := json.Marshal(lead)
+		req := httptest.NewRequest(http.MethodPost, "https://api.example/api/lead", bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "https://alpha.example")
+		req.RemoteAddr = "203.0.113.50:1000"
+		if rec := h.serve(req); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d", name, rec.Code)
+		}
+	}
 }

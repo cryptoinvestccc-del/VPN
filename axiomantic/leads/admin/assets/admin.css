@@ -1848,3 +1848,11 @@ a.hsum__tile:hover{filter:saturate(1.15)}
 .color--empty{position:relative}
 .color--empty::before{content:"";position:absolute;left:0;top:50%;width:44px;height:44px;transform:translateY(-50%);border-radius:12px;border:1.5px dashed var(--line-2);
   background:linear-gradient(135deg,transparent 47%,var(--line-2) 47%,var(--line-2) 53%,transparent 53%);pointer-events:none}
+
+/* ------------------------------------------------------------ blog comments */
+.cmt{display:flex;flex-direction:column;gap:6px;padding:16px 4px;border-bottom:1px solid var(--line)}
+.cmt:last-child{border-bottom:0}
+.cmt__post{margin:0;font-size:12.5px;font-weight:600;color:var(--muted)}
+.cmt__text{margin:0;font-size:15px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
+.cmt__meta{margin:0;font-size:12.5px;color:var(--muted-2)}
+.cmt__btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}

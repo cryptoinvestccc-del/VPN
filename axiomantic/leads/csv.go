@@ -47,7 +47,7 @@ func (a *Admin) handleExport(w http.ResponseWriter, r *http.Request, ac *actor) 
 	buf.WriteString("\xEF\xBB\xBF") // Excel reads UTF-8 only with the mark
 	writeCSVRow(&buf, []string{"№", "Получена", "Статус", "Имя", "Тип", "Источник", "Телефон", "Когда позвонить",
 		"Канал", "Контакт", "Интересует", "Бюджет", "Сообщение", "Ответственный", "Изменена"})
-	sources := map[string]string{"modal": "Окно заявки", "contacts": "Страница контактов"}
+	sources := map[string]string{"modal": "Окно заявки", "contacts": "Страница контактов", "home": "Главная"}
 	for _, v := range list {
 		l := v.Rec.Lead
 		assignee := ""

@@ -47,6 +47,11 @@ type Server struct {
 	now        func() time.Time
 	wg         sync.WaitGroup
 
+	// blog comments and reactions: per address and for everyone together
+	commentLimit *Limiter
+	reactLimit   *Limiter
+	reacted      reactionMemory
+
 	// admin is nil unless the server was started with -admin.
 	admin     *Admin
 	defaultWS string
@@ -56,6 +61,13 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/lead", s.handleLead)
 	if s.admin != nil {
+		if s.commentLimit == nil {
+			s.commentLimit = NewLimiter(10*time.Minute, 5, 300)
+		}
+		if s.reactLimit == nil {
+			s.reactLimit = NewLimiter(10*time.Minute, 120, 20000)
+		}
+		s.blogRoutes(mux)
 		s.admin.clientIP = s.clientIP
 		s.admin.hasNotify = func(w *Workspace) bool { return s.notify != nil && s.chatFor(w) != "-" }
 		s.admin.routes(mux)

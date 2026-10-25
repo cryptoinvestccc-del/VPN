@@ -1,0 +1,10 @@
+/* Shared project dialog; native dialog provides focus trapping and Escape. */
+.project-modal { width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 28px; overflow-y: auto; overscroll-behavior: contain; border: 0; border-radius: var(--r-card); background: rgb(var(--c-surface-muted)); color: rgb(var(--c-heading)); box-shadow: 0 24px 80px rgb(var(--c-dark) / .2); }
+.project-modal::backdrop { background: rgb(var(--c-dark) / .6); }
+.project-modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.project-modal-heading h2 { font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: -.03em; }
+.project-modal-close { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; background: rgb(var(--c-surface)); font-size: 28px; line-height: 1; }
+.project-modal form { padding: 0; }
+.project-modal-direct { margin-top: 16px; font-size: 14px; line-height: 1.5; color: rgb(var(--c-body)); }
+.project-modal-direct a { color: rgb(var(--c-heading)); text-decoration: underline; }
+@media (max-width: 480px) { .project-modal { padding: 20px; border-radius: 24px; } .project-modal-heading h2 { font-size: 24px; } }

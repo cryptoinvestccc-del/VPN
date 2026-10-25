@@ -2,4 +2,4 @@ User-agent: *
 Disallow: /api/
 Disallow: /404/
 
-Sitemap: https://axiomantic.example/sitemap.xml
+Sitemap: https://axiomantic.ru/sitemap.xml
