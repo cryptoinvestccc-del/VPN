@@ -93,7 +93,12 @@ cmd_install() {
 			-site "https://$DOMAIN" \
 			-site-dir "$SRC" -site-root "$WWW" -site-data "$DATA/site"
 		local login=""
-		while [ -z "$login" ]; do read -r -p "Логин владельца панели (email): " login; done
+		# only plain characters: a paste can bring invisible ones along
+		until printf '%s' "$login" | LC_ALL=C grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; do
+			[ -z "$login" ] || echo "Не похоже на email (или в нём невидимые символы) — наберите вручную."
+			read -r -p "Логин владельца панели (email): " login
+			login="$(printf '%s' "$login" | LC_ALL=C tr -cd 'A-Za-z0-9._%+@-')"
+		done
 		local name=""
 		read -r -p "Имя для панели [Владелец]: " name
 		echo "Пароль будет показан один раз — сохраните его в менеджер паролей и не пересылайте в чатах."

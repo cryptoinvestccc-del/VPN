@@ -149,7 +149,18 @@ func (c *AdminConfig) UserByLogin(login string) *User {
 	return nil
 }
 
-func normLogin(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+// normLogin also drops what a terminal or a paste can slip in unseen
+// (a byte-order mark, zero-width characters, a broken byte), so the login
+// typed at the sign-in form matches the one given on the console.
+func normLogin(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r == utf8.RuneError || unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.ToLower(strings.TrimSpace(s))
+}
 
 // Members lists the users of one workspace, never anyone else's.
 func (c *AdminConfig) Members(ws string) []*User {

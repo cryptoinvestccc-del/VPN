@@ -253,7 +253,7 @@ func cliUser(cmd string, args []string, stdin io.Reader, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		c.Users = append(c.Users, &User{ID: newUserID(), Login: strings.TrimSpace(*login), Name: strings.TrimSpace(*name),
+		c.Users = append(c.Users, &User{ID: newUserID(), Login: normLogin(*login), Name: strings.TrimSpace(*name),
 			Role: *role, Workspace: *ws, Hash: hash})
 		if err := SaveAdminConfig(*path, c); err != nil {
 			return err
