@@ -1,29 +1,29 @@
 [Unit]
-Description=Axiomantic site: order forms and the team panel
+Description=Axiomantic site (new): order forms, blog and the team panel
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# A system user of its own (useradd --system axiomantic).
-#   /var/lib/axiomantic   leads, admin.json (users and password hashes, 600),
+# A system user of its own (useradd --system axmsite).
+#   /var/lib/axm-site     leads, admin.json (users and password hashes, 600),
 #                         the site editor's draft, uploads, release records
-#   /var/www/axiomantic   published releases; nginx serves …/current
-#   /opt/axiomantic       the site's sources: build.py, content.py, legal.py,
+#   /var/www/axm-site     published releases; nginx serves …/current
+#   /opt/axm-site         the site's sources: build.py, content.py, legal.py,
 #                         site/ (template with pictures), cms/schema.json
 # The service rereads admin.json when it changes, so a user disabled from
 # the panel or the console loses access within seconds.
-User=axiomantic
-Group=axiomantic
-StateDirectory=axiomantic
+User=axmsite
+Group=axmsite
+StateDirectory=axm-site
 StateDirectoryMode=0700
-ReadWritePaths=/var/www/axiomantic
+ReadWritePaths=/var/www/axm-site
 UMask=0077
 # AXM_TG_TOKEN and AXM_TG_CHAT, if leads should also go to Telegram.
 # systemd reads this file as root: keep it root:root, mode 600. The site
 # generator never sees these variables.
-EnvironmentFile=-/etc/axiomantic/leads.env
-ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axiomantic/leads.jsonl -admin /var/lib/axiomantic/admin.json -origins https://axiomantic.ru,https://www.axiomantic.ru -trust-proxy
+EnvironmentFile=-/etc/axm-site/leads.env
+ExecStart=/usr/local/bin/axiomantic-leads -addr 127.0.0.1:8090 -store /var/lib/axm-site/leads.jsonl -admin /var/lib/axm-site/admin.json -origins https://axiomantic.ru,https://www.axiomantic.ru,https://new.axiomantic.ru -trust-proxy
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ProtectSystem=strict

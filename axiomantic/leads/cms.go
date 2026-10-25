@@ -656,7 +656,12 @@ func (a *Admin) publishNow(ctx context.Context, ws *Workspace, sc *SiteConfig, b
 	}
 	id := newReleaseID(a.now())
 	rels := filepath.Join(sc.Root, "releases")
+	// the service runs with umask 077 and nginx, another user, serves
+	// these: the modes are set outright, not left to the umask
 	if err := os.MkdirAll(rels, 0o755); err != nil {
+		return nil, nil, err
+	}
+	if err := os.Chmod(rels, 0o755); err != nil {
 		return nil, nil, err
 	}
 	tmp := filepath.Join(rels, ".building-"+id)
@@ -671,7 +676,11 @@ func (a *Admin) publishNow(ctx context.Context, ws *Workspace, sc *SiteConfig, b
 	key := a.indexNowKey(sc)
 	if key != "" {
 		// search engines check that the site holds the key it reports with
-		if err := os.WriteFile(filepath.Join(tmp, key+".txt"), []byte(key), 0o644); err != nil {
+		kf := filepath.Join(tmp, key+".txt")
+		if err := os.WriteFile(kf, []byte(key), 0o644); err != nil {
+			return nil, nil, err
+		}
+		if err := os.Chmod(kf, 0o644); err != nil {
 			return nil, nil, err
 		}
 	}

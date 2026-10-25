@@ -77,7 +77,7 @@ cd axiomantic/tailwind && npm ci && npm run build
 
 Ничего не грузится со сторонних серверов: шрифт и иконки свои. Яндекс
 Метрика — только когда номер счётчика задан в панели и посетитель нажал
-«Принять» в уведомлении о cookie. Под строгой CSP из `deploy/nginx.conf`
+«Принять» в уведомлении о cookie. Под строгой CSP из `deploy/snippet-axm-site.conf`
 сайт проверен без нарушений.
 
 ## 3. Формы и блог
@@ -122,29 +122,29 @@ cd axiomantic/tailwind && npm ci && npm run build
 скрытое поле-ловушка для ботов. Уведомление в Telegram — простой текст
 без разметки.
 
-Запуск на сервере (Ubuntu/Debian). В `deploy/axiomantic-leads.service` и
-`deploy/nginx.conf` уже стоит axiomantic.ru; для другого домена замените
+Запуск на сервере (Ubuntu/Debian). В `deploy/axm-site.service` и
+`deploy/axm-site.conf` уже стоит axiomantic.ru; для другого домена замените
 его — с чужим `Origin` сервис отвечает на заявки 403.
 
 ```bash
 cd axiomantic/leads && CGO_ENABLED=0 go build -trimpath -o axiomantic-leads .
 sudo install -m 755 axiomantic-leads /usr/local/bin/
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin axiomantic
-sudo install -d -m 750 -o root -g axiomantic /etc/axiomantic
-sudo install -m 644 ../deploy/axiomantic-leads.service /etc/systemd/system/
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin axmsite
+sudo install -d -m 750 -o root -g axmsite /etc/axm-site
+sudo install -m 644 ../deploy/axm-site.service /etc/systemd/system/
 # Telegram (по желанию): токен вводится в редакторе, а не в командной
 # строке — её видят ps, журнал sudo и история shell
-sudo install -m 600 -o root -g root /dev/null /etc/axiomantic/leads.env
-sudoedit /etc/axiomantic/leads.env     # AXM_TG_TOKEN=…  и  AXM_TG_CHAT=…
+sudo install -m 600 -o root -g root /dev/null /etc/axm-site/leads.env
+sudoedit /etc/axm-site/leads.env     # AXM_TG_TOKEN=…  и  AXM_TG_CHAT=…
 # панель и публикация сайта: см. раздел 10 — без admin.json сервис не стартует
-sudo systemctl daemon-reload && sudo systemctl enable --now axiomantic-leads
+sudo systemctl daemon-reload && sudo systemctl enable --now axm-site
 ```
 
-Пример nginx — `deploy/nginx.conf`. Заявки лежат в
-`/var/lib/axiomantic/leads.jsonl`. Удалить данные одного человека по его
+nginx: `deploy/snippet-axm-site.conf` (общая часть) и `deploy/axm-site.conf`; установка рядом со старым сайтом — `deploy/INSTALL.md`. Заявки лежат в
+`/var/lib/axm-site/leads.jsonl`. Удалить данные одного человека по его
 запросу — кнопка в карточке заявки (раздел 10). Чистить старые записи
 по сроку из политики — только с остановленным сервисом:
-`systemctl stop axiomantic-leads`, правка файла, `systemctl start`.
+`systemctl stop axm-site`, правка файла, `systemctl start`.
 Заявка, пришедшая во время правки на ходу, может потеряться, а панель
 увидит изменения только после перезапуска.
 
@@ -216,7 +216,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now axiomantic-leads
 аналитика». На сайте появляется уведомление о cookie; счётчик
 загружается только после «Принять» (Метрика ставит cookie, это
 персональные данные по 152-ФЗ). Если включаете Метрику, допишите её в
-политику обработки данных. В `deploy/nginx.conf` CSP уже разрешает
+политику обработки данных. В `deploy/snippet-axm-site.conf` CSP уже разрешает
 `mc.yandex.ru`; в предпросмотре счётчик не работает.
 
 **Как устроено.** Всё внутри того же сервиса на Go: API `/api/admin/*`
@@ -266,19 +266,19 @@ go run . -store /tmp/axm/leads.jsonl -admin /tmp/axm/admin.json
 
 ```bash
 # исходники сайта (читает сервис, пишет только root)
-sudo install -d -m 755 /opt/axiomantic
-sudo rsync -a --delete --exclude leads/ --exclude tailwind/ axiomantic/ /opt/axiomantic/   # из корня репозитория
+sudo install -d -m 755 /opt/axm-site
+sudo rsync -a --delete --exclude leads/ --exclude tailwind/ axiomantic/ /opt/axm-site/   # из корня репозитория
 # сюда панель публикует выпуски
-sudo install -d -m 755 -o axiomantic -g axiomantic /var/www/axiomantic
-sudo install -d -m 700 -o axiomantic -g axiomantic /var/lib/axiomantic
-sudo axiomantic-leads admin workspace set -config /var/lib/axiomantic/admin.json -id studio \
+sudo install -d -m 755 -o axmsite -g axmsite /var/www/axm-site
+sudo install -d -m 700 -o axmsite -g axmsite /var/lib/axm-site
+sudo axiomantic-leads admin workspace set -config /var/lib/axm-site/admin.json -id studio \
   -name "Axiomantic" -origins https://axiomantic.ru,https://www.axiomantic.ru \
   -site https://axiomantic.ru \
-  -site-dir /opt/axiomantic -site-root /var/www/axiomantic -site-data /var/lib/axiomantic/site
-sudo axiomantic-leads admin user add -config /var/lib/axiomantic/admin.json -workspace studio \
+  -site-dir /opt/axm-site -site-root /var/www/axm-site -site-data /var/lib/axm-site/site
+sudo axiomantic-leads admin user add -config /var/lib/axm-site/admin.json -workspace studio \
   -login owner@axiomantic.ru -name "Имя Фамилия" -role owner
-sudo chown axiomantic:axiomantic /var/lib/axiomantic/admin.json   # один раз; дальше владелец сохраняется
-sudo systemctl restart axiomantic-leads
+sudo chown axmsite:axmsite /var/lib/axm-site/admin.json   # один раз; дальше владелец сохраняется
+sudo systemctl restart axm-site
 ```
 
 Затем войти в `/admin/` и один раз нажать «Опубликовать»: до первого
@@ -288,7 +288,7 @@ sudo systemctl restart axiomantic-leads
 Пароль никогда не передаётся флагом: он генерируется и печатается один
 раз, либо читается из stdin (`-password-stdin`). Остальные команды:
 `admin user passwd | disable | enable | remove | list`. В nginx нужны
-блоки `location /admin/` и `/api/admin/` из `deploy/nginx.conf`; там же
+блоки `location /admin/` и `/api/admin/` из `deploy/snippet-axm-site.conf`; там же
 закомментирован пример, как пустить в панель только офис.
 
 **Отдать клиенту.** Панель одна, а сайт у каждого клиента свой: у сайта
@@ -303,7 +303,7 @@ sudo systemctl restart axiomantic-leads
 -accent '#0F7B6C' -logo К -telegram-chat <id>` и свои `-site-*`) и
 пользователей; в server-блоке nginx клиента проксируйте `/api/lead`,
 `/admin/` и `/api/admin/` на тот же сервис — с теми же строками, что в
-`deploy/nginx.conf`: `proxy_set_header Host $host;` и обязательно
+`deploy/snippet-axm-site.conf`: `proxy_set_header Host $host;` и обязательно
 `proxy_set_header X-Real-IP $remote_addr;`. Без второй строки адрес
 посетителя возьмётся из его же заголовка, и лимиты входа и заявок
 перестанут работать. Клиент входит на своём домене и видит только свой
@@ -352,18 +352,18 @@ sudo systemctl restart axiomantic-leads
 
 1. **Секретов нет на клиенте и в репозитории.** Секреты — токен
    Telegram-бота и хеши паролей панели. Токен живёт только в
-   `/etc/axiomantic/leads.env` (root, `600`) и передаётся через
+   `/etc/axm-site/leads.env` (root, `600`) и передаётся через
    окружение, не флагами и не в командной строке. Ошибки Telegram не
    цитируют URL запроса, а значит и токен (тест). Генератор сайта
    запускается с пустым окружением и токена не видит. Хеши — в
-   `/var/lib/axiomantic/admin.json` (`600`), браузер их не получает
+   `/var/lib/axm-site/admin.json` (`600`), браузер их не получает
    (тест); новый пароль сотрудника показывается один раз и нигде не
    хранится открытым текстом. Пароли не передаются флагами. В `site/` и в
    страницах панели нет ключей; CI ищет шаблоны ключей в собранном сайте
    на каждом пуше.
 2. **Хранилище закрыто по умолчанию.** Базы с доступом от клиента нет.
    Файл заявок, `admin.json`, черновик и копии выпусков — права `600`
-   в `/var/lib/axiomantic`; сервис не стартует, если они лежат внутри
+   в `/var/lib/axm-site`; сервис не стартует, если они лежат внутри
    публикуемой папки (или `admin.json` читают другие). Публичный
    эндпоинт только принимает. Все адреса `/api/admin/*` без сессии
    отвечают 401, без CSRF-токена — 403, без нужной роли — 403;
