@@ -1856,3 +1856,112 @@ a.hsum__tile:hover{filter:saturate(1.15)}
 .cmt__text{margin:0;font-size:15px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
 .cmt__meta{margin:0;font-size:12.5px;color:var(--muted-2)}
 .cmt__btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+
+/* ================================================================ glass
+   The panel over a rendered snow field: frosted panels, round glass
+   buttons, a pill menu at the top. Light theme: daylight glass with dark
+   text; dark theme: a dimmed field under tinted glass with light text. */
+
+:root{
+  --bg:#DCE3EE;
+  --card:rgba(255,255,255,.62);
+  --tile:rgba(255,255,255,.46);
+  --tile-2:rgba(255,255,255,.7);
+  --line:rgba(255,255,255,.6);
+  --line-2:rgba(21,30,72,.14);
+  --muted:#4F5679;
+  --muted-2:#6C7397;
+  --glass-blur:blur(22px) saturate(165%);
+  --glass-edge:rgba(255,255,255,.7);
+  --glass-hi:rgba(255,255,255,.75);
+  --glass-solid:rgba(250,251,255,.9);
+  --backdrop-tint:rgba(220,228,240,0);
+  --shadow:0 1px 1px rgba(16,24,64,.04),0 12px 32px rgba(16,24,64,.10);
+  --shadow-sm:0 1px 1px rgba(16,24,64,.04),0 4px 14px rgba(16,24,64,.08);
+  --nav-on-bg:var(--ink);--nav-on-ink:#FFFFFF;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1226;
+    --card:rgba(16,22,50,.56);
+    --tile:rgba(255,255,255,.08);
+    --tile-2:rgba(255,255,255,.14);
+    --line:rgba(255,255,255,.12);
+    --line-2:rgba(255,255,255,.2);
+    --ink:#FFFFFF;--ink-2:rgba(240,243,255,.86);--muted:rgba(226,231,255,.68);--muted-2:rgba(226,231,255,.5);
+    --glass-edge:rgba(255,255,255,.14);
+    --glass-hi:rgba(255,255,255,.16);
+    --glass-solid:rgba(18,24,54,.92);
+    --backdrop-tint:rgba(8,12,34,.5);
+    --nav-on-bg:#FFFFFF;--nav-on-ink:#0B0E33;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C1226;
+  --card:rgba(16,22,50,.56);
+  --tile:rgba(255,255,255,.08);
+  --tile-2:rgba(255,255,255,.14);
+  --line:rgba(255,255,255,.12);
+  --line-2:rgba(255,255,255,.2);
+  --ink:#FFFFFF;--ink-2:rgba(240,243,255,.86);--muted:rgba(226,231,255,.68);--muted-2:rgba(226,231,255,.5);
+  --glass-edge:rgba(255,255,255,.14);
+  --glass-hi:rgba(255,255,255,.16);
+  --glass-solid:rgba(18,24,54,.92);
+  --backdrop-tint:rgba(8,12,34,.5);
+  --nav-on-bg:#FFFFFF;--nav-on-ink:#0B0E33;
+}
+
+/* the backdrop: a Blender render of a snow field, the snow canvas over it */
+html{background:var(--bg)}
+body{background:transparent}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-3;pointer-events:none;
+  background:url(backdrop.webp) 50% 40%/cover no-repeat,var(--bg);
+}
+body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background:var(--backdrop-tint)}
+@media (max-width:900px){ body::before{background-image:url(backdrop-1280.webp)} }
+.snow{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
+.haze{display:none}
+
+/* frosted surfaces */
+.sidebar,.card,.pub,.tabs,.search,.icon-btn:not(.icon-btn--flat),.btn--ghost,.pop,.dialog,.palette,
+.login__card,.login__art,.topnav__link,.who{
+  -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+}
+.sidebar,.card,.pub,.tabs,.search,.icon-btn:not(.icon-btn--flat),.pop,.login__card,.topnav__link{
+  box-shadow:inset 0 1px 0 var(--glass-hi),0 0 0 1px var(--glass-edge),var(--shadow);
+}
+.icon-btn:not(.icon-btn--flat),.pub,.tabs,.search{box-shadow:inset 0 1px 0 var(--glass-hi),0 0 0 1px var(--glass-edge),var(--shadow-sm)}
+/* dialogs and menus float over moving snow: nearly solid, still frosted */
+.dialog,.palette,.pop{background:var(--glass-solid);box-shadow:inset 0 1px 0 var(--glass-hi),0 0 0 1px var(--glass-edge),var(--shadow-lg)}
+.toast{-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur)}
+
+/* login over the field */
+.login{background:transparent}
+.login__art{background:var(--card);box-shadow:inset 0 1px 0 var(--glass-hi),0 0 0 1px var(--glass-edge),var(--shadow)}
+.login__art::before{opacity:.55}
+
+/* pill menu in the top bar */
+.topnav{display:flex;align-items:center;gap:6px;min-width:0}
+.topnav__link{
+  display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:var(--r-pill);
+  background:var(--card);color:var(--ink-2);font-size:13.5px;font-weight:600;white-space:nowrap;
+  transition:background-color .16s,color .16s,transform .16s var(--ease);
+}
+.topnav__link .ico{width:17px;height:17px}
+.topnav__link:hover{color:var(--ink);background:var(--tile-2)}
+.topnav__link:active{transform:scale(.97)}
+.topnav__link[aria-current="page"]{background:var(--nav-on-bg);color:var(--nav-on-ink);box-shadow:0 6px 18px rgba(8,12,40,.18)}
+.topbar .search{width:clamp(220px,20vw,380px)}
+.topnav{flex:none}
+.topbar .pub{flex:none}
+@media (max-width:1999px){ .topnav__text{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap} .topnav__link{width:40px;padding:0;justify-content:center} }
+@media (max-width:1599px){ .topnav{display:none} }
+.snow-btn[aria-pressed="false"]{color:var(--muted)}
+
+/* no glass for those who asked the system for less transparency */
+@media (prefers-reduced-transparency:reduce){
+  :root{--card:#FFFFFF;--tile:#F3F5FA;--tile-2:#E9EDF5}
+  :root[data-theme="dark"]{--card:#121838;--tile:#1A2148;--tile-2:#222A55}
+  .sidebar,.card,.pub,.tabs,.search,.icon-btn,.btn--ghost,.pop,.dialog,.palette,.login__card,.login__art,.topnav__link,.who,.toast{-webkit-backdrop-filter:none;backdrop-filter:none}
+}

@@ -657,6 +657,14 @@
 
     E.themeBtn = h('button', { class: 'icon-btn', type: 'button', onclick: toggleTheme });
     syncThemeBtn();
+    // snow over the backdrop (assets/snow.js); the choice stays in this browser
+    E.snowBtn = h('button', { class: 'icon-btn snow-btn', type: 'button', onclick: function () {
+      if (!window.axmSnow) return;
+      window.axmSnow.set(!window.axmSnow.enabled());
+      syncSnowBtn();
+    } }, icon('snow'));
+    syncSnowBtn();
+    E.topnav = h('nav', { class: 'topnav', 'aria-label': 'Главное' });
     E.bellDot = h('span', { class: 'bell__dot', hidden: true });
     E.bell = h('a', { class: 'icon-btn bell', href: '#/leads?status=new' }, icon('bell'), E.bellDot);
     E.burger = h('button', { class: 'icon-btn burger', type: 'button', 'aria-label': 'Открыть меню', 'aria-controls': 'sidebar', 'aria-expanded': 'false', onclick: openMobileNav }, icon('menu'));
@@ -676,7 +684,10 @@
       leadsOn ? E.searchBox : null,
       leadsOn ? h('button', { class: 'icon-btn search-icon-btn', type: 'button', 'aria-label': 'Поиск по заявкам', onclick: function () { openPalette(''); } }, icon('search')) : null,
       h('span', { class: 'topbar__spacer' }),
+      E.topnav,
+      h('span', { class: 'topbar__spacer' }),
       E.pub,
+      E.snowBtn,
       E.themeBtn,
       leadsOn ? E.bell : null,
       h('div', { class: 'who' }, avatar(S.user),
@@ -783,6 +794,7 @@
     filterSideNav(E.sideSearch ? E.sideSearch.value : '');
     syncNavCurrent();
     if (E.syncNavMore) requestAnimationFrame(E.syncNavMore);
+    renderTopnav();
   }
   function filterSideNav(q) {
     if (!E.navBox) return;
@@ -811,9 +823,38 @@
     if (r.name === 'edit') return 'edit:' + r.section;
     return r.name;
   }
+  /* the pill menu at the top: the main places, the rest stays in the side menu */
+  function renderTopnav() {
+    if (!E.topnav) return;
+    var items = [['#/', 'home', 'Обзор', 'dash']];
+    if (S.features.leads) items.push(['#/leads', 'inbox', 'Заявки', 'leads']);
+    var secs = S.site && S.site.schema && S.site.schema.sections;
+    if (S.features.site && secs && secs.length) items.push(['#/edit/' + encodeURIComponent(secs[0].id), 'layers', 'Сайт', 'site']);
+    if (S.features.site) items.push(['#/media', 'image', 'Медиатека', 'media']);
+    items.push(['#/team', 'users', 'Команда', 'team']);
+    fill(E.topnav, items.map(function (x) {
+      return h('a', { class: 'topnav__link', href: x[0], title: x[2], data: { top: x[3] } }, icon(x[1]), h('span', { class: 'topnav__text', text: x[2] }));
+    }));
+    syncNavCurrent();
+  }
+  function syncSnowBtn() {
+    if (!E.snowBtn) return;
+    var snow = window.axmSnow;
+    E.snowBtn.hidden = !!(snow && !snow.available());
+    var on = !!(snow && snow.enabled());
+    E.snowBtn.setAttribute('aria-pressed', String(on));
+    E.snowBtn.setAttribute('aria-label', on ? 'Выключить снег' : 'Включить снег');
+    E.snowBtn.setAttribute('title', on ? 'Выключить снег' : 'Включить снег');
+  }
   function syncNavCurrent() {
     if (!E.sidebar) return;
     var key = navKey(S.route);
+    if (E.topnav) {
+      var top = key.indexOf('edit:') === 0 ? 'site' : key;
+      $$('.topnav__link', E.topnav).forEach(function (a) {
+        if (a.dataset.top === top) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      });
+    }
     $$('.nav__link[data-nav]', E.sidebar).forEach(function (a) {
       if (a.dataset.nav === key) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
