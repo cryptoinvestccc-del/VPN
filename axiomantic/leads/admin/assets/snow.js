@@ -25,9 +25,9 @@
   // depth: 0 far (crisp), 1 middle (crisp), 2 near the lens (blurred)
   function flake(anyY) {
     var roll = Math.random(), f;
-    if (roll < 0.58) f = { size: 7 + Math.random() * 6, vy: 26 + Math.random() * 18, sway: 8 + Math.random() * 8, a: 0.75, lv: 0, par: 0.35 };
-    else if (roll < 0.9) f = { size: 20 + Math.random() * 14, vy: 50 + Math.random() * 30, sway: 16 + Math.random() * 14, a: 0.95, lv: Math.random() < 0.6 ? 0 : 1, par: 0.7 };
-    else f = { size: 44 + Math.random() * 36, vy: 120 + Math.random() * 70, sway: 30 + Math.random() * 30, a: 0.6, lv: 2, par: 1.4 };
+    if (roll < 0.58) f = { size: 4 + Math.random() * 4, vy: 26 + Math.random() * 18, sway: 8 + Math.random() * 8, a: 0.75, lv: 0, par: 0.35 };
+    else if (roll < 0.9) f = { size: 11 + Math.random() * 8, vy: 50 + Math.random() * 30, sway: 16 + Math.random() * 14, a: 0.95, lv: Math.random() < 0.6 ? 0 : 1, par: 0.7 };
+    else f = { size: 26 + Math.random() * 20, vy: 120 + Math.random() * 70, sway: 30 + Math.random() * 30, a: 0.6, lv: 2, par: 1.4 };
     f.kind = Math.floor(Math.random() * KINDS);
     f.x = Math.random() * (w + 200) - 100;
     f.y = anyY ? Math.random() * h : -f.size - Math.random() * 80;
@@ -43,7 +43,7 @@
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     w = window.innerWidth; h = window.innerHeight;
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    var want = Math.min(260, Math.round(w * h / 5600));
+    var want = Math.min(320, Math.round(w * h / 4300));
     while (flakes.length < want) flakes.push(flake(true));
     flakes.length = want;
   }
