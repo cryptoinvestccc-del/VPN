@@ -2011,3 +2011,23 @@ body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;bac
 .shell.is-collapsed .nav__link[aria-current="page"][data-badge]::after{box-shadow:0 0 0 2px var(--nav-on-bg)}
 .bell__dot{background:#EF4444}
 .who .av,.me .av{background:linear-gradient(135deg,var(--avatar-a),var(--avatar-b));color:#FFFFFF;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+
+/* ---------------------------------------------------------------- calmer light glass
+   Over a bright, coloured backdrop thin glass takes on its colour (green in
+   summer). Light theme: denser, nearly neutral white glass over a softened
+   backdrop; text that sits on the backdrop itself gets a halo to stay legible. */
+:root{
+  --card:rgba(255,255,255,.8);
+  --tile:rgba(244,246,250,.72);
+  --tile-2:rgba(255,255,255,.92);
+  --line:rgba(255,255,255,.7);
+  --glass-blur:blur(26px) saturate(112%);
+  --backdrop-tint:rgba(236,240,247,.32);
+  --on-backdrop-halo:0 1px 2px rgba(255,255,255,.7),0 0 18px rgba(255,255,255,.75);
+}
+:root[data-theme="dark"]{
+  --glass-blur:blur(22px) saturate(140%);
+  --on-backdrop-halo:0 1px 2px rgba(0,0,0,.45),0 0 18px rgba(0,0,0,.35);
+}
+.page-title{text-shadow:var(--on-backdrop-halo)}
+.page-sub{color:var(--ink-2);text-shadow:var(--on-backdrop-halo);font-weight:500}
