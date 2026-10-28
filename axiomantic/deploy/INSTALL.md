@@ -15,6 +15,23 @@
 | токен Telegram (по желанию) | `/etc/axm-site/leads.env` (`600`, root) |
 | nginx | `snippets/axm-site.conf`, `sites-available/axm-site*.conf` |
 
+## Новый пустой сервер (Timeweb и т. п.)
+
+Ubuntu 22.04 / 24.04 или Debian 12, ничего больше не установлено.
+
+1. В DNS у регистратора поменять A-записи `axiomantic.ru` и `www.axiomantic.ru`
+   на адрес нового сервера и подождать, пока они обновятся (обычно до часа).
+2. Залить архив в `/root` и выполнить:
+
+```bash
+cd /root && tar xzf axm-site-bundle.tar.gz && cd axm-site-bundle
+./axm-site.sh fresh
+```
+
+Скрипт сам поставит nginx, Python и certbot, спросит логин владельца
+(пароль покажет один раз — не пересылайте его в чатах), получит сертификат и
+включит сайт. Затем `https://axiomantic.ru/admin/` → «Опубликовать».
+
 ## 1. Архив
 
 На своём компьютере (или здесь в репозитории): `axiomantic/deploy/bundle.sh`

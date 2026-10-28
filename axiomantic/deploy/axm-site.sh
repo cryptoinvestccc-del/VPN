@@ -10,6 +10,9 @@
 #                            is moved to a backup folder, not deleted
 #   ./axm-site.sh rollback   puts the old server block back
 #   ./axm-site.sh status     what is installed and what serves axiomantic.ru
+#   ./axm-site.sh fresh      an empty server (Ubuntu 22.04/24.04, Debian 12):
+#                            packages, the site, a certificate, axiomantic.ru on
+#                            the new site at once. DNS must already point here.
 #
 # Names are chosen not to touch what already runs on the server:
 # user axmsite, /opt/axm-site, /var/www/axm-site, /var/lib/axm-site,
@@ -199,10 +202,50 @@ cmd_status() {
 	blocks_for "$TEST_DOMAIN" | sed 's/^/  /'
 }
 
+cmd_fresh() {
+	if [ -n "$(ls "$NGX"/sites-enabled 2>/dev/null | grep -v '^default$' || true)" ]; then
+		die "на сервере уже есть сайты в nginx — для такого сервера: install, затем switch"
+	fi
+	say "пакеты"
+	export DEBIAN_FRONTEND=noninteractive
+	apt-get update -qq
+	apt-get install -y -qq nginx python3 certbot python3-certbot-nginx curl iproute2 >/dev/null
+	systemctl enable --now nginx >/dev/null 2>&1 || true
+
+	# DNS: the domain must already lead here, or the certificate cannot be issued
+	local here there
+	here="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9.]+$' | head -1)"
+	there="$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}')"
+	echo "Адрес сервера: ${here:-?}; $DOMAIN указывает на: ${there:-ничего}"
+	if [ -z "$there" ] || ! hostname -I | tr ' ' '\n' | grep -qx "$there"; then
+		local go=""
+		read -r -p "Похоже, DNS ещё не ведёт сюда (у облаков адрес может быть за NAT). Продолжить? Напишите yes: " go
+		[ "$go" = yes ] || die "смените A-записи $DOMAIN и www.$DOMAIN на адрес этого сервера и запустите снова"
+	fi
+
+	cmd_install
+
+	say "сертификат для $DOMAIN"
+	if [ ! -e "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+		local mail=""
+		read -r -p "Email для писем Let's Encrypt о сроке сертификата (можно пусто): " mail
+		if [ -n "$mail" ]; then
+			certbot certonly --nginx --non-interactive --agree-tos -m "$mail" -d "$DOMAIN" -d "www.$DOMAIN"
+		else
+			certbot certonly --nginx --non-interactive --agree-tos --register-unsafely-without-email -d "$DOMAIN" -d "www.$DOMAIN"
+		fi
+	fi
+	rm -f "$NGX/sites-enabled/default"
+	ln -sf "$NGX/sites-available/axm-site.conf" "$NGX/sites-enabled/axm-site.conf"
+	reload_nginx || die "nginx не принял конфигурацию; смотрите nginx -t"
+	say "готово: https://$DOMAIN/admin/ — войдите и нажмите «Опубликовать»"
+}
+
 case "${1:-}" in
 install) cmd_install ;;
 switch) cmd_switch ;;
 rollback) cmd_rollback ;;
 status) cmd_status ;;
-*) sed -n '2,16p' "$0"; exit 2 ;;
+fresh) cmd_fresh ;;
+*) sed -n '2,19p' "$0"; exit 2 ;;
 esac
