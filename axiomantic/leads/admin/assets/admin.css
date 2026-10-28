@@ -2012,22 +2012,55 @@ body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;bac
 .bell__dot{background:#EF4444}
 .who .av,.me .av{background:linear-gradient(135deg,var(--avatar-a),var(--avatar-b));color:#FFFFFF;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
 
-/* ---------------------------------------------------------------- calmer light glass
-   Over a bright, coloured backdrop thin glass takes on its colour (green in
-   summer). Light theme: denser, nearly neutral white glass over a softened
-   backdrop; text that sits on the backdrop itself gets a halo to stay legible. */
-:root{
-  --card:rgba(255,255,255,.8);
-  --tile:rgba(244,246,250,.72);
-  --tile-2:rgba(255,255,255,.92);
-  --line:rgba(255,255,255,.7);
-  --glass-blur:blur(26px) saturate(112%);
-  --backdrop-tint:rgba(236,240,247,.32);
-  --on-backdrop-halo:0 1px 2px rgba(255,255,255,.7),0 0 18px rgba(255,255,255,.75);
+/* ================================================================ palettes per theme and season
+   Dark winter is the reference look and stays as defined above. The other
+   three each get glass tuned to their backdrop, so panels stay glass yet
+   never take on a muddy or garish cast. */
+
+:root{--on-backdrop-halo:0 1px 2px rgba(0,0,0,.4),0 0 18px rgba(0,0,0,.3)}
+
+/* light, both seasons: cool frosted daylight glass, navy ink */
+:root[data-theme="light"]{
+  --bg:#E6ECF4;
+  --card:rgba(250,251,255,.56);
+  --tile:rgba(255,255,255,.42);
+  --tile-2:rgba(255,255,255,.7);
+  --line:rgba(255,255,255,.55);
+  --line-2:rgba(15,27,61,.12);
+  --ink:#0F1B3D;--ink-2:#2B3A5E;--muted:#55617E;--muted-2:#7883A0;
+  --glass-blur:blur(30px) saturate(118%);
+  --glass-edge:rgba(255,255,255,.72);
+  --glass-hi:rgba(255,255,255,.9);
+  --glass-solid:rgba(250,251,255,.95);
+  --backdrop-tint:rgba(238,243,250,.16);
+  --nav-on-bg:#0F1B3D;--nav-on-ink:#FFFFFF;
+  --contrast:#0F1B3D;--contrast-ink:#FFFFFF;
+  --btn-bg:#0F1B3D;--btn-ink:#FFFFFF;
+  --shadow:0 1px 1px rgba(15,27,61,.04),0 18px 40px rgba(15,27,61,.12);
+  --shadow-sm:0 1px 1px rgba(15,27,61,.04),0 6px 18px rgba(15,27,61,.1);
+  --on-backdrop-halo:0 1px 2px rgba(255,255,255,.75),0 0 20px rgba(255,255,255,.8);
+  color-scheme:light;
 }
-:root[data-theme="dark"]{
-  --glass-blur:blur(22px) saturate(140%);
-  --on-backdrop-halo:0 1px 2px rgba(0,0,0,.45),0 0 18px rgba(0,0,0,.35);
+/* light summer: the meadow calmed, so glass over it stays clear, not green */
+:root[data-theme="light"][data-season="summer"] body::before{filter:saturate(.62) brightness(1.06) contrast(.94)}
+:root[data-theme="light"][data-season="summer"]{
+  --backdrop-tint:linear-gradient(180deg,rgba(244,247,251,.08) 0%,rgba(244,247,251,.3) 42%,rgba(240,244,249,.72) 72%,rgba(238,242,248,.82) 100%);
+  --card:rgba(250,251,255,.6);
 }
+:root[data-theme="light"][data-season="winter"] body::before{filter:brightness(1.02)}
+
+/* dark summer: an evening meadow, deep teal glass instead of the winter brown */
+:root[data-theme="dark"][data-season="summer"]{
+  --bg:#0A181B;
+  --card:rgba(10,26,30,.52);
+  --tile:rgba(255,255,255,.07);
+  --tile-2:rgba(255,255,255,.13);
+  --glass-solid:rgba(12,28,32,.95);
+  --contrast:rgba(6,18,22,.9);
+  --backdrop-tint:linear-gradient(180deg,rgba(3,12,16,.32) 0%,rgba(3,12,16,.5) 45%,rgba(4,14,18,.78) 75%,rgba(4,14,18,.86) 100%);
+}
+:root[data-theme="dark"][data-season="summer"] body::before{filter:saturate(.8)}
+
+/* text that sits on the backdrop itself */
 .page-title{text-shadow:var(--on-backdrop-halo)}
 .page-sub{color:var(--ink-2);text-shadow:var(--on-backdrop-halo);font-weight:500}
