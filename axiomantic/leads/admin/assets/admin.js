@@ -25,6 +25,9 @@
   var saved = storeGet(THEME_KEY);
   // smoky glass over the snow field is the panel's own look; light is a choice
   document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+  // the backdrop's season: a snow field in winter, a meadow in summer
+  var SEASON_KEY = 'axm-admin-season';
+  document.documentElement.setAttribute('data-season', storeGet(SEASON_KEY) === 'summer' ? 'summer' : 'winter');
 
   document.addEventListener('DOMContentLoaded', boot);
 
@@ -658,12 +661,15 @@
 
     E.themeBtn = h('button', { class: 'icon-btn', type: 'button', onclick: toggleTheme });
     syncThemeBtn();
-    // snow over the backdrop (assets/snow.js); the choice stays in this browser
+    // winter or summer behind the panel, and whether snow or seeds drift over
+    // it (assets/snow.js); both choices stay in this browser
+    E.seasonBtn = h('button', { class: 'icon-btn season-btn', type: 'button', onclick: toggleSeason });
     E.snowBtn = h('button', { class: 'icon-btn snow-btn', type: 'button', onclick: function () {
       if (!window.axmSnow) return;
       window.axmSnow.set(!window.axmSnow.enabled());
       syncSnowBtn();
-    } }, icon('snow'));
+    } }, icon('sparkle'));
+    syncSeasonBtn();
     syncSnowBtn();
     E.topnav = h('nav', { class: 'topnav', 'aria-label': 'Главное' });
     E.bellDot = h('span', { class: 'bell__dot', hidden: true });
@@ -688,6 +694,7 @@
       E.topnav,
       h('span', { class: 'topbar__spacer' }),
       E.pub,
+      E.seasonBtn,
       E.snowBtn,
       E.themeBtn,
       leadsOn ? E.bell : null,
@@ -838,14 +845,30 @@
     }));
     syncNavCurrent();
   }
+  function currentSeason() { return document.documentElement.getAttribute('data-season') === 'summer' ? 'summer' : 'winter'; }
+  function toggleSeason() {
+    var next = currentSeason() === 'summer' ? 'winter' : 'summer';
+    document.documentElement.setAttribute('data-season', next);
+    storeSet(SEASON_KEY, next);
+    syncSeasonBtn();
+    syncSnowBtn();
+  }
+  function syncSeasonBtn() {
+    if (!E.seasonBtn) return;
+    var summer = currentSeason() === 'summer';
+    fill(E.seasonBtn, icon(summer ? 'snow' : 'leaf'));
+    E.seasonBtn.setAttribute('aria-label', summer ? 'Включить зиму' : 'Включить лето');
+    E.seasonBtn.setAttribute('title', summer ? 'Зима' : 'Лето');
+  }
   function syncSnowBtn() {
     if (!E.snowBtn) return;
     var snow = window.axmSnow;
     E.snowBtn.hidden = !!(snow && !snow.available());
     var on = !!(snow && snow.enabled());
+    var what = currentSeason() === 'summer' ? 'пух' : 'снег';
     E.snowBtn.setAttribute('aria-pressed', String(on));
-    E.snowBtn.setAttribute('aria-label', on ? 'Выключить снег' : 'Включить снег');
-    E.snowBtn.setAttribute('title', on ? 'Выключить снег' : 'Включить снег');
+    E.snowBtn.setAttribute('aria-label', (on ? 'Выключить ' : 'Включить ') + what);
+    E.snowBtn.setAttribute('title', (on ? 'Выключить ' : 'Включить ') + what);
   }
   function syncNavCurrent() {
     if (!E.sidebar) return;

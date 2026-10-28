@@ -1920,6 +1920,8 @@ body::before{
 }
 body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background:var(--backdrop-tint)}
 @media (max-width:900px){ body::before{background-image:url(backdrop-1280.webp)} }
+:root[data-season="summer"] body::before{background-image:url(backdrop-summer.webp)}
+@media (max-width:900px){ :root[data-season="summer"] body::before{background-image:url(backdrop-summer-1280.webp)} }
 .snow{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
 .haze{display:none}
 
@@ -1956,7 +1958,8 @@ body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;bac
 .topnav{flex:none}
 .topbar .pub{flex:none}
 @media (max-width:1999px){ .topnav__text{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap} .topnav__link{width:40px;padding:0;justify-content:center} }
-@media (max-width:1599px){ .topnav{display:none} }
+@media (max-width:1699px){ .topnav{display:none} }
+@media (max-width:1399px) and (min-width:1024px){ .topbar .pub__text{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap} .topbar .pub__state{padding-right:4px} }
 .snow-btn[aria-pressed="false"]{color:var(--muted)}
 
 /* no glass for those who asked the system for less transparency */
