@@ -390,6 +390,8 @@ cd axiomantic/leads && go test -race ./...   # валидация, лимиты,
 ## 12. Лицензии
 
 - Inter — SIL Open Font License 1.1 (`site/assets/fonts/OFL-Inter.txt`).
+- Onest и Unbounded (шрифты панели) — SIL Open Font License 1.1 (`leads/admin/assets/fonts/OFL-*.txt`).
+- Фоны панели и снежинки — собственные рендеры в Blender; небо — HDRI Poly Haven (CC0).
 - Font Awesome Free — значки CC BY 4.0, шрифты SIL OFL 1.1, код MIT (`site/assets/vendor/fontawesome/LICENSE.txt`).
 - Tailwind CSS — MIT (только сборка, на сайт попадает собранный CSS).
 
