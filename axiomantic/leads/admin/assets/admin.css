@@ -1965,3 +1965,46 @@ body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;bac
   :root[data-theme="dark"]{--card:#121838;--tile:#1A2148;--tile-2:#222A55}
   .sidebar,.card,.pub,.tabs,.search,.icon-btn,.btn--ghost,.pop,.dialog,.palette,.login__card,.login__art,.topnav__link,.who,.toast{-webkit-backdrop-filter:none;backdrop-filter:none}
 }
+
+/* ---------------------------------------------------------------- reference palette
+   Colours of the reference: smoky warm glass, white text, the chosen item
+   a white pill, one bright blue for what matters, orange avatar, red dot. */
+:root{
+  --brand:#3B82F6;
+  --violet:#6366F1;
+  --accent-card:#3B82F6;
+  --nav-on-bg:#1C1917;--nav-on-ink:#FFFFFF;
+  --avatar-a:#FBBF24;--avatar-b:#F97316;
+  --danger:#EF4444;
+}
+:root[data-theme="dark"]{
+  --bg:#1A1715;
+  --card:rgba(44,37,34,.5);
+  --tile:rgba(255,255,255,.07);
+  --tile-2:rgba(255,255,255,.13);
+  --line:rgba(255,255,255,.11);
+  --line-2:rgba(255,255,255,.2);
+  --ink:#FFFFFF;--ink-2:rgba(255,255,255,.84);--muted:rgba(255,255,255,.6);--muted-2:rgba(255,255,255,.44);
+  --accent:#3B82F6;--accent-text:#7FB0FF;--accent-ink:#FFFFFF;
+  --accent-soft:rgba(59,130,246,.2);--accent-soft-2:rgba(59,130,246,.3);
+  --accent-card:#3B82F6;
+  --contrast:rgba(30,25,23,.9);--contrast-ink:#FFFFFF;
+  --btn-bg:#FFFFFF;--btn-ink:#1C1917;
+  --nav-on-bg:#FFFFFF;--nav-on-ink:#1C1917;
+  --glass-edge:rgba(255,255,255,.13);
+  --glass-hi:rgba(255,255,255,.14);
+  --glass-solid:rgba(36,30,28,.94);
+  --backdrop-tint:rgba(24,18,15,.42);
+  --st-new-bg:rgba(59,130,246,.22);--st-new-fg:#9CC2FF;
+  --st-won-bg:rgba(52,211,153,.18);--st-won-fg:#6EE7B7;
+  --ok:#34D399;--ok-soft:rgba(52,211,153,.18);
+  --danger:#F87171;--danger-soft:rgba(239,68,68,.18);
+  --ring:0 0 0 2px rgba(0,0,0,.4),0 0 0 4px #3B82F6;
+  color-scheme:dark;
+}
+/* the chosen item: a white pill in dark, a dark one in light */
+.nav__link[aria-current="page"]{background:var(--nav-on-bg);color:var(--nav-on-ink);box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.nav__link[aria-current="page"] .badge{background:var(--danger);color:#FFFFFF}
+.shell.is-collapsed .nav__link[aria-current="page"][data-badge]::after{box-shadow:0 0 0 2px var(--nav-on-bg)}
+.bell__dot{background:#EF4444}
+.who .av,.me .av{background:linear-gradient(135deg,var(--avatar-a),var(--avatar-b));color:#FFFFFF;box-shadow:0 0 0 2px rgba(255,255,255,.35)}

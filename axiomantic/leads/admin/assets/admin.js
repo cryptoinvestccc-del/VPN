@@ -23,7 +23,8 @@
   }
 
   var saved = storeGet(THEME_KEY);
-  if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+  // smoky glass over the snow field is the panel's own look; light is a choice
+  document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
 
   document.addEventListener('DOMContentLoaded', boot);
 
