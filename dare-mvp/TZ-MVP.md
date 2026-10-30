@@ -44,7 +44,7 @@
 5. [UX/UI: экраны, сценарии, механики безопасности](#5-uxui)
 6. [Архитектура и интеграция с «Точкой»](#6-архитектура)
 7. [Данные: ER-диаграмма, сущности, состояния, проводки](#7-данные)
-8. [API: эндпоинты, DTO, примеры JSON](#8-api)
+8. [API: эндпоинты, DTO, примеры JSON, кнопки → запросы (8.5)](#8-api)
 9. [Алгоритмы (псевдокод)](#9-алгоритмы-псевдокод)
 10. [Безопасность](#10-безопасность)
 11. [Модерация (только ручная)](#11-модерация-только-ручная)
@@ -928,6 +928,7 @@ create unique index one_tochka_operation     on payments (tochka_operation_id);
 |---|---|---|---|---|
 | POST | `/auth/otp`, `/auth/otp/verify`, `/auth/refresh`, `/auth/logout` | гость / любой | код привязан к номеру; refresh — к устройству | |
 | GET, DELETE | `/me` | любой | из токена; удаление — отказ при активной попытке или деньгах в обработке | |
+| PUT | `/me/self-exclusion` | любой | из токена; `{days: 7 \| 30 \| 90}`; досрочно не снимается | ✔ |
 | POST | `/me/verification` | любой | из токена | |
 | GET | `/legal/documents` | все | — | |
 | POST | `/me/consents` | любой | из токена | ✔ |
@@ -940,6 +941,7 @@ create unique index one_tochka_operation     on payments (tochka_operation_id);
 | POST | `/me/player/deposit` | игрок с обнулённым депозитом | из токена; повторный депозит по привязке | ✔ | |
 | POST | `/me/player/deposit/refund` | игрок | из токена; нет активной попытки | ✔ | |
 | POST | `/me/viewer` | любой (18+, согласия) | из токена; платёж 500 ₽ с привязкой карты и автопродлением | ✔ | |
+| GET | `/me/viewer` | зритель | из токена; оплаченный период, автопродление | | |
 | DELETE | `/me/viewer/auto-renew` | зритель | из токена | | |
 | GET | `/me/balance` | зритель | из токена | | |
 | POST | `/me/balance/top-up` | зритель | из токена; от 100 ₽, итог не выше потолка | ✔ | |
@@ -958,15 +960,21 @@ create unique index one_tochka_operation     on payments (tochka_operation_id);
 | PATCH | `/challenges/{id}` | автор | автор и статус `NEEDS_CHANGES`; иначе 404/409 | | |
 | POST | `/challenges/{id}/contributions` | зритель | вкладчик = из токена; **сумма = `contribution_amount` задания**, списывается с баланса; банк не выше потолка | ✔ | |
 | DELETE | `/me/contributions/{id}` | вкладчик | взнос свой, иначе 404; только до принятия игроком | ✔ | |
+| GET | `/me/challenges` | зритель | задания, которые создал этот зритель | | |
 | GET | `/me/contributions` | зритель | из токена | | |
 | PUT, DELETE | `/challenges/{id}/vote` | зритель | голос из токена; уровень доверия ≥ уровня задания | | |
-| POST | `/challenges/{id}/accept` | игрок | попытка от имени токена (9.1–9.2) | ✔ | `POST /api/challenges/{id}/accept` |
+| POST | `/challenges/{id}/cancel` | автор | автор и статус до принятия игроком; иначе 404/409; всем вкладчикам 100% на баланс | ✔ | |
+| GET | `/me/offers` | игрок | входящие задания, адресованные этому игроку (запасной путь, если push не дошёл) | | |
+| POST | `/offers/{id}/reject` | игрок | предложение адресовано ему, иначе 404; бесплатно, провалом не считается | ✔ | |
+| POST | `/challenges/{id}/accept` | игрок | попытка от имени токена (9.1–9.2); в теле можно передать `offerId` — предложение должно быть адресовано этому игроку | ✔ | `POST /api/challenges/{id}/accept` |
 
 **Попытки, эфир, отчёт, выплаты**
 
 | Метод | Путь | Кто | Владелец | Идемп. | В концепте |
 |---|---|---|---|---|---|
 | GET | `/me/attempts`, `/attempts/{id}` | игрок, персонал | попытка своя, иначе 404 | | |
+| PATCH | `/attempts/{id}/stream-settings` | владелец | своя попытка, иначе 404; задержка 30–120 с, размытие лиц, чат | | |
+| POST | `/safety-stops/{id}/check-in` | игрок | Стоп свой, иначе 404; `{status: "OK" \| "NEED_HELP"}`; `NEED_HELP` — срочная очередь дежурного | ✔ | |
 | POST | `/attempts/{id}/cancel` | владелец | своя, иначе 404 | ✔ | |
 | POST | `/attempts/{id}/safety-stop` | владелец | своя, иначе 404 | ✔ | |
 | POST | `/attempts/{id}/streams`, `/streams/{id}/end` | владелец | своя; статус `ACCEPTED`/`IN_PROGRESS` | ✔ | `POST /api/streams` |
@@ -984,18 +992,20 @@ create unique index one_tochka_operation     on payments (tochka_operation_id);
 |---|---|---|---|
 | GET | `/streams`, `/streams/{id}`, `/streams/{id}/playback` | зритель с оплаченным периодом | `LIVE` и не скрыт; иначе 404 |
 | POST | `/complaints` | любой | автор = из токена |
-| GET | `/me/complaints/{id}` | любой | своя жалоба, иначе 404 |
+| GET | `/me/complaints`, `/me/complaints/{id}` | любой | свои обращения; чужая жалоба → 404 |
 
 **Модерация (персонал, 2FA)**
 
 | Метод | Путь | Проверки |
 |---|---|---|
 | GET | `/mod/queue?type=challenge\|urgent\|attempt\|complaint\|appeal\|safety_stop` | роль `moderator` |
-| POST | `/mod/challenges/{id}/decision` | автор не связан с модератором |
+| POST | `/mod/challenges/{id}/decision` | автор не связан с модератором; `APPROVE`, `NEEDS_CHANGES`, `REJECT` для новых; `KEEP`, `REMOVE` для срочной очереди |
 | POST | `/mod/attempts/{id}/decision` | `COMPLETED` или `NOT_COMPLETED` с обязательной причиной; игрок не связан с модератором |
 | POST | `/mod/chat/{messageId}/hide` | роль `moderator` |
 | POST | `/mod/streams/{id}/kill` | роль `moderator` |
 | POST | `/mod/appeals/{id}/decision` | модератор ≠ принявшему исходное решение |
+| GET | `/mod/users/{id}` | роль `moderator`; связанный аккаунт → 409 |
+| POST | `/mod/safety-stops/{id}/decision` | итог — только ограничение доступа, деньги не меняются |
 | POST | `/mod/users/{id}/sanctions` | причина; аудит |
 | GET | `/mod/attempts/{id}/precise-geo` | причина; аудит; доступ на 15 минут |
 
@@ -1283,6 +1293,128 @@ POST /api/v1/mod/attempts/at_01JC3R2M7Q/decision
   "merchantId": "<id торговой точки>"
 }
 ```
+
+### 8.5 Кнопки и модальные окна → запросы
+
+Для каждой кнопки и модального окна приложения указано, что уходит на
+сервер. Все пути — от `/api/v1`. «—» в колонке «Запрос» значит, что
+действие только на устройстве и сервер не вызывается. «✔» — нужен
+`Idempotency-Key`: повторное нажатие или обрыв сети не приводят к двойному
+списанию. Проверка владельца во всех запросах — по токену; чужой id → 404
+(10.8).
+
+**Общие экраны**
+
+| Экран | Кнопка / модалка | Запрос | Идемп. | Ответ и ошибки |
+|---|---|---|---|---|
+| S01 Приветствие | Открытие экрана (камера) | — (камера только на устройстве, кадр никуда не уходит) | | |
+| S01 | «ИГРОК» / «ЗРИТЕЛЬ» | — (выбор роли сохраняется на устройстве до входа) | | |
+| S01 | «Правила» | `GET /legal/documents` | | список документов и версий |
+| S02 Вход | «Получить код» | `POST /auth/otp` `{phone}` | | `204`; `429` — слишком часто |
+| S02 | «Войти» | `POST /auth/otp/verify` `{phone, code}` | | токены; `401` — неверный код |
+| S02 | Тихое продление сессии | `POST /auth/refresh` | | новые токены; `401` — войти заново |
+| S03 Согласия | «Продолжить» | `POST /me/consents` `{documents: [{type, version}]}` | ✔ | `201`; `422` — не все отмечены |
+| S04 18+ | «Госуслуги» / «Банк ID» | `POST /me/verification` `{provider}` → переход по ссылке провайдера | | ссылка; результат приходит вебхуком, приложение узнаёт из `GET /me` или события `user.verified` |
+| S05 Привязка карты (игрок) | «Оплатить 500 ₽» | `POST /me/player` | ✔ | `paymentLink`; после оплаты — `GET /me/payments/{id}`, событие `wallet.updated` |
+| S05 (зритель) | «Оплатить 500 ₽» | `POST /me/viewer` | ✔ | `paymentLink`; затем `GET /me/payments/{id}` |
+| S06 Профиль | Открытие | `GET /me` | | профиль, роли, статусы |
+| S06 | «Удалить карту» → модалка подтверждения → «Удалить» | `DELETE /me/cards/{id}` | | `204`; `409` — есть активная попытка или автопродление |
+| S06 | «Самоограничение» → модалка «на 7 / 30 / 90 дней» → «Включить» | `PUT /me/self-exclusion` `{days}` | ✔ | `200`; отменить досрочно нельзя |
+| S06 | «Выйти» | `POST /auth/logout` | | `204` |
+| S06 | «Удалить аккаунт» → модалка «деньги вернутся на карту» → «Удалить» | `DELETE /me` | ✔ | `202`; `409` — активная попытка или деньги в обработке |
+| S07 Поддержка | Открытие | `GET /me/complaints` | | мои обращения |
+| S07 | «Новое обращение» → модалка (тема, текст) → «Отправить» | `POST /complaints` `{targetType: "SUPPORT", text}` | ✔ | `201` |
+
+**Игрок**
+
+| Экран | Кнопка / модалка | Запрос | Идемп. | Ответ и ошибки |
+|---|---|---|---|---|
+| P01 Онбординг | «Ответить» на квиз | — (ответы проверяются на устройстве; факт прохождения — в `POST /me/consents` с типом `PLAYER_QUIZ`) | ✔ | |
+| P02 Депозит | Открытие | `GET /me/wallet` | | депозит и его статус |
+| P02 | «Внести депозит (500 ₽)» → модалка «вы вносите депозит снова» → «Оплатить» | `POST /me/player/deposit` | ✔ | `paymentLink`; `409` — депозит уже активен |
+| P02 | «Вернуть депозит на карту» → модалка → «Вернуть» | `POST /me/player/deposit/refund` | ✔ | `202`; `409` — есть активная попытка |
+| P03 Лента | Открытие, фильтры, прокрутка | `GET /challenges?near=…&radiusKm=…&level=…&tag=…&cursor=…` | | карточки без координат |
+| P03 | «Получить задание» | `GET /me/offers` (если входящих нет — сервер подбирает и присылает событие `offer.new`) | | предложение или пусто |
+| P03a Входящее задание | Появление карточки | push + событие `offer.new` по WebSocket | | `{offerId, challenge, expiresAt}` |
+| P03a | «Отклонить» | `POST /offers/{id}/reject` | ✔ | `204`; бесплатно |
+| P03a | «Принять» → модалка «при провале депозит 500 ₽ обнуляется» → «Принимаю» | `POST /challenges/{id}/accept` `{offerId}` | ✔ | попытка; `409` — `DEPOSIT_REQUIRED`, `ACTIVE_ATTEMPT_EXISTS`, `CONFLICT_OF_INTEREST`, `COOLDOWN_ACTIVE`, `BANK_TOO_SMALL` |
+| P03a | Таймер 60 с истёк | — (предложение истекает на сервере само) | | |
+| P04 Карточка задания | Открытие | `GET /challenges/{id}` | | задание; `404` — снято или скрыто |
+| P04 | «Принять» → та же модалка | `POST /challenges/{id}/accept` | ✔ | как выше |
+| P05 Подготовка | Открытие, таймер | `GET /attempts/{id}` + событие `attempt.timer` | | дедлайн, конец грейса |
+| P05 | «Отказаться бесплатно» (в грейс) → модалка → «Отказаться» | `POST /attempts/{id}/cancel` | ✔ | `CANCELLED_GRACE` |
+| P05 | «Отказаться» (после грейса) → модалка «депозит 500 ₽ обнулится» → «Отказаться» | `POST /attempts/{id}/cancel` | ✔ | `FAILED` |
+| P05 | «Начать эфир» | `POST /attempts/{id}/streams` | ✔ | адрес и одноразовый ключ эфира; дальше видео идёт на медиа-сервер напрямую |
+| P05 | Настройки приватности (задержка, размытие, чат) | `PATCH /attempts/{id}/stream-settings` `{delaySeconds, blurFaces, chatEnabled}` | | `200` |
+| P06 Эфир | «Завершить эфир» | `POST /streams/{id}/end` | | `204` |
+| P06 | «Скрыть чат» | — (только на устройстве игрока) | | |
+| P06 | «СТОП» | — (открывает P07; эфир гасится на устройстве сразу) | | |
+| P07 Стоп | Выбор причины | `POST /attempts/{id}/safety-stop` `{reason, comment}` | ✔ | `SAFETY_STOPPED`, `countsAsFailure: false` |
+| P07 | «Позвонить 112» | — (`tel:112`, звонок не логируется) | | |
+| P07 | «Вернуться к заданию» | — | | |
+| P08 «Вы в безопасности?» | «Я в порядке» / «Нужна помощь» | `POST /safety-stops/{id}/check-in` `{status}` | ✔ | `NEED_HELP` — звонок дежурного |
+| P09 Отчёт | «Загрузить видео» | `POST /attempts/{id}/report/uploads` → загрузка частями по presigned URL прямо в хранилище | | `uploadId`, URL на 10 минут |
+| P09 | «Отправить отчёт» | `POST /attempts/{id}/report` | ✔ | `SUBMITTED` |
+| P10 Результат | Открытие | событие `attempt.status` / `payout.sent` + `GET /attempts/{id}` | | итог и сумма |
+| P10 | «Обжаловать» → модалка (текст) → «Отправить» | `POST /attempts/{id}/appeal` `{text}` | ✔ | `201`; `409` — окно 72 ч закрыто |
+| P11 Выплаты | Открытие | `GET /me/payouts` | | выплаты и чеки |
+| P11 | Строка выплаты | `GET /me/payouts/{id}` | | статус, ссылка на чек |
+| P11 | «Реквизиты» → модалка (телефон для СБП, статус НПД) → «Сохранить» | `PUT /me/payout-profile` | | `200`; `422` — номер не на имя игрока |
+
+**Зритель**
+
+| Экран | Кнопка / модалка | Запрос | Идемп. | Ответ и ошибки |
+|---|---|---|---|---|
+| V01 Оплата просмотра | «Оплатить 500 ₽» | `POST /me/viewer` | ✔ | `paymentLink` |
+| V02 Каталог эфиров | Открытие, фильтры | `GET /streams?category=…&city=…&cursor=…` | | эфиры без координат |
+| V03 Плеер | Открытие | `GET /streams/{id}` + `GET /streams/{id}/playback` (продлевается раз в 5 минут) | | подписанный URL; `403` — период не оплачен |
+| V03 | Чат: «Отправить» | WebSocket `chat.send {streamId, text, clientMsgId}` | по `clientMsgId` | сообщение показывается всем через задержку эфира, если модератор не скрыл |
+| V03 | Реакция | WebSocket `reaction.send` | | |
+| V03 | «Пожаловаться» → модалка (причина) → «Отправить» | `POST /complaints` `{targetType: "STREAM", targetId, reason}` | ✔ | `201`; угроза жизни — реакция до 2 минут |
+| V04 Создать задание | «Создать и внести с баланса» → модалка «спишем X ₽ с баланса» → «Подтвердить» | `POST /challenges` | ✔ | задание на модерации; `409 INSUFFICIENT_BALANCE` |
+| V05 Мои задания | Открытие | `GET /me/challenges`, `GET /me/contributions` | | статусы |
+| V05 | «Исправить» (после замечания модератора) | `PATCH /challenges/{id}` | | `200`; `409` — не в статусе `NEEDS_CHANGES` |
+| V05 | «Снять задание» → модалка «всем вернётся 100%» → «Снять» | `POST /challenges/{id}/cancel` | ✔ | `REMOVED`; `409` — игрок уже принял |
+| V05 | «Забрать взнос» → модалка → «Забрать» | `DELETE /me/contributions/{id}` | ✔ | `204`; `409 CHALLENGE_FROZEN` |
+| V06 Голосование и банк | «Интересно» | `PUT /challenges/{id}/vote` `{interest: 5, riskFlag: false}` | по природе | `200`; `403 TRUST_LEVEL_TOO_LOW` |
+| V06 | «Кажется опасным» → модалка «задание проверит модератор» → «Отметить» | `PUT /challenges/{id}/vote` `{interest: 1, riskFlag: true}` | по природе | `200`; на третьем флажке задание уходит в срочную очередь |
+| V06 | «Отменить голос» | `DELETE /challenges/{id}/vote` | | `204` |
+| V06 | «Вложить X ₽» → модалка «спишем X ₽ с баланса» → «Вложить» | `POST /challenges/{id}/contributions` | ✔ | банк и остаток баланса; `409` — `INSUFFICIENT_BALANCE`, `BANK_CAP_REACHED`, `CHALLENGE_FROZEN`, `ALREADY_CONTRIBUTED` |
+| V07 Управление оплатой | Открытие | `GET /me/viewer`, `GET /me/payments` | | период, история, чеки |
+| V07 | «Отменить автопродление» → модалка → «Отменить» | `DELETE /me/viewer/auto-renew` | | `204`; доступ до конца оплаченного периода |
+| V08 Баланс | Открытие | `GET /me/balance` | | остаток и история |
+| V08 | «Пополнить» → модалка (сумма, карта или СБП) → «Пополнить» | `POST /me/balance/top-up` → оплата по `paymentLink` → `GET /me/payments/{id}` | ✔ | `409 BALANCE_CAP_REACHED` |
+| V08 | «Вернуть на карту» → модалка (сумма) → «Вернуть» | `POST /me/balance/withdraw` | ✔ | `202`; `409 INSUFFICIENT_BALANCE` |
+
+**Модератор и администратор (веб-панель)**
+
+| Экран | Кнопка / модалка | Запрос | Идемп. | Ответ и ошибки |
+|---|---|---|---|---|
+| M01 Очереди | Открытие, вкладки | `GET /mod/queue?type=…` | | элементы с SLA |
+| M02 Задание | «Одобрить» → модалка (уровень, дедлайн, район, гео-зона) → «Опубликовать» | `POST /mod/challenges/{id}/decision` `{decision: "APPROVE", …}` | ✔ | `PUBLISHED` |
+| M02 | «Нужны правки» → модалка (замечание) | `POST /mod/challenges/{id}/decision` `{decision: "NEEDS_CHANGES", note}` | ✔ | |
+| M02 | «Отклонить» → модалка (код причины) | `POST /mod/challenges/{id}/decision` `{decision: "REJECT", reasonCode}` | ✔ | взнос автору на баланс |
+| M02 (срочная очередь) | «Оставить» / «Снять» | `POST /mod/challenges/{id}/decision` `{decision: "KEEP" \| "REMOVE"}` | ✔ | при `REMOVE` всем 100% на баланс |
+| M03 Подтверждение | «Выполнено» | `POST /mod/attempts/{id}/decision` `{decision: "COMPLETED"}` | ✔ | выплата игроку сразу |
+| M03 | «Не выполнено» → модалка (код причины, комментарий) | `POST /mod/attempts/{id}/decision` `{decision: "NOT_COMPLETED", reasonCode, note}` | ✔ | до дедлайна — игрок может доделать; после — провал |
+| M03 | «Показать точное место» → модалка (причина) | `GET /mod/attempts/{id}/precise-geo?reason=…` | | точка на 15 минут, запись в аудит |
+| M04 Live-стена | Сообщение чата: «Скрыть» | `POST /mod/chat/{messageId}/hide` | | скрыто до показа зрителям |
+| M04 | «Остановить эфир» → модалка (причина) → «Остановить» | `POST /mod/streams/{id}/kill` `{reasonCode}` | ✔ | эфир остановлен ≤ 5 с |
+| M01 → апелляция | «Отменить провал» / «Оставить» | `POST /mod/appeals/{id}/decision` | ✔ | `409` — тот же модератор, что решал |
+| M01 → Стопы | «Норма» / «Злоупотребление» | `POST /mod/safety-stops/{id}/decision` | ✔ | при злоупотреблении — только ограничение доступа |
+| M05 Пользователь | Открытие | `GET /mod/users/{id}` | | история, связи, санкции |
+| M05 | «Санкция» → модалка (тип, срок, причина) | `POST /mod/users/{id}/sanctions` | ✔ | `201` |
+| A01 Настройки | Открытие | `GET /admin/settings` | | |
+| A01 | «Изменить» → модалка (значение, причина) | `POST /admin/settings/changes` | ✔ | ждёт второго админа |
+| A01 | «Подтвердить изменение» | `POST /admin/settings/changes/{id}/approve` | ✔ | `409` — подтверждает инициатор |
+| A02 Финансы | Открытие | `GET /admin/reconciliation` | | сверка с «Точкой» |
+| A03 Метрики | Открытие | `GET /admin/metrics` | | |
+| A04 Аудит | Открытие, фильтры | `GET /admin/audit?…` | | только чтение |
+
+**Без кнопок (сервер сам):** конец грейса, дедлайн, истечение
+задания, расчёт провала через 72 ч, автопродление, отправка выплат и
+возвратов — воркеры (6.3). Оплата, возвраты и выплаты подтверждаются
+вебхуком `POST /webhooks/tochka`.
 
 ---
 
@@ -1842,6 +1974,11 @@ revoke update, delete on audit_log from app_api, app_ledger;
 | `DELETE /me/cards/{id}` | 404 |
 | WebSocket: `attempt:{id}`, `user:{id}` A | отказ подписки |
 | `/mod/*` с ролью игрока или зрителя | 403 |
+| `POST /offers/{id}/reject`, `accept` с `offerId` другого игрока | 404 |
+| `POST /challenges/{id}/cancel` не автором | 404; банк не изменился |
+| `POST /safety-stops/{id}/check-in` чужого Стопа | 404 |
+| `PATCH /attempts/{id}/stream-settings` чужой попытки | 404 |
+| `PUT /me/self-exclusion` | id из токена; чужое самоограничение задать нельзя |
 | `/mod/attempts/{id}/decision` по связанному аккаунту | 409 |
 | `/mod/appeals/{id}/decision` тем же модератором | 409 |
 | `/admin/*` с ролью модератора | 403 |
